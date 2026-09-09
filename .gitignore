@@ -1,0 +1,24 @@
+# 환경 변수 / 비밀 정보
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# 의존성 / 빌드 산출물
+node_modules/
+dist/
+build/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 에디터 / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code 로컬 설정
+.claude/settings.local.json

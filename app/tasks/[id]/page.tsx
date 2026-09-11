@@ -35,13 +35,12 @@ function TaskDetail({ email }: { email: string }) {
   const [editing, setEditing] = useState(false);
   const guideRef = useRef<HTMLPreElement>(null);
 
+  const validId = Number.isInteger(id) && id > 0;
+
   useEffect(() => {
-    if (!Number.isInteger(id)) {
-      setTask(null);
-      return;
-    }
+    if (!validId) return;
     getTask(id).then(setTask).catch((e: Error) => setError(e.message));
-  }, [id]);
+  }, [id, validId]);
 
   async function run(action: () => Promise<Task | void>, after?: () => void) {
     setError(null);
@@ -74,6 +73,7 @@ function TaskDetail({ email }: { email: string }) {
     }
   }
 
+  if (!validId) return <p className="p-6 text-stone-500">업무를 찾을 수 없습니다.</p>;
   if (error && task === undefined) return <p className="p-6 text-red-600">{error}</p>;
   if (task === undefined) return <p className="p-6 text-stone-500">불러오는 중…</p>;
   if (task === null) return <p className="p-6 text-stone-500">업무를 찾을 수 없습니다.</p>;

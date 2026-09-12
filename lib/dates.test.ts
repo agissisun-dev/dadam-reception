@@ -66,3 +66,21 @@ describe("bucketOpenTasks", () => {
     expect(ids).not.toContain(7);
   });
 });
+
+describe("weekdayKo / groupByDate", () => {
+  it("요일을 한글 한 글자로", async () => {
+    const { weekdayKo } = await import("./dates");
+    expect(weekdayKo("2026-09-12")).toBe("토");
+    expect(weekdayKo("2026-09-14")).toBe("월");
+  });
+  it("같은 날짜끼리 묶고 날짜 오름차순", async () => {
+    const { groupByDate } = await import("./dates");
+    const groups = groupByDate([
+      task({ id: 1, due_date: "2026-09-14" }),
+      task({ id: 2, due_date: "2026-09-13" }),
+      task({ id: 3, due_date: "2026-09-14" }),
+    ]);
+    expect(groups.map((g) => g.date)).toEqual(["2026-09-13", "2026-09-14"]);
+    expect(groups[1].tasks.map((t) => t.id)).toEqual([1, 3]);
+  });
+});

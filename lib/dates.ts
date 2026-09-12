@@ -40,3 +40,23 @@ export function bucketOpenTasks(
       .sort(byDueAsc),
   };
 }
+
+const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
+
+/** YYYY-MM-DD → 요일 한 글자 (일·월·화…). */
+export function weekdayKo(iso: string): string {
+  return WEEKDAYS_KO[parseISO(iso).getDay()];
+}
+
+/** 날짜별로 묶어 날짜 오름차순으로. 각 묶음 안 순서는 입력 순서를 유지한다. */
+export function groupByDate(tasks: Task[]): { date: string; tasks: Task[] }[] {
+  const map = new Map<string, Task[]>();
+  for (const t of tasks) {
+    const list = map.get(t.due_date) ?? [];
+    list.push(t);
+    map.set(t.due_date, list);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, list]) => ({ date, tasks: list }));
+}

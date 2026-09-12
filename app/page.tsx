@@ -5,13 +5,13 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import TaskCard from "@/components/TaskCard";
 import { listOpenTasks } from "@/lib/tasks";
-import { bucketOpenTasks, todayISO } from "@/lib/dates";
+import { bucketOpenTasks, groupByDate, todayISO, weekdayKo } from "@/lib/dates";
 import type { Task } from "@/lib/types";
 
 function TodayBoard() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showUpcoming, setShowUpcoming] = useState(false);
+  const [showUpcoming, setShowUpcoming] = useState(true);
   const today = todayISO();
 
   useEffect(() => {
@@ -57,19 +57,31 @@ function TodayBoard() {
       )}
 
       <section>
-        <button
-          onClick={() => setShowUpcoming((v) => !v)}
-          className="text-sm text-stone-600 underline"
-        >
-          다가오는 일 7일 ({upcoming.length}) {showUpcoming ? "접기" : "펼치기"}
-        </button>
+        <div className="mb-2 flex items-baseline justify-between">
+          <h2 className="font-bold text-stone-700">이번 주 (내일부터 7일, {upcoming.length})</h2>
+          <button
+            onClick={() => setShowUpcoming((v) => !v)}
+            className="text-sm text-stone-500 underline"
+          >
+            {showUpcoming ? "접기" : "펼치기"}
+          </button>
+        </div>
         {showUpcoming && (
-          <div className="mt-2 space-y-2">
+          <div className="space-y-4">
             {upcoming.length === 0 && (
               <p className="text-sm text-stone-500">7일 안에 예정된 일이 없습니다</p>
             )}
-            {upcoming.map((t) => (
-              <TaskCard key={t.id} task={t} today={today} />
+            {groupByDate(upcoming).map((g) => (
+              <div key={g.date}>
+                <p className="mb-1 text-sm text-stone-500">
+                  {g.date} ({weekdayKo(g.date)})
+                </p>
+                <div className="space-y-2">
+                  {g.tasks.map((t) => (
+                    <TaskCard key={t.id} task={t} today={today} />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}

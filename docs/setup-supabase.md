@@ -10,10 +10,10 @@
 2. 이 저장소의 `supabase/schema.sql` 내용을 전부 붙여넣고 [Run]
 3. 왼쪽 메뉴 [Table Editor]에 `tasks` 표가 보이면 성공
 
-## 3. 접수실 계정 만들기
+## 3. 접수실 공용 계정 만들기 (하나만)
 1. 왼쪽 메뉴 [Authentication] → [Users] → [Add user] → [Create new user]
-2. 이메일과 비밀번호 입력. "Auto Confirm User"를 켠다 (메일 확인 절차 생략)
-3. 접수실 A, 접수실 B, 원장 계정 세 개를 만든다
+2. 이메일(예: reception@dadam.kr 처럼 실제로 안 써도 되는 주소)과 비밀번호 입력. "Auto Confirm User"를 켠다
+3. 계정은 이것 하나입니다. 각 PC에서 처음 한 번만 로그인하면 브라우저가 기억합니다. 누가 처리했는지는 완료할 때 이름을 골라 남깁니다
 
 ## 4. 앱에 연결 정보 넣기
 1. [Project Settings] → [API]

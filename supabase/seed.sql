@@ -14,4 +14,4 @@ insert into public.tasks (title, due_date, guide_text, status, completed_at, com
  'todo', null, null, null),
 ('한방파스 재고 확인 (추석 선물용)', '2026-08-25',
  E'추석 연휴 전후 3일간 내원 환자 1인 1개 배포분 확인.',
- 'done', '2026-08-25 10:00:00+09', 'reception@dadam.local', '추석 전 재고 확인 완료');
+ 'done', '2026-08-25 10:00:00+09', '실장님', '추석 전 재고 확인 완료');

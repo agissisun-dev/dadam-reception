@@ -13,6 +13,7 @@ import {
   deleteTask,
 } from "@/lib/tasks";
 import type { Task } from "@/lib/types";
+import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "";
@@ -21,7 +22,7 @@ function formatDateTime(iso: string | null): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-function TaskDetail({ email }: { email: string }) {
+function TaskDetail() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const router = useRouter();
@@ -32,10 +33,15 @@ function TaskDetail({ email }: { email: string }) {
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
   const [memo, setMemo] = useState("");
+  const [staff, setStaff] = useState<StaffName>(STAFF_NAMES[0]);
   const [editing, setEditing] = useState(false);
   const guideRef = useRef<HTMLPreElement>(null);
 
   const validId = Number.isInteger(id) && id > 0;
+
+  useEffect(() => {
+    setStaff(loadLastStaff());
+  }, []);
 
   useEffect(() => {
     if (!validId) return;
@@ -147,6 +153,20 @@ function TaskDetail({ email }: { email: string }) {
       ) : completing ? (
         <section className="rounded-lg border border-stone-200 bg-white p-4">
           <label className="block">
+            <span className="text-sm text-stone-600">처리한 사람</span>
+            <select
+              value={staff}
+              onChange={(e) => setStaff(e.target.value as StaffName)}
+              className="mt-1 w-full rounded border border-stone-300 bg-white px-3 py-2"
+            >
+              {STAFF_NAMES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="mt-3 block">
             <span className="text-sm text-stone-600">완료 메모 (무엇을 어떻게 했는지)</span>
             <textarea
               value={memo}
@@ -158,7 +178,15 @@ function TaskDetail({ email }: { email: string }) {
           </label>
           <div className="mt-3 flex gap-2">
             <button
-              onClick={() => run(() => completeTask(task.id, memo, email), () => setCompleting(false))}
+              onClick={() =>
+                run(
+                  () => {
+                    saveLastStaff(staff);
+                    return completeTask(task.id, memo, staff);
+                  },
+                  () => setCompleting(false),
+                )
+              }
               className="rounded bg-stone-900 px-4 py-2 text-white"
             >
               저장
@@ -202,10 +230,10 @@ function TaskDetail({ email }: { email: string }) {
 export default function TaskDetailPage() {
   return (
     <AuthGate>
-      {(email) => (
+      {() => (
         <>
-          <AppHeader email={email} />
-          <TaskDetail email={email} />
+          <AppHeader />
+          <TaskDetail />
         </>
       )}
     </AuthGate>

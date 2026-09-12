@@ -81,9 +81,9 @@ function TodayBoard() {
 export default function HomePage() {
   return (
     <AuthGate>
-      {(email) => (
+      {() => (
         <>
-          <AppHeader email={email} />
+          <AppHeader />
           <TodayBoard />
         </>
       )}

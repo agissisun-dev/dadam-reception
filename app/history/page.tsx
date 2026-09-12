@@ -51,9 +51,9 @@ function HistoryList() {
 export default function HistoryPage() {
   return (
     <AuthGate>
-      {(email) => (
+      {() => (
         <>
-          <AppHeader email={email} />
+          <AppHeader />
           <HistoryList />
         </>
       )}

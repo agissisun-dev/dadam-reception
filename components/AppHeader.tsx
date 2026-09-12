@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabaseClient";
 
-export default function AppHeader({ email }: { email: string }) {
+export default function AppHeader() {
   const router = useRouter();
 
   async function logout() {
@@ -24,7 +24,6 @@ export default function AppHeader({ email }: { email: string }) {
         <Link href="/history" className="rounded border border-stone-300 px-3 py-1.5">
           지난 기록
         </Link>
-        <span className="ml-2 text-stone-500">{email}</span>
         <button onClick={logout} className="rounded border border-stone-300 px-3 py-1.5">
           로그아웃
         </button>

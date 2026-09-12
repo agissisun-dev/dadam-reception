@@ -12,9 +12,9 @@ export default function NewTaskPage() {
 
   return (
     <AuthGate>
-      {(email) => (
+      {() => (
         <>
-          <AppHeader email={email} />
+          <AppHeader />
           <main className="mx-auto max-w-2xl p-4">
             <h1 className="mb-4 text-xl font-bold">업무 등록</h1>
             <TaskForm

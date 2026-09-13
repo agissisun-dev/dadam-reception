@@ -28,3 +28,8 @@
 
 ## 6. 확인
 - [Table Editor] → `tasks`에 행이 보이면 과제 3의 "Table Editor에서 행 확인"이 된 것. 이 화면을 캡처한다.
+
+## 7. V2-1 해피콜 표 만들기 (2026-09-13 추가)
+1. [SQL Editor] → [New query]
+2. `supabase/schema-v2-1.sql` 내용을 붙여넣고 [Run]
+3. [Table Editor]에 `patients`, `prescriptions`, `happy_calls`, `contact_logs` 네 표가 보이면 성공

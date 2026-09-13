@@ -21,8 +21,14 @@ export default function AppHeader() {
         <Link href="/happy-calls" className="rounded border border-stone-300 px-3 py-1.5">
           해피콜
         </Link>
+        <Link href="/weekly" className="rounded border border-stone-300 px-3 py-1.5">
+          주간 관리
+        </Link>
         <Link href="/patients" className="rounded border border-stone-300 px-3 py-1.5">
           환자
+        </Link>
+        <Link href="/templates" className="rounded border border-stone-300 px-3 py-1.5">
+          문구 틀
         </Link>
         <Link href="/tasks/new" className="rounded bg-stone-900 px-3 py-1.5 text-white">
           업무 등록

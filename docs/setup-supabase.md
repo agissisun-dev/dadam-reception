@@ -33,3 +33,6 @@
 1. [SQL Editor] → [New query]
 2. `supabase/schema-v2-1.sql` 내용을 붙여넣고 [Run]
 3. [Table Editor]에 `patients`, `prescriptions`, `happy_calls`, `contact_logs` 네 표가 보이면 성공
+
+## 8. V2-1b 처방 포 수 칸 추가 (2026-09-13 추가, 실행 완료)
+- [SQL Editor]에서 `supabase/schema-v2-1b.sql` 실행. `prescriptions` 표에 `packs`, `per_day` 칸이 생긴다.

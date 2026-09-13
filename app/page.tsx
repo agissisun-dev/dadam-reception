@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { countOpenHappyCalls } from "@/lib/happyCalls";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import TaskCard from "@/components/TaskCard";
@@ -12,11 +14,15 @@ function TodayBoard() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showUpcoming, setShowUpcoming] = useState(true);
+  const [hc, setHc] = useState<{ today: number; overdue: number } | null>(null);
   const today = todayISO();
 
   useEffect(() => {
     listOpenTasks().then(setTasks).catch((e: Error) => setError(e.message));
-  }, []);
+    countOpenHappyCalls(today)
+      .then(setHc)
+      .catch(() => setHc(null));
+  }, [today]);
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
   if (!tasks) return <p className="p-6 text-stone-500">불러오는 중…</p>;
@@ -27,6 +33,24 @@ function TodayBoard() {
   return (
     <main className="mx-auto max-w-2xl space-y-8 p-4">
       <p className="text-sm text-stone-500">{today}</p>
+
+      <Link
+        href="/happy-calls"
+        className={`block rounded-lg border p-4 ${
+          hc && hc.today + hc.overdue > 0 ? "border-amber-300 bg-amber-50" : "border-stone-200 bg-white"
+        }`}
+      >
+        <span className="font-medium">해피콜 대상</span>{" "}
+        {hc ? (
+          <>
+            오늘 {hc.today}명
+            {hc.overdue > 0 && <span className="text-red-700"> · 지난 것 {hc.overdue}명</span>}
+          </>
+        ) : (
+          "…"
+        )}
+        <span className="float-right text-stone-500">▶</span>
+      </Link>
 
       {nothingToday && (
         <p className="rounded-lg border border-stone-200 bg-white p-6 text-center text-stone-600">

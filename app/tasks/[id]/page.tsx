@@ -33,15 +33,14 @@ function TaskDetail() {
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
   const [memo, setMemo] = useState("");
-  const [staff, setStaff] = useState<StaffName>(STAFF_NAMES[0]);
+  const [staff, setStaff] = useState<StaffName>(() =>
+    typeof window === "undefined" ? STAFF_NAMES[0] : loadLastStaff(),
+  );
   const [editing, setEditing] = useState(false);
   const guideRef = useRef<HTMLPreElement>(null);
 
   const validId = Number.isInteger(id) && id > 0;
 
-  useEffect(() => {
-    setStaff(loadLastStaff());
-  }, []);
 
   useEffect(() => {
     if (!validId) return;

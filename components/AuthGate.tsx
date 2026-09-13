@@ -10,16 +10,18 @@ export default function AuthGate({ children }: Props) {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
-  const [configError, setConfigError] = useState<string | null>(null);
+  const [configError] = useState<string | null>(() => {
+    try {
+      getSupabase();
+      return null;
+    } catch (e) {
+      return (e as Error).message;
+    }
+  });
 
   useEffect(() => {
-    let supabase;
-    try {
-      supabase = getSupabase();
-    } catch (e) {
-      setConfigError((e as Error).message);
-      return;
-    }
+    if (configError) return;
+    const supabase = getSupabase();
     let active = true;
 
     supabase.auth.getSession().then(({ data }) => {
@@ -43,7 +45,7 @@ export default function AuthGate({ children }: Props) {
       active = false;
       sub.subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, configError]);
 
   if (configError) {
     return (

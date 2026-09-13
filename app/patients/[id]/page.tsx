@@ -22,6 +22,9 @@ import { addDays, todayISO } from "@/lib/dates";
 import { isValidPhone } from "@/lib/phone";
 import { DEFAULT_PER_DAY, describePrescription } from "@/lib/packs";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
+import { listWeeklyContacts, resumeWeekly, startWeekly, stopWeekly } from "@/lib/weekly";
+import { DEFAULT_WEEKDAY, WEEKDAYS } from "@/lib/weeklyRules";
+import type { WeeklyContact } from "@/lib/types";
 import type { Patient, PatientInput } from "@/lib/types";
 
 const CH: Record<string, string> = { phone: "전화", kakao: "카톡", sms: "문자" };
@@ -33,6 +36,7 @@ const ACT: Record<string, string> = {
   rescheduled: "예정일 변경",
 };
 const ST: Record<string, string> = { pending: "대기", contacted: "연락함", closed: "종료" };
+const WA: Record<string, string> = { sent: "발송함", skipped_visited: "내원해 건너뜀", no_reply: "답 없음", dormant: "휴면", excluded: "연락 제외" };
 
 const INPUT = "mt-1 w-full rounded border border-stone-300 px-3 py-2";
 const BTN = "rounded border border-stone-300 px-3 py-1.5 text-sm";
@@ -52,6 +56,10 @@ function Detail() {
 
   const [patient, setPatient] = useState<Patient | null | undefined>(undefined);
   const [prescs, setPrescs] = useState<PrescriptionWithCalls[]>([]);
+  const [weekly, setWeekly] = useState<WeeklyContact[]>([]);
+  const [starting, setStarting] = useState(false);
+  const [weekday, setWeekday] = useState(DEFAULT_WEEKDAY);
+  const [interval, setInterval_] = useState(1);
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState<boolean>(
     () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("add") === "1",
@@ -66,10 +74,11 @@ function Detail() {
 
   const load = useCallback(() => {
     if (!validId) return;
-    Promise.all([getPatient(id), listPrescriptionsWithCalls(id)])
-      .then(([p, pr]) => {
+    Promise.all([getPatient(id), listPrescriptionsWithCalls(id), listWeeklyContacts(id)])
+      .then(([p, pr, wk]) => {
         setPatient(p);
         setPrescs(pr);
+        setWeekly(wk);
       })
       .catch((e: Error) => setError(e.message));
   }, [id, validId]);
@@ -282,6 +291,65 @@ function Detail() {
           </div>
         )}
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      </section>
+
+      <section className="rounded-lg border border-stone-200 bg-white p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="font-bold">주간 관리</h2>
+          {patient.weekly_status === "active" && (
+            <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-800">
+              관리 중 · {WEEKDAYS[patient.weekly_weekday]}요일 · 매{patient.weekly_interval > 1 ? `${patient.weekly_interval}주` : "주"} · {patient.weekly_round}회차 · 다음 {patient.weekly_next_date}
+            </span>
+          )}
+          {patient.weekly_status === "dormant" && (
+            <span className="rounded bg-stone-200 px-1.5 py-0.5 text-xs">휴면 · {patient.weekly_round}회차까지 진행</span>
+          )}
+          {patient.weekly_status === "off" && <span className="text-xs text-stone-500">대상 아님</span>}
+          <span className="ml-auto flex gap-2">
+            {patient.weekly_status === "off" && !patient.excluded_at && (
+              <button className={PRIMARY} onClick={() => setStarting((v) => !v)}>주간 관리 시작</button>
+            )}
+            {patient.weekly_status === "dormant" && !patient.excluded_at && (
+              <button className={PRIMARY} onClick={() => run(() => resumeWeekly(patient.id))}>다시 시작</button>
+            )}
+            {patient.weekly_status !== "off" && (
+              <button className={BTN} onClick={() => { if (window.confirm("주간 관리를 중지할까요? 기록은 남습니다.")) run(() => stopWeekly(patient.id)); }}>중지</button>
+            )}
+          </span>
+        </div>
+        {starting && patient.weekly_status === "off" && (
+          <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-stone-200 pt-3">
+            <label className="block">
+              <span className="text-sm text-stone-600">보내는 요일</span>
+              <select value={weekday} onChange={(e) => setWeekday(Number(e.target.value))} className={INPUT}>
+                {WEEKDAYS.map((w, i) => (
+                  <option key={i} value={i}>{w}요일</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-sm text-stone-600">주기</span>
+              <select value={interval} onChange={(e) => setInterval_(Number(e.target.value))} className={INPUT}>
+                <option value={1}>매주</option>
+                <option value={2}>2주마다</option>
+              </select>
+            </label>
+            <button className={PRIMARY} onClick={() => run(async () => { await startWeekly(patient.id, weekday, interval); setStarting(false); })}>시작</button>
+            <button className={BTN} onClick={() => setStarting(false)}>취소</button>
+          </div>
+        )}
+        {weekly.length > 0 && (
+          <ul className="mt-3 space-y-1 border-t border-stone-200 pt-3 text-sm">
+            {weekly.map((w) => (
+              <li key={w.id} className="rounded bg-stone-50 p-2">
+                <span className="rounded bg-stone-200 px-1.5 py-0.5 text-xs">{w.round}회차</span> {w.planned_date} · {WA[w.action]} · {w.staff_name}
+                {w.message && <p className="mt-1 whitespace-pre-wrap text-xs text-stone-500">{w.message}</p>}
+                {w.patient_reply && <p className="mt-1 text-xs"><span className="text-stone-500">답변:</span> {w.patient_reply}{w.reply_status === "waiting_doctor" ? " (원장 확인 대기)" : ""}</p>}
+                {w.doctor_note && <p className="mt-1 text-xs text-green-800">원장님 지시: {w.doctor_note}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section>

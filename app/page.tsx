@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { countOpenHappyCalls } from "@/lib/happyCalls";
+import { countWeekly } from "@/lib/weekly";
+import { weekEndISO } from "@/lib/weeklyRules";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import TaskCard from "@/components/TaskCard";
@@ -15,6 +17,7 @@ function TodayBoard() {
   const [error, setError] = useState<string | null>(null);
   const [showUpcoming, setShowUpcoming] = useState(true);
   const [hc, setHc] = useState<{ today: number; overdue: number } | null>(null);
+  const [wk, setWk] = useState<{ thisWeek: number; waiting: number } | null>(null);
   const today = todayISO();
 
   useEffect(() => {
@@ -22,6 +25,9 @@ function TodayBoard() {
     countOpenHappyCalls(today)
       .then(setHc)
       .catch(() => setHc(null));
+    countWeekly(weekEndISO(today))
+      .then(setWk)
+      .catch(() => setWk(null));
   }, [today]);
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
@@ -45,6 +51,24 @@ function TodayBoard() {
           <>
             오늘 {hc.today}명
             {hc.overdue > 0 && <span className="text-red-700"> · 지난 것 {hc.overdue}명</span>}
+          </>
+        ) : (
+          "…"
+        )}
+        <span className="float-right text-stone-500">▶</span>
+      </Link>
+
+      <Link
+        href="/weekly"
+        className={`block rounded-lg border p-4 ${
+          wk && wk.thisWeek + wk.waiting > 0 ? "border-amber-300 bg-amber-50" : "border-stone-200 bg-white"
+        }`}
+      >
+        <span className="font-medium">주간 관리</span>{" "}
+        {wk ? (
+          <>
+            이번 주 {wk.thisWeek}명
+            {wk.waiting > 0 && <span className="text-amber-800"> · 원장 확인 대기 {wk.waiting}건</span>}
           </>
         ) : (
           "…"

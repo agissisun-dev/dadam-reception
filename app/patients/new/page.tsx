@@ -7,7 +7,8 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import PrescriptionForm from "@/components/PrescriptionForm";
 import { addPrescription, createPatient, findPatientByPhone } from "@/lib/patients";
-import { isValidPhone, formatPhone } from "@/lib/phone";
+import { isValidPhone, formatPhone, normalizePhone } from "@/lib/phone";
+import { DEFAULT_PER_DAY } from "@/lib/packs";
 import { CONDITIONS, conditionLabel } from "@/lib/conditions";
 import { addDays, todayISO } from "@/lib/dates";
 import type { Patient, PatientInput, PrescriptionInput } from "@/lib/types";
@@ -28,16 +29,16 @@ function NewPatient() {
     memo: "",
   });
 
-  async function check() {
+  async function check(value: string = phone) {
     setError(null);
-    if (!isValidPhone(phone)) {
+    if (!isValidPhone(value)) {
       setError("연락처는 숫자 10~11자리여야 합니다");
       return;
     }
     try {
-      const existing = await findPatientByPhone(phone);
+      const existing = await findPatientByPhone(value);
       setChecked({ existing });
-      setForm((f) => ({ ...f, phone }));
+      setForm((f) => ({ ...f, phone: value }));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -57,7 +58,13 @@ function NewPatient() {
     router.push(`/patients/${id}`);
   }
 
-  const firstPrescription: PrescriptionInput = { receive_date: addDays(todayISO(), 3), days: 30, memo: "" };
+  const firstPrescription: PrescriptionInput = {
+    receive_date: addDays(todayISO(), 3),
+    days: 0,
+    packs: null,
+    per_day: DEFAULT_PER_DAY,
+    memo: "",
+  };
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-4">
@@ -70,8 +77,11 @@ function NewPatient() {
             <input
               value={phone}
               onChange={(e) => {
-                setPhone(e.target.value);
+                const v = e.target.value;
+                setPhone(v);
                 setChecked(null);
+                // 휴대폰 11자리가 다 입력되면 [확인] 없이 바로 조회
+                if (normalizePhone(v).length === 11) check(v);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -82,7 +92,7 @@ function NewPatient() {
               placeholder="010-1234-5678"
               className="w-full rounded border border-stone-300 px-3 py-2"
             />
-            <button type="button" onClick={check} className="shrink-0 rounded bg-stone-900 px-4 py-2 text-white">
+            <button type="button" onClick={() => check()} className="shrink-0 rounded bg-stone-900 px-4 py-2 text-white">
               확인
             </button>
           </div>

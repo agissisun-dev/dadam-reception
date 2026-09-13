@@ -122,6 +122,8 @@ export async function addPrescription(
       patient_id: patientId,
       receive_date: input.receive_date,
       days: input.days,
+      packs: input.packs,
+      per_day: input.per_day,
       memo: input.memo.trim() || null,
     })
     .select("*")

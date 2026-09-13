@@ -29,7 +29,7 @@ function row(p: Partial<HappyCallRow> & { id: number; due_date: string }): Happy
     created_at: "",
     prescription_seq: 1,
     prescription: {
-      id: 1, patient_id: 1, receive_date: "2026-09-01", days: 30, memo: null, status: "active", created_at: "",
+      id: 1, patient_id: 1, receive_date: "2026-09-01", days: 30, packs: null, per_day: null, memo: null, status: "active", created_at: "",
       patient: {
         id: 1, name: "x", phone: "01000000000", family_phone: null, family_note: null,
         condition: "general", memo: null, excluded_at: null, excluded_reason: null, created_at: "",

@@ -20,6 +20,7 @@ import {
 import { CONDITIONS, conditionLabel } from "@/lib/conditions";
 import { addDays, todayISO } from "@/lib/dates";
 import { isValidPhone } from "@/lib/phone";
+import { DEFAULT_PER_DAY, describePrescription } from "@/lib/packs";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
 import type { Patient, PatientInput } from "@/lib/types";
 
@@ -52,7 +53,9 @@ function Detail() {
   const [patient, setPatient] = useState<Patient | null | undefined>(undefined);
   const [prescs, setPrescs] = useState<PrescriptionWithCalls[]>([]);
   const [editing, setEditing] = useState(false);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState<boolean>(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("add") === "1",
+  );
   const [excluding, setExcluding] = useState(false);
   const [reason, setReason] = useState("");
   const [staff, setStaff] = useState<StaffName>(() =>
@@ -268,7 +271,7 @@ function Detail() {
         {adding && (
           <div className="mt-3 border-t border-stone-200 pt-3">
             <PrescriptionForm
-              initial={{ receive_date: addDays(todayISO(), 3), days: 30, memo: "" }}
+              initial={{ receive_date: addDays(todayISO(), 3), days: 0, packs: null, per_day: DEFAULT_PER_DAY, memo: "" }}
               submitLabel="처방 추가"
               onSubmit={async (v) => {
                 await addPrescription(patient.id, v);
@@ -288,7 +291,7 @@ function Detail() {
           {prescs.map((p, i) => (
             <div key={p.id} className="rounded-lg border border-stone-200 bg-white p-3">
               <p className="text-sm font-medium">
-                {prescs.length - i}번째 · 수령 {p.receive_date} · {p.days}일분 ·{" "}
+                {prescs.length - i}번째 · 수령 {p.receive_date} · {describePrescription(p)} ·{" "}
                 {p.status === "active" ? "진행" : "종료"}
                 {p.memo ? ` · ${p.memo}` : ""}
               </p>

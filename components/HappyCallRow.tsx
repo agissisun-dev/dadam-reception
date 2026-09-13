@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { describePrescription } from "@/lib/packs";
 import type { ContactChannel, HappyCallRow as Row } from "@/lib/types";
 import { conditionLabel } from "@/lib/conditions";
 import { daysBetween } from "@/lib/dates";
@@ -29,6 +31,7 @@ const BTN = "rounded border border-stone-300 px-3 py-1.5 text-sm";
 const PRIMARY = "rounded bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-50";
 
 export default function HappyCallRow({ row, today, onDone }: { row: Row; today: string; onDone: () => void }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>(null);
   const [staff, setStaff] = useState<StaffName>(() =>
@@ -77,7 +80,7 @@ export default function HappyCallRow({ row, today, onDone }: { row: Row; today: 
         </div>
         <p className="mt-1 text-sm text-stone-600">{row.note}</p>
         <p className="mt-1 text-xs text-stone-500">
-          수령 {p.receive_date} · {p.days}일분
+          수령 {p.receive_date} · {describePrescription(p)}
           {p.memo ? ` · ${p.memo}` : ""}
           {pt.memo ? ` · ${pt.memo}` : ""}
         </p>
@@ -87,11 +90,11 @@ export default function HappyCallRow({ row, today, onDone }: { row: Row; today: 
         <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span>
-              연락처 <PhoneText phone={pt.phone} />
+              연락처 <PhoneText phone={pt.phone} revealed />
             </span>
             {pt.family_phone && (
               <span className="text-stone-600">
-                가족({pt.family_note ?? ""}) <PhoneText phone={pt.family_phone} />
+                가족({pt.family_note ?? ""}) <PhoneText phone={pt.family_phone} revealed />
               </span>
             )}
             <Link href={`/patients/${pt.id}`} className="ml-auto underline">
@@ -173,6 +176,18 @@ export default function HappyCallRow({ row, today, onDone }: { row: Row; today: 
               <div className="flex gap-2">
                 <button className={PRIMARY} disabled={busy} onClick={() => run(() => markRepresc(row.id, memo, staff))}>
                   저장
+                </button>
+                <button
+                  className={PRIMARY}
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () => {
+                      await markRepresc(row.id, memo, staff);
+                      router.push(`/patients/${pt.id}?add=1`);
+                    })
+                  }
+                >
+                  저장하고 새 처방 등록
                 </button>
                 <button className={BTN} onClick={() => setMode(null)}>
                   취소

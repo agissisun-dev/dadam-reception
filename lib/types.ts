@@ -38,6 +38,8 @@ export type Prescription = {
   patient_id: number;
   receive_date: string;
   days: number;
+  packs: number | null;
+  per_day: number | null;
   memo: string | null;
   status: "active" | "closed";
   created_at: string;
@@ -86,5 +88,7 @@ export type PatientInput = {
 export type PrescriptionInput = {
   receive_date: string;
   days: number;
+  packs: number | null;
+  per_day: number | null;
   memo: string;
 };

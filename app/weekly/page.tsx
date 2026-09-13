@@ -79,7 +79,7 @@ function ThisWeek({ templates }: { templates: Template[] }) {
   );
 }
 
-function Waiting() {
+function Waiting({ onChanged }: { onChanged: () => void }) {
   const [items, setItems] = useState<WaitingItem[] | null>(null);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [staff, setStaff] = useState<StaffName>(() =>
@@ -134,6 +134,7 @@ function Waiting() {
                 saveLastStaff(staff);
                 await reviewReply(it.id, (notes[it.id] ?? "").trim());
                 load();
+                onChanged();
               } catch (e) {
                 setError((e as Error).message);
               }
@@ -153,10 +154,14 @@ function Board() {
   const [waitingCount, setWaitingCount] = useState(0);
   const today = todayISO();
 
+  const refreshCount = useCallback(() => {
+    listWaitingDoctor().then((w) => setWaitingCount(w.length)).catch(() => setWaitingCount(0));
+  }, []);
+
   useEffect(() => {
     listTemplates("weekly").then(setTemplates).catch(() => setTemplates([]));
-    listWaitingDoctor().then((w) => setWaitingCount(w.length)).catch(() => setWaitingCount(0));
-  }, [tab]);
+    refreshCount();
+  }, [tab, refreshCount]);
 
   return (
     <main className="mx-auto max-w-2xl space-y-4 p-4">
@@ -172,7 +177,7 @@ function Board() {
           원장 확인 대기{waitingCount > 0 ? ` (${waitingCount})` : ""}
         </button>
       </div>
-      {tab === "week" ? <ThisWeek templates={templates} /> : <Waiting />}
+      {tab === "week" ? <ThisWeek templates={templates} /> : <Waiting onChanged={refreshCount} />}
     </main>
   );
 }

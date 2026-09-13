@@ -22,7 +22,7 @@ import { addDays, todayISO } from "@/lib/dates";
 import { isValidPhone } from "@/lib/phone";
 import { DEFAULT_PER_DAY, describePrescription } from "@/lib/packs";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
-import { listWeeklyContacts, resumeWeekly, startWeekly, stopWeekly } from "@/lib/weekly";
+import { listWeeklyContacts, recordReply, resumeWeekly, startWeekly, stopWeekly } from "@/lib/weekly";
 import { DEFAULT_WEEKDAY, WEEKDAYS } from "@/lib/weeklyRules";
 import type { WeeklyContact } from "@/lib/types";
 import type { Patient, PatientInput } from "@/lib/types";
@@ -60,6 +60,9 @@ function Detail() {
   const [starting, setStarting] = useState(false);
   const [weekday, setWeekday] = useState(DEFAULT_WEEKDAY);
   const [interval, setInterval_] = useState(1);
+  const [replyFor, setReplyFor] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [askDoctor, setAskDoctor] = useState(true);
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState<boolean>(
     () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("add") === "1",
@@ -346,6 +349,19 @@ function Detail() {
                 {w.message && <p className="mt-1 whitespace-pre-wrap text-xs text-stone-500">{w.message}</p>}
                 {w.patient_reply && <p className="mt-1 text-xs"><span className="text-stone-500">답변:</span> {w.patient_reply}{w.reply_status === "waiting_doctor" ? " (원장 확인 대기)" : ""}</p>}
                 {w.doctor_note && <p className="mt-1 text-xs text-green-800">원장님 지시: {w.doctor_note}</p>}
+                {w.action === "sent" && !w.patient_reply && replyFor !== w.id && (
+                  <button className="mt-1 text-xs underline" onClick={() => { setReplyFor(w.id); setReplyText(""); }}>답변 기록</button>
+                )}
+                {replyFor === w.id && (
+                  <div className="mt-2 space-y-2">
+                    <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={2} placeholder="환자가 보내온 답변 요약" className="w-full rounded border border-stone-300 px-2 py-1 text-sm" />
+                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={askDoctor} onChange={(e) => setAskDoctor(e.target.checked)} /> 원장님 확인 요청</label>
+                    <div className="flex gap-2">
+                      <button className={PRIMARY} disabled={!replyText.trim()} onClick={() => run(async () => { await recordReply(w.id, replyText.trim(), askDoctor); setReplyFor(null); })}>저장</button>
+                      <button className={BTN} onClick={() => setReplyFor(null)}>취소</button>
+                    </div>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

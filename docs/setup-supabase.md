@@ -36,3 +36,6 @@
 
 ## 8. V2-1b 처방 포 수 칸 추가 (2026-09-13 추가, 실행 완료)
 - [SQL Editor]에서 `supabase/schema-v2-1b.sql` 실행. `prescriptions` 표에 `packs`, `per_day` 칸이 생긴다.
+
+## 9. V2-2·V2-3 문구 틀·주간 관리 표 (2026-09-13 추가)
+- [SQL Editor]에서 `supabase/schema-v2-2-3.sql` 실행. `templates`, `weekly_contacts` 표와 `patients`의 주간 관리 칸 6개가 생기고, 초기 문구 18개가 들어간다.

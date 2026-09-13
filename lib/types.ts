@@ -30,6 +30,12 @@ export type Patient = {
   memo: string | null;
   excluded_at: string | null;
   excluded_reason: string | null;
+  weekly_status: WeeklyStatus;
+  weekly_weekday: number;
+  weekly_interval: number;
+  weekly_round: number;
+  weekly_next_date: string | null;
+  weekly_started_at: string | null;
   created_at: string;
 };
 
@@ -91,4 +97,47 @@ export type PrescriptionInput = {
   packs: number | null;
   per_day: number | null;
   memo: string;
+};
+
+export type TemplateKind = "task" | "weekly";
+
+export type Template = {
+  id: number;
+  kind: TemplateKind;
+  name: string;
+  title: string | null;
+  body: string;
+  date_rule: string | null;
+  condition: Condition | null;
+  round: number | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TemplateInput = Omit<Template, "id" | "created_at" | "updated_at">;
+
+export type WeeklyStatus = "off" | "active" | "dormant";
+export type WeeklyAction = "sent" | "skipped_visited" | "no_reply" | "dormant" | "excluded";
+export type ReplyStatus = "none" | "waiting_doctor" | "reviewed";
+
+export type WeeklyContact = {
+  id: number;
+  patient_id: number;
+  round: number;
+  planned_date: string;
+  action: WeeklyAction;
+  message: string | null;
+  patient_reply: string | null;
+  reply_status: ReplyStatus;
+  doctor_note: string | null;
+  staff_name: string;
+  created_at: string;
+};
+
+/** 주간 관리 명단 한 줄 */
+export type WeeklyRow = Patient & {
+  last: WeeklyContact | null;
+  lastReviewed: WeeklyContact | null;
+  noReplyStreak: number;
 };

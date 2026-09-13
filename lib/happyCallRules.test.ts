@@ -32,7 +32,8 @@ function row(p: Partial<HappyCallRow> & { id: number; due_date: string }): Happy
       id: 1, patient_id: 1, receive_date: "2026-09-01", days: 30, packs: null, per_day: null, memo: null, status: "active", created_at: "",
       patient: {
         id: 1, name: "x", phone: "01000000000", family_phone: null, family_note: null,
-        condition: "general", memo: null, excluded_at: null, excluded_reason: null, created_at: "",
+        condition: "general", memo: null, excluded_at: null, excluded_reason: null,
+        weekly_status: "off", weekly_weekday: 2, weekly_interval: 1, weekly_round: 1, weekly_next_date: null, weekly_started_at: null, created_at: "",
       },
     },
     ...p,

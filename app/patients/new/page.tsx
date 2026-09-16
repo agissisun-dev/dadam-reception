@@ -71,32 +71,47 @@ function NewPatient() {
       <h1 className="text-xl font-bold">환자 등록</h1>
 
       <section className="rounded-lg border border-stone-200 bg-white p-4">
-        <label className="block">
-          <span className="text-sm text-stone-600">연락처 (환자 구분 기준)</span>
-          <div className="mt-1 flex gap-2">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-sm text-stone-600">이름</span>
             <input
-              value={phone}
-              onChange={(e) => {
-                const v = e.target.value;
-                setPhone(v);
-                setChecked(null);
-                // 휴대폰 11자리가 다 입력되면 [확인] 없이 바로 조회
-                if (normalizePhone(v).length === 11) check(v);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  check();
-                }
-              }}
-              placeholder="010-1234-5678"
-              className="w-full rounded border border-stone-300 px-3 py-2"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="홍길동"
+              className={INPUT}
+              autoFocus
             />
-            <button type="button" onClick={() => check()} className="shrink-0 rounded bg-stone-900 px-4 py-2 text-white">
-              확인
-            </button>
-          </div>
-        </label>
+          </label>
+          <label className="block">
+            <span className="text-sm text-stone-600">연락처 (환자 구분 기준)</span>
+            <div className="mt-1 flex gap-2">
+              <input
+                value={phone}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPhone(v);
+                  setChecked(null);
+                  // 휴대폰 11자리가 다 입력되면 [확인] 없이 바로 조회
+                  if (normalizePhone(v).length === 11) check(v);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    check();
+                  }
+                }}
+                placeholder="010-1234-5678"
+                className="w-full rounded border border-stone-300 px-3 py-2"
+              />
+              <button type="button" onClick={() => check()} className="shrink-0 rounded bg-stone-900 px-4 py-2 text-white">
+                확인
+              </button>
+            </div>
+          </label>
+        </div>
+        {!checked && !error && (
+          <p className="mt-2 text-sm text-stone-500">연락처를 다 넣으면 같은 번호의 환자가 있는지 자동으로 확인합니다.</p>
+        )}
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       </section>
 
@@ -122,10 +137,6 @@ function NewPatient() {
       {checked && !checked.existing && (
         <section className="space-y-4 rounded-lg border border-stone-200 bg-white p-4">
           <p className="text-sm text-green-700">새 환자입니다. 아래를 채워 주세요.</p>
-          <label className="block">
-            <span className="text-sm text-stone-600">이름</span>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={INPUT} />
-          </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-sm text-stone-600">가족 연락처 (선택)</span>

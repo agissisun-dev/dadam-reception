@@ -3,6 +3,8 @@ import {
   nextWeeklyDate,
   effectiveRound,
   pickWeeklyTemplate,
+  pickHappyCallTemplate,
+  weeklySlotLabel,
   consecutiveNoReply,
   weekEndISO,
   WEEKDAYS,
@@ -42,21 +44,56 @@ function tpl(p: Partial<Template> & { id: number }): Template {
   };
 }
 
-describe("pickWeeklyTemplate", () => {
+describe("pickWeeklyTemplate — 공통 3개 (첫 발송 · 그다음 · 내원 안내)", () => {
   const list = [
-    tpl({ id: 1, condition: "digestive", round: 1 }),
-    tpl({ id: 2, condition: "digestive", round: 2 }),
+    tpl({ id: 1, condition: null, round: 1 }), // 첫 발송: 복약 불편 확인
+    tpl({ id: 2, condition: null, round: 2 }), // 그다음: 남은 탕약·예약
+    tpl({ id: 3, condition: null, round: null }), // 내원 안내
+  ];
+  it("1회차는 첫 발송, 2·3회차는 그다음", () => {
+    expect(pickWeeklyTemplate(list, "digestive", 1)?.id).toBe(1);
+    expect(pickWeeklyTemplate(list, "skin", 2)?.id).toBe(2);
+    expect(pickWeeklyTemplate(list, "general", 3)?.id).toBe(2);
+  });
+  it("4회차부터는 내원 안내", () => {
+    expect(pickWeeklyTemplate(list, "digestive", 4)?.id).toBe(3);
+    expect(pickWeeklyTemplate(list, "digestive", 9)?.id).toBe(3);
+  });
+  it("질환별 회차 문구가 따로 있으면 그것을 우선 (옛 데이터 호환)", () => {
+    const withOld = [...list, tpl({ id: 9, condition: "digestive", round: 2 })];
+    expect(pickWeeklyTemplate(withOld, "digestive", 2)?.id).toBe(9);
+    expect(pickWeeklyTemplate(withOld, "skin", 2)?.id).toBe(2);
+  });
+  it("슬롯 문구가 없으면 내원 안내로, 아무것도 없으면 null", () => {
+    expect(pickWeeklyTemplate([list[2]], "skin", 1)?.id).toBe(3);
+    expect(pickWeeklyTemplate([], "skin", 1)).toBeNull();
+  });
+});
+
+describe("pickHappyCallTemplate", () => {
+  const list = [
+    tpl({ id: 1, condition: null, round: 1 }),
+    tpl({ id: 2, condition: null, round: 2 }),
     tpl({ id: 3, condition: null, round: null }),
   ];
-  it("질환·회차 일치", () => {
-    expect(pickWeeklyTemplate(list, "digestive", 2)?.id).toBe(2);
+  it("1차는 복약 불편 확인, 2차는 남은 탕약·예약", () => {
+    expect(pickHappyCallTemplate(list, 1, false)?.id).toBe(1);
+    expect(pickHappyCallTemplate(list, 2, false)?.id).toBe(2);
   });
-  it("회차 5는 4로 캡, 없으면 공통", () => {
-    expect(pickWeeklyTemplate(list, "digestive", 5)?.id).toBe(3);
-    expect(pickWeeklyTemplate(list, "skin", 1)?.id).toBe(3);
+  it("한 번만 거는 처방(12일 이하)은 남은 탕약·예약 문구", () => {
+    expect(pickHappyCallTemplate(list, 1, true)?.id).toBe(2);
   });
-  it("아무것도 없으면 null", () => {
-    expect(pickWeeklyTemplate([], "skin", 1)).toBeNull();
+  it("없으면 null (내원 안내로 대신하지 않음)", () => {
+    expect(pickHappyCallTemplate([list[2]], 1, false)).toBeNull();
+  });
+});
+
+describe("weeklySlotLabel", () => {
+  it("1 → 첫 발송, 2 → 그다음, null → 내원 안내, 그 외 → N주차", () => {
+    expect(weeklySlotLabel(1)).toBe("첫 발송");
+    expect(weeklySlotLabel(2)).toBe("그다음");
+    expect(weeklySlotLabel(null)).toBe("내원 안내");
+    expect(weeklySlotLabel(3)).toBe("3주차");
   });
 });
 

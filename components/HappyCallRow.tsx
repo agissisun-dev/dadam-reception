@@ -4,9 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { describePrescription } from "@/lib/packs";
-import type { ContactChannel, HappyCallRow as Row } from "@/lib/types";
+import type { ContactChannel, HappyCallRow as Row, Template } from "@/lib/types";
 import { conditionLabel } from "@/lib/conditions";
 import { daysBetween } from "@/lib/dates";
+import { NOTE_SINGLE } from "@/lib/happyCallRules";
+import { pickHappyCallTemplate } from "@/lib/weeklyRules";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
 import {
   markContacted,
@@ -30,7 +32,17 @@ const CHANNELS: { value: ContactChannel; label: string }[] = [
 const BTN = "rounded border border-stone-300 px-3 py-1.5 text-sm";
 const PRIMARY = "rounded bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-50";
 
-export default function HappyCallRow({ row, today, onDone }: { row: Row; today: string; onDone: () => void }) {
+export default function HappyCallRow({
+  row,
+  today,
+  templates = [],
+  onDone,
+}: {
+  row: Row;
+  today: string;
+  templates?: Template[];
+  onDone: () => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>(null);
@@ -40,12 +52,27 @@ export default function HappyCallRow({ row, today, onDone }: { row: Row; today: 
   const [channel, setChannel] = useState<ContactChannel>("phone");
   const [memo, setMemo] = useState("");
   const [date, setDate] = useState(row.due_date);
+  const tpl = pickHappyCallTemplate(templates, row.round, row.note === NOTE_SINGLE);
+  const [message, setMessage] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const late = daysBetween(row.due_date, today);
   const p = row.prescription;
   const pt = p.patient;
+  // 문구 틀은 화면이 뜬 뒤에 도착하므로, 사용자가 고치기 전까지는 틀 본문을 그대로 보여 준다.
+  const messageText = message ?? tpl?.body ?? "";
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(messageText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("자동 복사가 막혀 있습니다. 문구를 드래그해 Ctrl+C로 복사하세요.");
+    }
+  }
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -101,6 +128,24 @@ export default function HappyCallRow({ row, today, onDone }: { row: Row; today: 
               환자 상세
             </Link>
           </div>
+
+          {tpl && (
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-stone-600">보낼 문구 ({tpl.name})</span>
+                <button className={BTN} onClick={copy}>
+                  문구 복사
+                </button>
+                {copied && <span className="text-sm text-green-700">복사됨</span>}
+              </div>
+              <textarea
+                value={messageText}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={4}
+                className="mt-1 w-full rounded border border-stone-300 px-3 py-2 text-sm"
+              />
+            </div>
+          )}
 
           {mode === null && (
             <div className="flex flex-wrap gap-2">

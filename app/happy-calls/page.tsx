@@ -7,8 +7,9 @@ import AppHeader from "@/components/AppHeader";
 import HappyCallRow from "@/components/HappyCallRow";
 import { listOpenHappyCalls } from "@/lib/happyCalls";
 import { bucketHappyCalls } from "@/lib/happyCallRules";
+import { listTemplates } from "@/lib/templates";
 import { todayISO, weekdayKo } from "@/lib/dates";
-import type { HappyCallRow as Row } from "@/lib/types";
+import type { HappyCallRow as Row, Template } from "@/lib/types";
 
 function groupRows(rows: Row[]): { date: string; rows: Row[] }[] {
   const m = new Map<string, Row[]>();
@@ -18,6 +19,7 @@ function groupRows(rows: Row[]): { date: string; rows: Row[] }[] {
 
 function Board() {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [error, setError] = useState<string | null>(null);
   const today = todayISO();
 
@@ -29,6 +31,7 @@ function Board() {
 
   useEffect(() => {
     load();
+    listTemplates("weekly").then(setTemplates).catch(() => setTemplates([]));
   }, [load]);
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
@@ -57,7 +60,7 @@ function Board() {
         )}
         <div className="space-y-2">
           {todays.map((r) => (
-            <HappyCallRow key={r.id} row={r} today={today} onDone={load} />
+            <HappyCallRow key={r.id} row={r} today={today} templates={templates} onDone={load} />
           ))}
         </div>
       </section>
@@ -73,7 +76,7 @@ function Board() {
               </p>
               <div className="space-y-2">
                 {g.rows.map((r) => (
-                  <HappyCallRow key={r.id} row={r} today={today} onDone={load} />
+                  <HappyCallRow key={r.id} row={r} today={today} templates={templates} onDone={load} />
                 ))}
               </div>
             </div>

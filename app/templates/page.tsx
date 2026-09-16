@@ -5,6 +5,7 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import { createTemplate, deleteTemplate, listTemplates, updateTemplate } from "@/lib/templates";
 import { CONDITIONS, conditionLabel } from "@/lib/conditions";
+import { weeklySlotLabel } from "@/lib/weeklyRules";
 import type { Condition, Template, TemplateInput, TemplateKind } from "@/lib/types";
 
 const INPUT = "mt-1 w-full rounded border border-stone-300 px-3 py-2";
@@ -90,12 +91,9 @@ function TemplateEditor({
               onChange={(e) => setV({ ...v, round: e.target.value ? Number(e.target.value) : null })}
               className={INPUT}
             >
-              <option value="">공통</option>
-              {[1, 2, 3, 4].map((r) => (
-                <option key={r} value={r}>
-                  {r}주차
-                </option>
-              ))}
+              <option value="">내원 안내 (4회째부터)</option>
+              <option value={1}>첫 발송 (1회차)</option>
+              <option value={2}>그다음 (2·3회차)</option>
             </select>
           </label>
         </div>
@@ -202,8 +200,8 @@ function Manager() {
                   <span className="font-medium">{t.name}</span>
                   {t.kind === "weekly" && (
                     <span className="rounded bg-stone-100 px-1.5 py-0.5 text-xs">
-                      {t.condition ? conditionLabel(t.condition) : "공통"}
-                      {t.round ? ` · ${t.round}주차` : ""}
+                      {weeklySlotLabel(t.round)}
+                      {t.condition ? ` · ${conditionLabel(t.condition)}` : ""}
                     </span>
                   )}
                   {t.kind === "task" && t.date_rule && (

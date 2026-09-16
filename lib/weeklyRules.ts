@@ -38,19 +38,64 @@ export function effectiveRound(round: number): number {
   return Math.min(Math.max(1, round), MAX_ROUND);
 }
 
-/** 질환·회차 일치 → 공통(condition null) → null */
+/**
+ * 주간 관리 문구는 공통 3개다. round 칸을 "슬롯"으로 쓴다.
+ *   1    = 첫 발송 (복약 불편 확인)
+ *   2    = 그다음 (남은 탕약 확인·예약 안내)
+ *   null = 내원 안내 (4회째부터)
+ */
+export const SLOT_FIRST = 1;
+export const SLOT_NEXT = 2;
+
+export function weeklySlotLabel(round: number | null): string {
+  if (round === SLOT_FIRST) return "첫 발송";
+  if (round === SLOT_NEXT) return "그다음";
+  if (round === null) return "내원 안내";
+  return `${round}주차`;
+}
+
+function weeklyOf(templates: Template[]): Template[] {
+  return templates.filter((t) => t.kind === "weekly");
+}
+
+function visitTemplate(weekly: Template[]): Template | null {
+  return weekly.find((t) => t.condition === null && t.round === null) ?? null;
+}
+
+/**
+ * 회차 → 문구.
+ *  - 4회째부터: 내원 안내 (질환별 4주차 문구가 남아 있으면 그것)
+ *  - 그 전: 질환별 회차 문구(옛 데이터) → 공통 슬롯(1회차=첫 발송, 나머지=그다음) → 내원 안내 → null
+ */
 export function pickWeeklyTemplate(
   templates: Template[],
   condition: Condition,
   round: number,
 ): Template | null {
+  const weekly = weeklyOf(templates);
   const r = effectiveRound(round);
-  const weekly = templates.filter((t) => t.kind === "weekly");
+  if (r >= MAX_ROUND) {
+    return visitTemplate(weekly) ?? weekly.find((t) => t.condition === condition && t.round === MAX_ROUND) ?? null;
+  }
+  const slot = r === 1 ? SLOT_FIRST : SLOT_NEXT;
   return (
     weekly.find((t) => t.condition === condition && t.round === r) ??
-    weekly.find((t) => t.condition === null) ??
-    null
+    weekly.find((t) => t.condition === null && t.round === slot) ??
+    visitTemplate(weekly)
   );
+}
+
+/**
+ * 해피콜 문구. 1차 = 첫 발송(복약 불편 확인), 2차·한 번만 거는 처방 = 그다음(남은 탕약·예약).
+ * 내원 안내로 대신하지 않는다 (해피콜은 복약 중인 환자라서).
+ */
+export function pickHappyCallTemplate(
+  templates: Template[],
+  round: number,
+  single: boolean,
+): Template | null {
+  const slot = round === 1 && !single ? SLOT_FIRST : SLOT_NEXT;
+  return weeklyOf(templates).find((t) => t.condition === null && t.round === slot) ?? null;
 }
 
 /** 최근(내림차순) 기록에서 연속 '답 없음' 수 */

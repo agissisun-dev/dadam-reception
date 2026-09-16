@@ -6,7 +6,7 @@ import type { Template, WeeklyRow as Row } from "@/lib/types";
 import { conditionLabel } from "@/lib/conditions";
 import { daysBetween } from "@/lib/dates";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
-import { effectiveRound, pickWeeklyTemplate } from "@/lib/weeklyRules";
+import { pickWeeklyTemplate } from "@/lib/weeklyRules";
 import { recordReply, recordWeekly } from "@/lib/weekly";
 import { excludePatient } from "@/lib/patients";
 import PhoneText from "./PhoneText";
@@ -133,7 +133,7 @@ export default function WeeklyRow({
           <div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-stone-600">
-                이번 주 문구 {tpl ? `(${tpl.name}${effectiveRound(row.weekly_round) !== row.weekly_round ? ", 4주차 문구 반복" : ""})` : "(틀 없음)"}
+                이번 주 문구 {tpl ? `(${tpl.name})` : "(틀 없음)"}
               </span>
               <button className={BTN} onClick={copy}>
                 문구 복사

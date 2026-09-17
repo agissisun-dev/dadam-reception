@@ -71,7 +71,7 @@ export default function WeeklyRow({
     setBusy(true);
     setError(null);
     try {
-      await sendSms(to, message);
+      await sendSms(to, message, { patientId: row.id, staff });
     } catch (e) {
       setError(`문자를 보내지 못했습니다. ${(e as Error).message}`);
       setBusy(false);
@@ -204,6 +204,7 @@ export default function WeeklyRow({
 
           {mode === "sms" && (
             <div className="space-y-2">
+              <StaffSelect value={staff} onChange={setStaff} />
               <SmsSendBox
                 recipients={recipients}
                 text={message}

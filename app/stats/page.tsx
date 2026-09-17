@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import MonthColumns from "@/components/MonthColumns";
 import { loadStats, type StatsData } from "@/lib/stats";
+import { listSmsLogs } from "@/lib/smsLogs";
+import { maskPhone } from "@/lib/phone";
+import type { SmsLog } from "@/lib/types";
 import { todayISO } from "@/lib/dates";
 import {
   happyCallMonth,
@@ -156,7 +159,87 @@ function Board() {
       <p className="text-xs text-stone-500">
         포 수는 처방에 적힌 포 수를 더한 값이고, 포 수가 없는 옛 처방은 일수 × 하루 포수로 봅니다. 신규 환자는 등록한 달 기준입니다.
       </p>
+
+      <SmsLedger />
     </main>
+  );
+}
+
+function whenKo(ts: string): string {
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** 문자 발송 장부. 서버가 남긴 모든 시도(성공·실패·거절)를 최근 것부터 보여 준다. 앱에서는 지울 수 없다. */
+function SmsLedger() {
+  const [logs, setLogs] = useState<SmsLog[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
+
+  useEffect(() => {
+    listSmsLogs(100)
+      .then(setLogs)
+      .catch((e: Error) => setError(e.message));
+  }, []);
+
+  return (
+    <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
+      <div className="mb-1 flex items-baseline justify-between">
+        <h2 className="font-bold">문자 발송 장부</h2>
+        <span className="text-xs text-stone-500">최근 100건 · 성공·실패 모두</span>
+      </div>
+      <p className="mb-3 text-xs text-stone-500">
+        등록된 환자·가족 번호로만 보낼 수 있고, 모든 시도가 여기 남습니다. 줄을 누르면 보낸 문구가 보입니다.
+      </p>
+      {error && <p className="text-red-600">{error}</p>}
+      {logs && logs.length === 0 && <p className="text-stone-500">아직 보낸 문자가 없습니다.</p>}
+      {logs && logs.length > 0 && (
+        <table className="w-full text-xs">
+          <thead className="text-stone-500">
+            <tr>
+              <th className="px-2 py-1 text-left">언제</th>
+              <th className="px-2 py-1 text-left">환자</th>
+              <th className="px-2 py-1 text-left">받는 사람</th>
+              <th className="px-2 py-1 text-left">보낸 사람</th>
+              <th className="px-2 py-1 text-left">결과</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.map((l) => (
+              <Fragment key={l.id}>
+                <tr
+                  onClick={() => setOpenId(openId === l.id ? null : l.id)}
+                  className="cursor-pointer border-t border-stone-100 hover:bg-stone-50"
+                >
+                  <td className="px-2 py-1.5 whitespace-nowrap">{whenKo(l.created_at)}</td>
+                  <td className="px-2 py-1.5">{l.patient_name}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">
+                    {l.recipient_label} {maskPhone(l.to_phone)}
+                  </td>
+                  <td className="px-2 py-1.5">{l.staff_name}</td>
+                  <td className="px-2 py-1.5">
+                    {l.ok ? (
+                      <span className="text-green-700">보냄 ({l.sms_type})</span>
+                    ) : (
+                      <span className="text-red-700">실패</span>
+                    )}
+                  </td>
+                </tr>
+                {openId === l.id && (
+                  <tr className="bg-stone-50">
+                    <td colSpan={5} className="px-3 py-2">
+                      <p className="whitespace-pre-wrap text-stone-700">{l.text}</p>
+                      {l.error && <p className="mt-1 text-red-700">{l.error}</p>}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 

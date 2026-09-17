@@ -100,7 +100,7 @@ export default function HappyCallRow({
     setBusy(true);
     setError(null);
     try {
-      await sendSms(to, messageText);
+      await sendSms(to, messageText, { patientId: pt.id, staff });
     } catch (e) {
       setError(`문자를 보내지 못했습니다. ${(e as Error).message}`);
       setBusy(false);

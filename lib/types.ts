@@ -141,3 +141,19 @@ export type WeeklyRow = Patient & {
   lastReviewed: WeeklyContact | null;
   noReplyStreak: number;
 };
+
+/** 문자 발송 장부 한 줄. 서버가 성공·실패 모두 남긴다. */
+export type SmsLog = {
+  id: number;
+  patient_id: number | null;
+  patient_name: string;
+  recipient_label: string;
+  to_phone: string;
+  text: string;
+  sms_type: "SMS" | "LMS";
+  staff_name: string;
+  ok: boolean;
+  error: string | null;
+  message_id: string | null;
+  created_at: string;
+};

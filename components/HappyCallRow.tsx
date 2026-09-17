@@ -20,8 +20,10 @@ import {
 import { excludePatient } from "@/lib/patients";
 import PhoneText from "./PhoneText";
 import StaffSelect from "./StaffSelect";
+import SmsSendBox, { type SmsRecipient } from "./SmsSendBox";
+import { sendSms } from "@/lib/sms";
 
-type Mode = null | "contacted" | "represc" | "exclude" | "reschedule";
+type Mode = null | "contacted" | "represc" | "exclude" | "reschedule" | "sms";
 
 const CHANNELS: { value: ContactChannel; label: string }[] = [
   { value: "phone", label: "전화" },
@@ -88,6 +90,26 @@ export default function HappyCallRow({
     }
   }
 
+  const recipients: SmsRecipient[] = [
+    { label: "환자", phone: pt.phone },
+    ...(pt.family_phone ? [{ label: `가족(${pt.family_note ?? ""})`, phone: pt.family_phone }] : []),
+  ];
+
+  /** 문자를 보내고, 성공하면 "연락함(문자)"으로 기록한다. 실패하면 기록하지 않는다. */
+  async function sendText(to: string, label: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await sendSms(to, messageText);
+    } catch (e) {
+      setError(`문자를 보내지 못했습니다. ${(e as Error).message}`);
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
+    await run(() => markContacted(row.id, "sms", `문자 발송 → ${label}\n${messageText}`, staff));
+  }
+
   return (
     <div className={`rounded-lg border bg-white p-4 ${late > 0 ? "border-red-300" : "border-stone-200"}`}>
       <button type="button" onClick={() => setOpen((v) => !v)} className="w-full text-left">
@@ -133,10 +155,15 @@ export default function HappyCallRow({
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-stone-600">보낼 문구 ({tpl.name})</span>
-                <button className={BTN} onClick={copy}>
-                  문구 복사
-                </button>
-                {copied && <span className="text-sm text-green-700">복사됨</span>}
+                <span className="flex items-center gap-2">
+                  {copied && <span className="text-sm text-green-700">복사됨</span>}
+                  <button className={BTN} onClick={copy}>
+                    문구 복사
+                  </button>
+                  <button className={PRIMARY} disabled={busy} onClick={() => setMode("sms")}>
+                    문자 보내기
+                  </button>
+                </span>
               </div>
               <textarea
                 value={messageText}
@@ -164,6 +191,20 @@ export default function HappyCallRow({
               <button className={`${BTN} ml-auto`} onClick={() => setMode("reschedule")}>
                 예정일 옮기기
               </button>
+            </div>
+          )}
+
+          {mode === "sms" && (
+            <div className="space-y-3">
+              <StaffSelect value={staff} onChange={setStaff} />
+              <SmsSendBox
+                recipients={recipients}
+                text={messageText}
+                busy={busy}
+                onSend={sendText}
+                onCancel={() => setMode(null)}
+              />
+              <p className="text-xs text-stone-500">보내면 이 해피콜은 연락함(문자)으로 기록되고 명단에서 빠집니다.</p>
             </div>
           )}
 

@@ -36,6 +36,9 @@ export default function AppHeader() {
         <Link href="/history" className="rounded border border-stone-300 px-3 py-1.5">
           지난 기록
         </Link>
+        <Link href="/stats" className="rounded border border-stone-300 px-3 py-1.5">
+          현황
+        </Link>
         <button onClick={logout} className="rounded border border-stone-300 px-3 py-1.5">
           로그아웃
         </button>

@@ -81,7 +81,7 @@ function Board() {
           value={pct(hc.onTime, hc.due) === null ? "–" : `${pct(hc.onTime, hc.due)}%`}
           sub={`예정 ${hc.due}건 중 예정일 안에 ${hc.onTime}건`}
         />
-        <Tile label="해피콜로 재처방·예약" value={`${hc.represcribed}건`} sub={`3차 해피콜 생성 ${hc.followUps}건`} />
+        <Tile label="해피콜로 재처방·예약" value={`${hc.represcribed}건`} sub={`처리 ${hc.handled}건 중`} />
       </section>
 
       <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">

@@ -105,7 +105,6 @@ export type HappyCallMonth = {
   handled: number; // 처리됨(대기 아님)
   onTime: number; // 예정일 당일 또는 그 전에 처리
   represcribed: number; // 재처방·예약됨으로 닫힘
-  followUps: number; // 그 달 만들어진 3차
 };
 
 const HANDLED = new Set(["contacted", "represcribed", "excluded"]);
@@ -113,9 +112,8 @@ const HANDLED = new Set(["contacted", "represcribed", "excluded"]);
 export function happyCallMonth(calls: HappyCallLite[], logs: ContactLogLite[], key: string): HappyCallMonth {
   const byCall = new Map<number, ContactLogLite[]>();
   for (const l of logs) byCall.set(l.happy_call_id, [...(byCall.get(l.happy_call_id) ?? []), l]);
-  const out: HappyCallMonth = { due: 0, handled: 0, onTime: 0, represcribed: 0, followUps: 0 };
+  const out: HappyCallMonth = { due: 0, handled: 0, onTime: 0, represcribed: 0 };
   for (const c of calls) {
-    if (c.round === 3 && monthKeyOfTimestamp(c.created_at) === key) out.followUps += 1;
     if (monthKey(c.due_date) !== key) continue;
     out.due += 1;
     if (c.status === "pending") continue;

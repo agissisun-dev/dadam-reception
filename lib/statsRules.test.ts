@@ -58,7 +58,6 @@ describe("happyCallMonth", () => {
     { id: 2, round: 2, due_date: "2026-09-10", status: "contacted", created_at: "2026-08-20T12:00:00+09:00" },
     { id: 3, round: 2, due_date: "2026-09-15", status: "closed", created_at: "2026-08-20T12:00:00+09:00" },
     { id: 4, round: 1, due_date: "2026-09-20", status: "pending", created_at: "2026-08-20T12:00:00+09:00" },
-    { id: 5, round: 3, due_date: "2026-10-01", status: "pending", created_at: "2026-09-10T12:00:00+09:00" },
     { id: 6, round: 1, due_date: "2026-08-30", status: "contacted", created_at: "2026-08-20T12:00:00+09:00" },
   ];
   const logs = [
@@ -67,13 +66,12 @@ describe("happyCallMonth", () => {
     { happy_call_id: 2, action: "contacted", created_at: "2026-09-12T12:00:00+09:00" },
     { happy_call_id: 3, action: "represcribed", created_at: "2026-09-14T12:00:00+09:00" },
   ];
-  it("예정·처리·제때·재처방·3차를 센다", () => {
+  it("예정·처리·제때·재처방을 센다", () => {
     expect(happyCallMonth(calls, logs, "2026-09")).toEqual({
       due: 4,
       handled: 3,
       onTime: 2,
       represcribed: 1,
-      followUps: 1,
     });
   });
 });

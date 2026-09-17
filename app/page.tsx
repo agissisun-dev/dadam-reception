@@ -8,6 +8,8 @@ import TaskCard from "@/components/TaskCard";
 import HappyCallRow from "@/components/HappyCallRow";
 import WeeklyRow from "@/components/WeeklyRow";
 import MonthCalendar, { type DayCounts } from "@/components/MonthCalendar";
+import Celebration from "@/components/Celebration";
+import { pickMessage, shouldCelebrate } from "@/lib/celebrationRules";
 import { listOpenTasks } from "@/lib/tasks";
 import { listOpenHappyCalls } from "@/lib/happyCalls";
 import { listWaitingDoctor, listWeeklyTargets } from "@/lib/weekly";
@@ -36,6 +38,30 @@ function buildCounts(data: Data, today: string): Map<string, DayCounts> {
   return m;
 }
 
+/**
+ * 오늘 남은 일(기한 지난 것 포함)이 0이 된 순간인지 본다. 자료가 올 때마다 부른다.
+ * 브라우저 저장소에 "오늘 본 남은 일 수"와 "축하한 날짜"를 남겨 하루 한 번만 띄운다.
+ */
+function checkCelebration(data: Data, today: string): boolean {
+  const openToday =
+    data.tasks.filter((t) => t.status === "todo" && t.due_date <= today).length +
+    data.happyCalls.filter((h) => h.due_date <= today).length +
+    data.weekly.filter((w) => weeklyDate(w, today) <= today).length;
+  try {
+    const seenKey = `dadam:openToday:${today}`;
+    const doneKey = "dadam:celebratedOn";
+    const raw = window.localStorage.getItem(seenKey);
+    const lastSeenOpen = raw === null ? null : Number(raw);
+    const celebratedOn = window.localStorage.getItem(doneKey);
+    const yes = shouldCelebrate({ today, openNow: openToday, lastSeenOpen, celebratedOn });
+    if (yes) window.localStorage.setItem(doneKey, today);
+    window.localStorage.setItem(seenKey, String(Math.max(openToday, lastSeenOpen ?? 0)));
+    return yes;
+  } catch {
+    return false; // 저장소를 못 쓰는 브라우저면 축하 화면만 건너뛴다
+  }
+}
+
 function CalendarBoard() {
   const today = todayISO();
   const [data, setData] = useState<Data | null>(null);
@@ -43,6 +69,7 @@ function CalendarBoard() {
   const [error, setError] = useState<string | null>(null);
   const [month, setMonth] = useState<YearMonth>(() => yearMonthOf(todayISO()));
   const [selected, setSelected] = useState<string>(() => todayISO());
+  const [celebrate, setCelebrate] = useState(false);
 
   const load = useCallback(() => {
     const now = todayISO();
@@ -52,7 +79,11 @@ function CalendarBoard() {
       listWeeklyTargets(addDays(now, 400)),
       listWaitingDoctor().then((l) => l.length).catch(() => 0),
     ])
-      .then(([tasks, happyCalls, weekly, waiting]) => setData({ tasks, happyCalls, weekly, waiting }))
+      .then(([tasks, happyCalls, weekly, waiting]) => {
+        const next = { tasks, happyCalls, weekly, waiting };
+        setData(next);
+        if (checkCelebration(next, now)) setCelebrate(true);
+      })
       .catch((e: Error) => setError(e.message));
   }, []);
 
@@ -89,6 +120,7 @@ function CalendarBoard() {
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-4">
+      {celebrate && <Celebration message={pickMessage(today)} onClose={() => setCelebrate(false)} />}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm text-stone-500">
           오늘 {today} ({weekdayKo(today)})
@@ -146,7 +178,11 @@ function CalendarBoard() {
         </h2>
         {dayEmpty && (
           <p className="rounded-lg border border-stone-200 bg-white p-6 text-center text-stone-600">
-            {selected === today ? "오늘 할 일이 없습니다" : "이 날은 할 일이 없습니다"}
+            {selected === today
+              ? overdueCount === 0
+                ? "오늘 할 일을 모두 마쳤습니다. 수고하셨습니다!"
+                : "오늘 예정된 일은 없습니다. 위의 기한 지난 일을 확인해 주세요."
+              : "이 날은 할 일이 없습니다"}
           </p>
         )}
         <div className="space-y-2">

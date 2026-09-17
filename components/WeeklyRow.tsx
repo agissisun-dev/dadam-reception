@@ -11,11 +11,13 @@ import { recordReply, recordWeekly } from "@/lib/weekly";
 import { excludePatient } from "@/lib/patients";
 import PhoneText from "./PhoneText";
 import StaffSelect from "./StaffSelect";
+import SmsSendBox, { type SmsRecipient } from "./SmsSendBox";
+import { sendSms } from "@/lib/sms";
 
 const BTN = "rounded border border-stone-300 px-3 py-1.5 text-sm";
 const PRIMARY = "rounded bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-50";
 
-type Mode = null | "reply" | "exclude";
+type Mode = null | "reply" | "exclude" | "sms";
 
 export default function WeeklyRow({
   row,
@@ -57,6 +59,26 @@ export default function WeeklyRow({
     } finally {
       setBusy(false);
     }
+  }
+
+  const recipients: SmsRecipient[] = [
+    { label: "환자", phone: row.phone },
+    ...(row.family_phone ? [{ label: `가족(${row.family_note ?? ""})`, phone: row.family_phone }] : []),
+  ];
+
+  /** 문자를 보내고, 성공하면 "발송함"으로 기록한다. 실패하면 기록하지 않는다. */
+  async function sendText(to: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await sendSms(to, message);
+    } catch (e) {
+      setError(`문자를 보내지 못했습니다. ${(e as Error).message}`);
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
+    await run(() => recordWeekly(row, "sent", staff, { message }));
   }
 
   async function copy() {
@@ -135,10 +157,15 @@ export default function WeeklyRow({
               <span className="text-sm text-stone-600">
                 이번 주 문구 {tpl ? `(${tpl.name})` : "(틀 없음)"}
               </span>
-              <button className={BTN} onClick={copy}>
-                문구 복사
-              </button>
-              {copied && <span className="text-sm text-green-700">복사됨</span>}
+              <span className="flex items-center gap-2">
+                {copied && <span className="text-sm text-green-700">복사됨</span>}
+                <button className={BTN} onClick={copy}>
+                  문구 복사
+                </button>
+                <button className={PRIMARY} disabled={busy || !message.trim()} onClick={() => setMode("sms")}>
+                  문자 보내기
+                </button>
+              </span>
             </div>
             <textarea
               value={message}
@@ -172,6 +199,19 @@ export default function WeeklyRow({
               <button className={`${BTN} text-red-700`} onClick={() => setMode("exclude")}>
                 연락 제외
               </button>
+            </div>
+          )}
+
+          {mode === "sms" && (
+            <div className="space-y-2">
+              <SmsSendBox
+                recipients={recipients}
+                text={message}
+                busy={busy}
+                onSend={(to) => sendText(to)}
+                onCancel={() => setMode(null)}
+              />
+              <p className="text-xs text-stone-500">보내면 발송함으로 기록되고 회차가 올라갑니다.</p>
             </div>
           )}
 

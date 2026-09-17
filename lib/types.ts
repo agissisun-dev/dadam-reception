@@ -54,7 +54,7 @@ export type Prescription = {
 export type HappyCall = {
   id: number;
   prescription_id: number;
-  round: 1 | 2;
+  round: 1 | 2 | 3; // 3 = 연락은 됐지만 재처방 없을 때 한 번 더
   due_date: string;
   auto_due_date: string;
   note: string;

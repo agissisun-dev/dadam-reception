@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { planHappyCalls, bucketHappyCalls, NOTE_ROUND1, NOTE_ROUND2, NOTE_SINGLE } from "./happyCallRules";
+import {
+  planHappyCalls,
+  bucketHappyCalls,
+  followUpAfterContact,
+  isLastPlannedCall,
+  NOTE_ROUND1,
+  NOTE_ROUND2,
+  NOTE_ROUND3,
+  NOTE_SINGLE,
+} from "./happyCallRules";
 import type { HappyCallRow } from "./types";
 
 describe("planHappyCalls", () => {
@@ -60,5 +69,28 @@ describe("bucketHappyCalls", () => {
     const b = bucketHappyCalls(rows, today);
     const ids = [...b.today, ...b.upcoming].map((r) => r.id);
     expect(ids).not.toContain(5);
+  });
+});
+
+describe("followUpAfterContact (3차 해피콜)", () => {
+  const today = "2026-09-17";
+  it("2차를 연락함으로 마치면 7일 뒤 3차", () => {
+    expect(followUpAfterContact({ round: 2, note: NOTE_ROUND2 }, today)).toEqual({
+      round: 3,
+      due_date: "2026-09-24",
+      note: NOTE_ROUND3,
+    });
+  });
+  it("12일 이하 처방의 단일 건도 마지막이라 3차를 만든다", () => {
+    expect(followUpAfterContact({ round: 1, note: NOTE_SINGLE }, today)?.due_date).toBe("2026-09-24");
+  });
+  it("1차(2차가 남아 있음)와 3차는 만들지 않는다", () => {
+    expect(followUpAfterContact({ round: 1, note: NOTE_ROUND1 }, today)).toBeNull();
+    expect(followUpAfterContact({ round: 3, note: NOTE_ROUND3 }, today)).toBeNull();
+  });
+  it("isLastPlannedCall", () => {
+    expect(isLastPlannedCall({ round: 2, note: "" })).toBe(true);
+    expect(isLastPlannedCall({ round: 1, note: NOTE_SINGLE })).toBe(true);
+    expect(isLastPlannedCall({ round: 1, note: NOTE_ROUND1 })).toBe(false);
   });
 });

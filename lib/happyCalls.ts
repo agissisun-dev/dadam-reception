@@ -1,5 +1,6 @@
 import { getSupabase } from "./supabaseClient";
 import { addDays, todayISO } from "./dates";
+import { followUpAfterContact } from "./happyCallRules";
 import type { ContactChannel, HappyCallRow } from "./types";
 
 function fail(action: string, message: string): never {
@@ -60,15 +61,43 @@ async function log(
   if (error) fail("기록 저장", error.message);
 }
 
+/**
+ * 연락함. 마지막 예정 건(2차 또는 단일)이었으면 7일 뒤 3차를 하나 만든다.
+ * 3차가 이미 있으면 다시 만들지 않는다. 재처방·예약됨으로 닫히면 markRepresc가 3차도 닫는다.
+ */
 export async function markContacted(
   id: number,
   channel: ContactChannel,
   memo: string,
   staff: string,
 ): Promise<void> {
-  const { error } = await getSupabase().from("happy_calls").update({ status: "contacted" }).eq("id", id);
+  const sb = getSupabase();
+  const { data: cur, error: e0 } = await sb
+    .from("happy_calls")
+    .select("round, note, prescription_id")
+    .eq("id", id)
+    .single();
+  if (e0) fail("연락함 처리", e0.message);
+  const { error } = await sb.from("happy_calls").update({ status: "contacted" }).eq("id", id);
   if (error) fail("연락함 처리", error.message);
   await log(id, "contacted", staff, { channel, memo });
+
+  const next = followUpAfterContact(cur, todayISO());
+  if (!next) return;
+  const { count } = await sb
+    .from("happy_calls")
+    .select("id", { count: "exact", head: true })
+    .eq("prescription_id", cur.prescription_id)
+    .eq("round", 3);
+  if ((count ?? 0) > 0) return;
+  const { error: e2 } = await sb.from("happy_calls").insert({
+    prescription_id: cur.prescription_id,
+    round: next.round,
+    due_date: next.due_date,
+    auto_due_date: next.due_date,
+    note: next.note,
+  });
+  if (e2) fail("3차 해피콜 만들기", e2.message);
 }
 
 export async function markMissed(id: number, staff: string): Promise<void> {

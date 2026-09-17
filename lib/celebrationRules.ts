@@ -1,0 +1,29 @@
+/**
+ * 오늘 할 일(기한 지난 것 포함)을 다 마쳤을 때 축하 화면을 띄울지 정한다.
+ * - 오늘 남은 일이 0이어야 한다.
+ * - 오늘 중에 일이 있었어야 한다(마지막으로 본 남은 일 수가 0보다 컸음). 아무 일도 없던 날은 안 띄운다.
+ * - 하루에 한 번만.
+ */
+export function shouldCelebrate(input: {
+  today: string;
+  openNow: number;
+  lastSeenOpen: number | null; // 오늘 마지막으로 본 남은 일 수. 오늘 처음이면 null
+  celebratedOn: string | null; // 마지막으로 축하 화면을 띄운 날짜
+}): boolean {
+  if (input.openNow !== 0) return false;
+  if (input.celebratedOn === input.today) return false;
+  return (input.lastSeenOpen ?? 0) > 0;
+}
+
+export const CELEBRATION_MESSAGES = [
+  "오늘 할 일을 모두 마쳤습니다. 수고하셨습니다!",
+  "오늘도 빠짐없이 챙기셨네요. 멋집니다!",
+  "다 끝났습니다. 따뜻한 차 한 잔 하세요!",
+  "오늘 환자분들이 잘 챙겨졌습니다. 고맙습니다!",
+] as const;
+
+export function pickMessage(seed: string): string {
+  let h = 0;
+  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) % 100000;
+  return CELEBRATION_MESSAGES[h % CELEBRATION_MESSAGES.length];
+}

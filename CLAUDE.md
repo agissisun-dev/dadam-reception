@@ -5,7 +5,7 @@
 ## 이 앱이 무엇인가
 - 노원 다담한의원 **접수실용** 웹앱. 쓰는 사람은 접수실 2명 + 원장 부부(김경태·김선민). 사용자(구디)가 병원 운영자다.
 - 로그인은 **공용 계정 하나**(dadamn1@naver.com, Supabase Auth). 앱 안에 가입 화면 없음. 완료·처리 때 이름을 고른다: 박정희샘 · 실장님 · 이혜경샘 (`lib/staff.ts`).
-- 화면: 첫 화면(오늘 할 일 + 해피콜·주간 관리 카드) / 해피콜 / 주간 관리 / 환자 / 문구 틀 / 업무 등록 / 지난 기록.
+- 화면: 첫 화면(한 달 달력 + 기한 지난 일 + 고른 날의 업무·해피콜·주간 관리, `components/MonthCalendar.tsx` · `lib/calendarRules.ts`) / 해피콜 / 주간 관리 / 환자 / 문구 틀 / 업무 등록 / 지난 기록.
 - 프로덕션 https://dadam-reception.vercel.app (Vercel 팀 dadamn1), Supabase 프로젝트 `dadam-reception` (ref vrwxpmhrpqqdivegktgg), GitHub https://github.com/agissisun-dev/dadam-reception (공개, 환자 정보 없음).
 - 데이터는 Supabase 하나에 있어서 접수실·원장실 어느 PC에서 열어도 같은 내용이다. 화면은 열 때 불러오므로 새로고침하면 최신.
 

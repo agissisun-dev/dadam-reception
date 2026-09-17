@@ -1,138 +1,165 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { countOpenHappyCalls } from "@/lib/happyCalls";
-import { countWeekly } from "@/lib/weekly";
-import { weekEndISO } from "@/lib/weeklyRules";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import TaskCard from "@/components/TaskCard";
+import HappyCallRow from "@/components/HappyCallRow";
+import WeeklyRow from "@/components/WeeklyRow";
+import MonthCalendar, { type DayCounts } from "@/components/MonthCalendar";
 import { listOpenTasks } from "@/lib/tasks";
-import { bucketOpenTasks, groupByDate, todayISO, weekdayKo } from "@/lib/dates";
-import type { Task } from "@/lib/types";
+import { listOpenHappyCalls } from "@/lib/happyCalls";
+import { listWaitingDoctor, listWeeklyTargets } from "@/lib/weekly";
+import { listTemplates } from "@/lib/templates";
+import { weekEndISO } from "@/lib/weeklyRules";
+import { addDays, todayISO, weekdayKo } from "@/lib/dates";
+import { dayLabel, sameMonth, shiftMonth, yearMonthOf, type YearMonth } from "@/lib/calendarRules";
+import type { HappyCallRow as HcRow, Task, Template, WeeklyRow as WkRow } from "@/lib/types";
 
-function TodayBoard() {
-  const [tasks, setTasks] = useState<Task[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [showUpcoming, setShowUpcoming] = useState(true);
-  const [hc, setHc] = useState<{ today: number; overdue: number } | null>(null);
-  const [wk, setWk] = useState<{ thisWeek: number; waiting: number } | null>(null);
+type Data = { tasks: Task[]; happyCalls: HcRow[]; weekly: WkRow[]; waiting: number };
+
+function weeklyDate(r: WkRow, today: string): string {
+  return r.weekly_next_date ?? today;
+}
+
+function buildCounts(data: Data, today: string): Map<string, DayCounts> {
+  const m = new Map<string, DayCounts>();
+  const bump = (iso: string, key: keyof DayCounts) => {
+    const c = m.get(iso) ?? { tasks: 0, happyCalls: 0, weekly: 0 };
+    c[key] += 1;
+    m.set(iso, c);
+  };
+  for (const t of data.tasks) bump(t.due_date, "tasks");
+  for (const h of data.happyCalls) bump(h.due_date, "happyCalls");
+  for (const w of data.weekly) bump(weeklyDate(w, today), "weekly");
+  return m;
+}
+
+function CalendarBoard() {
   const today = todayISO();
+  const [data, setData] = useState<Data | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [month, setMonth] = useState<YearMonth>(() => yearMonthOf(todayISO()));
+  const [selected, setSelected] = useState<string>(() => todayISO());
+
+  const load = useCallback(() => {
+    const now = todayISO();
+    Promise.all([
+      listOpenTasks(),
+      listOpenHappyCalls(),
+      listWeeklyTargets(addDays(now, 400)),
+      listWaitingDoctor().then((l) => l.length).catch(() => 0),
+    ])
+      .then(([tasks, happyCalls, weekly, waiting]) => setData({ tasks, happyCalls, weekly, waiting }))
+      .catch((e: Error) => setError(e.message));
+  }, []);
 
   useEffect(() => {
-    listOpenTasks().then(setTasks).catch((e: Error) => setError(e.message));
-    countOpenHappyCalls(today)
-      .then(setHc)
-      .catch(() => setHc(null));
-    countWeekly(weekEndISO(today))
-      .then(setWk)
-      .catch(() => setWk(null));
-  }, [today]);
+    load();
+    listTemplates("weekly").then(setTemplates).catch(() => setTemplates([]));
+  }, [load]);
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
-  if (!tasks) return <p className="p-6 text-stone-500">불러오는 중…</p>;
+  if (!data) return <p className="p-6 text-stone-500">불러오는 중…</p>;
 
-  const { overdue, today: todays, upcoming } = bucketOpenTasks(tasks, today);
-  const nothingToday = overdue.length === 0 && todays.length === 0;
+  const openTasks = data.tasks.filter((t) => t.status === "todo");
+  const counts = buildCounts({ ...data, tasks: openTasks }, today);
+
+  const overdueTasks = openTasks.filter((t) => t.due_date < today);
+  const overdueHc = data.happyCalls.filter((h) => h.due_date < today);
+  const overdueWk = data.weekly.filter((w) => weeklyDate(w, today) < today);
+  const overdueCount = overdueTasks.length + overdueHc.length + overdueWk.length;
+
+  const dayTasks = openTasks.filter((t) => t.due_date === selected);
+  const dayHc = data.happyCalls.filter((h) => h.due_date === selected);
+  const dayWk = data.weekly.filter((w) => weeklyDate(w, today) === selected);
+  const dayEmpty = dayTasks.length === 0 && dayHc.length === 0 && dayWk.length === 0;
+
+  const hcToday = data.happyCalls.filter((h) => h.due_date === today).length;
+  const weekEnd = weekEndISO(today);
+  const wkThisWeek = data.weekly.filter((w) => weeklyDate(w, today) <= weekEnd).length;
+
+  const goToday = () => {
+    const now = todayISO();
+    setMonth(yearMonthOf(now));
+    setSelected(now);
+  };
 
   return (
-    <main className="mx-auto max-w-2xl space-y-8 p-4">
-      <p className="text-sm text-stone-500">{today}</p>
-
-      <Link
-        href="/happy-calls"
-        className={`block rounded-lg border p-4 ${
-          hc && hc.today + hc.overdue > 0 ? "border-amber-300 bg-amber-50" : "border-stone-200 bg-white"
-        }`}
-      >
-        <span className="font-medium">해피콜 대상</span>{" "}
-        {hc ? (
-          <>
-            오늘 {hc.today}명
-            {hc.overdue > 0 && <span className="text-red-700"> · 지난 것 {hc.overdue}명</span>}
-          </>
-        ) : (
-          "…"
-        )}
-        <span className="float-right text-stone-500">▶</span>
-      </Link>
-
-      <Link
-        href="/weekly"
-        className={`block rounded-lg border p-4 ${
-          wk && wk.thisWeek + wk.waiting > 0 ? "border-amber-300 bg-amber-50" : "border-stone-200 bg-white"
-        }`}
-      >
-        <span className="font-medium">주간 관리</span>{" "}
-        {wk ? (
-          <>
-            이번 주 {wk.thisWeek}명
-            {wk.waiting > 0 && <span className="text-amber-800"> · 원장 확인 대기 {wk.waiting}건</span>}
-          </>
-        ) : (
-          "…"
-        )}
-        <span className="float-right text-stone-500">▶</span>
-      </Link>
-
-      {nothingToday && (
-        <p className="rounded-lg border border-stone-200 bg-white p-6 text-center text-stone-600">
-          오늘 할 일이 없습니다
+    <main className="mx-auto max-w-2xl space-y-6 p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm text-stone-500">
+          오늘 {today} ({weekdayKo(today)})
         </p>
-      )}
+        <p className="flex flex-wrap gap-3 text-sm">
+          <Link href="/happy-calls" className="underline">
+            해피콜 오늘 {hcToday}명
+          </Link>
+          <Link href="/weekly" className="underline">
+            주간 관리 이번 주 {wkThisWeek}명
+          </Link>
+          {data.waiting > 0 && (
+            <Link href="/weekly" className="text-amber-800 underline">
+              원장 확인 대기 {data.waiting}건
+            </Link>
+          )}
+        </p>
+      </div>
 
-      {overdue.length > 0 && (
+      {overdueCount > 0 && (
         <section>
-          <h2 className="mb-2 font-bold text-red-700">기한 지난 일 ({overdue.length})</h2>
+          <h2 className="mb-2 font-bold text-red-700">기한 지난 일 ({overdueCount})</h2>
           <div className="space-y-2">
-            {overdue.map((t) => (
-              <TaskCard key={t.id} task={t} today={today} />
+            {overdueTasks.map((t) => (
+              <TaskCard key={`t${t.id}`} task={t} today={today} />
+            ))}
+            {overdueHc.map((r) => (
+              <HappyCallRow key={`h${r.id}`} row={r} today={today} templates={templates} onDone={load} />
+            ))}
+            {overdueWk.map((r) => (
+              <WeeklyRow key={`w${r.id}`} row={r} today={today} templates={templates} onDone={load} />
             ))}
           </div>
         </section>
       )}
 
-      {todays.length > 0 && (
-        <section>
-          <h2 className="mb-2 font-bold">오늘 할 일 ({todays.length})</h2>
-          <div className="space-y-2">
-            {todays.map((t) => (
-              <TaskCard key={t.id} task={t} today={today} />
-            ))}
-          </div>
-        </section>
-      )}
+      <MonthCalendar
+        month={month}
+        today={today}
+        selected={selected}
+        counts={counts}
+        onSelect={setSelected}
+        onPrev={() => setMonth((m) => shiftMonth(m, -1))}
+        onNext={() => setMonth((m) => shiftMonth(m, 1))}
+        onToday={goToday}
+      />
 
       <section>
-        <div className="mb-2 flex items-baseline justify-between">
-          <h2 className="font-bold text-stone-700">이번 주 (내일부터 7일, {upcoming.length})</h2>
-          <button
-            onClick={() => setShowUpcoming((v) => !v)}
-            className="text-sm text-stone-500 underline"
-          >
-            {showUpcoming ? "접기" : "펼치기"}
-          </button>
-        </div>
-        {showUpcoming && (
-          <div className="space-y-4">
-            {upcoming.length === 0 && (
-              <p className="text-sm text-stone-500">7일 안에 예정된 일이 없습니다</p>
-            )}
-            {groupByDate(upcoming).map((g) => (
-              <div key={g.date}>
-                <p className="mb-1 text-sm text-stone-500">
-                  {g.date} ({weekdayKo(g.date)})
-                </p>
-                <div className="space-y-2">
-                  {g.tasks.map((t) => (
-                    <TaskCard key={t.id} task={t} today={today} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+        <h2 className="mb-2 font-bold">
+          {dayLabel(selected)} ({weekdayKo(selected)}){" "}
+          {selected === today && <span className="text-sm text-stone-500">오늘</span>}
+          {!sameMonth(yearMonthOf(selected), month) && (
+            <span className="text-sm font-normal text-stone-500"> · 다른 달</span>
+          )}
+        </h2>
+        {dayEmpty && (
+          <p className="rounded-lg border border-stone-200 bg-white p-6 text-center text-stone-600">
+            {selected === today ? "오늘 할 일이 없습니다" : "이 날은 할 일이 없습니다"}
+          </p>
         )}
+        <div className="space-y-2">
+          {dayTasks.map((t) => (
+            <TaskCard key={`t${t.id}`} task={t} today={today} />
+          ))}
+          {dayHc.map((r) => (
+            <HappyCallRow key={`h${r.id}`} row={r} today={today} templates={templates} onDone={load} />
+          ))}
+          {dayWk.map((r) => (
+            <WeeklyRow key={`w${r.id}`} row={r} today={today} templates={templates} onDone={load} />
+          ))}
+        </div>
       </section>
     </main>
   );
@@ -144,7 +171,7 @@ export default function HomePage() {
       {() => (
         <>
           <AppHeader />
-          <TodayBoard />
+          <CalendarBoard />
         </>
       )}
     </AuthGate>

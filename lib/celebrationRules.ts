@@ -19,7 +19,7 @@ export const CELEBRATION_MESSAGES = [
   "오늘 할 일을 모두 마쳤습니다. 수고하셨습니다!",
   "오늘도 빠짐없이 챙기셨네요. 멋집니다!",
   "다 끝났습니다. 따뜻한 차 한 잔 하세요!",
-  "오늘 환자분들이 잘 챙겨졌습니다. 고맙습니다!",
+  "오늘 덕분에 환자분들과 병원 일을 잘 챙겼습니다. 고맙습니다!",
 ] as const;
 
 export function pickMessage(seed: string): string {

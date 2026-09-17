@@ -1,17 +1,15 @@
 /**
  * 오늘 할 일(기한 지난 것 포함)을 다 마쳤을 때 축하 화면을 띄울지 정한다.
  * - 오늘 남은 일이 0이어야 한다.
- * - 오늘 중에 일이 있었어야 한다(마지막으로 본 남은 일 수가 0보다 컸음). 아무 일도 없던 날은 안 띄운다.
- * - 하루에 한 번만.
+ * - 직전에 본 남은 일 수가 0보다 컸어야 한다. 아무 일도 없던 날은 안 띄운다.
+ * - 횟수 제한 없음: 완료 취소나 새 업무로 일이 다시 생겼다가 또 0이 되면 또 띄운다 (사용자 결정 2026-09-18).
+ *   그래서 띄운 뒤에는 "마지막으로 본 수"를 0으로 되돌려 둬야 새로고침마다 뜨지 않는다.
  */
 export function shouldCelebrate(input: {
-  today: string;
   openNow: number;
-  lastSeenOpen: number | null; // 오늘 마지막으로 본 남은 일 수. 오늘 처음이면 null
-  celebratedOn: string | null; // 마지막으로 축하 화면을 띄운 날짜
+  lastSeenOpen: number | null; // 직전에 본 남은 일 수. 오늘 처음이면 null
 }): boolean {
   if (input.openNow !== 0) return false;
-  if (input.celebratedOn === input.today) return false;
   return (input.lastSeenOpen ?? 0) > 0;
 }
 

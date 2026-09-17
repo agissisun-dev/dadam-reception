@@ -2,20 +2,21 @@ import { describe, it, expect } from "vitest";
 import { CELEBRATION_MESSAGES, pickMessage, shouldCelebrate } from "./celebrationRules";
 
 describe("shouldCelebrate", () => {
-  const today = "2026-09-17";
-  it("오늘 일이 있었고 지금 0이고 아직 안 띄웠으면 띄운다", () => {
-    expect(shouldCelebrate({ today, openNow: 0, lastSeenOpen: 3, celebratedOn: null })).toBe(true);
-    expect(shouldCelebrate({ today, openNow: 0, lastSeenOpen: 1, celebratedOn: "2026-09-16" })).toBe(true);
+  it("직전에 일이 있었고 지금 0이면 띄운다", () => {
+    expect(shouldCelebrate({ openNow: 0, lastSeenOpen: 3 })).toBe(true);
+    expect(shouldCelebrate({ openNow: 0, lastSeenOpen: 1 })).toBe(true);
   });
   it("남은 일이 있으면 안 띄운다", () => {
-    expect(shouldCelebrate({ today, openNow: 2, lastSeenOpen: 3, celebratedOn: null })).toBe(false);
+    expect(shouldCelebrate({ openNow: 2, lastSeenOpen: 3 })).toBe(false);
   });
   it("아무 일도 없던 날(처음 봤을 때 이미 0)은 안 띄운다", () => {
-    expect(shouldCelebrate({ today, openNow: 0, lastSeenOpen: null, celebratedOn: null })).toBe(false);
-    expect(shouldCelebrate({ today, openNow: 0, lastSeenOpen: 0, celebratedOn: null })).toBe(false);
+    expect(shouldCelebrate({ openNow: 0, lastSeenOpen: null })).toBe(false);
+    expect(shouldCelebrate({ openNow: 0, lastSeenOpen: 0 })).toBe(false);
   });
-  it("오늘 이미 띄웠으면 다시 안 띄운다", () => {
-    expect(shouldCelebrate({ today, openNow: 0, lastSeenOpen: 3, celebratedOn: today })).toBe(false);
+  it("띄운 뒤 0으로 되돌려 두면 새로고침에는 안 뜨고, 일이 다시 생겼다 0이 되면 또 뜬다", () => {
+    expect(shouldCelebrate({ openNow: 0, lastSeenOpen: 0 })).toBe(false); // 띄운 직후 새로고침
+    expect(shouldCelebrate({ openNow: 1, lastSeenOpen: 0 })).toBe(false); // 완료 취소로 다시 1
+    expect(shouldCelebrate({ openNow: 0, lastSeenOpen: 1 })).toBe(true); // 다시 완료
   });
 });
 

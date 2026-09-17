@@ -49,13 +49,11 @@ function checkCelebration(data: Data, today: string): boolean {
     data.weekly.filter((w) => weeklyDate(w, today) <= today).length;
   try {
     const seenKey = `dadam:openToday:${today}`;
-    const doneKey = "dadam:celebratedOn";
     const raw = window.localStorage.getItem(seenKey);
     const lastSeenOpen = raw === null ? null : Number(raw);
-    const celebratedOn = window.localStorage.getItem(doneKey);
-    const yes = shouldCelebrate({ today, openNow: openToday, lastSeenOpen, celebratedOn });
-    if (yes) window.localStorage.setItem(doneKey, today);
-    window.localStorage.setItem(seenKey, String(Math.max(openToday, lastSeenOpen ?? 0)));
+    const yes = shouldCelebrate({ openNow: openToday, lastSeenOpen });
+    // 지금 남은 수를 기억한다. 띄웠으면 0이 저장되므로 새로고침엔 안 뜨고, 일이 다시 생기면 그 수가 저장된다.
+    window.localStorage.setItem(seenKey, String(openToday));
     return yes;
   } catch {
     return false; // 저장소를 못 쓰는 브라우저면 축하 화면만 건너뛴다

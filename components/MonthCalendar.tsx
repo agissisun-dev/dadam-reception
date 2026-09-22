@@ -2,7 +2,7 @@
 
 import { WEEKDAYS } from "@/lib/weeklyRules";
 import { isInMonth, monthGrid, monthLabel, type YearMonth } from "@/lib/calendarRules";
-import { holidayName } from "@/lib/holidays";
+import { holidayLabel, isClinicClosed } from "@/lib/holidays";
 
 export type DayCounts = { tasks: number; happyCalls: number; weekly: number };
 
@@ -78,8 +78,8 @@ export default function MonthCalendar({
           const isSelected = iso === selected;
           const late = iso < today;
           const w = new Date(iso + "T00:00:00").getDay();
-          const holiday = holidayName(iso);
-          const closed = w === 0 || holiday !== null;
+          const holiday = holidayLabel(iso);
+          const closed = isClinicClosed(iso);
           const dayColor = closed ? "text-red-600" : w === 6 ? "text-blue-600" : "text-stone-800";
           return (
             <button
@@ -87,7 +87,7 @@ export default function MonthCalendar({
               key={iso}
               onClick={() => onSelect(iso)}
               aria-pressed={isSelected}
-              title={closed ? `휴진 (${holiday ?? "일요일"})` : undefined}
+              title={closed ? `휴진 (${holiday ?? "일요일"})` : holiday ? "진료합니다" : undefined}
               className={`flex min-h-14 flex-col items-start gap-1 p-1 text-left align-top ${
                 isSelected ? "bg-stone-100" : closed ? "bg-stone-50 hover:bg-stone-100" : "bg-white hover:bg-stone-50"
               } ${inMonth ? "" : "opacity-40"}`}
@@ -100,7 +100,9 @@ export default function MonthCalendar({
                 >
                   {Number(iso.slice(8))}
                 </span>
-                {holiday && <span className="truncate text-[10px] leading-3 text-red-600">{holiday}</span>}
+                {holiday && (
+                  <span className={`truncate text-[10px] leading-3 ${closed ? "text-red-600" : "text-stone-500"}`}>{holiday}</span>
+                )}
               </span>
               {c && (
                 <span className="flex flex-wrap gap-0.5">

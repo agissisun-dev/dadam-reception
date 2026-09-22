@@ -155,26 +155,13 @@ export function holidayLabel(iso: string): string | null {
 }
 
 /**
- * 휴진일이면 가장 가까운 진료일로 옮긴다 (반올림처럼). 앞뒤 거리가 같으면 prefer 쪽.
- * - 연락(해피콜·주간 관리)은 prefer "after": 일요일 → 월요일.
- * - 업무(할 날짜)는 prefer "before": 일요일 → 토요일. 문구 틀의 "휴진이면 그 전 진료일"과 같다.
- * 진료일이면 그대로.
+ * 휴진일이면 **그 전 진료일**로 당긴다. 뒤로 미루지 않는다. 진료일이면 그대로.
+ * 이유(사용자 결정 2026-09-22): 2차 해피콜은 약 끝나기 3일 전에 다음 약·예약을 잡는 연락이라,
+ * 연휴 뒤로 밀리면 약이 끊긴 뒤가 된다. 1차·주간 관리·업무도 같은 규칙으로 하나로 맞춘다.
+ * 예: 일요일 → 토요일, 추석 연휴 9/24(목)~9/27(일) → 모두 9/23(수).
  */
-export function shiftToClinicDay(iso: string, prefer: "before" | "after"): string {
-  if (!isClinicClosed(iso)) return iso;
-  let before = iso;
-  let after = iso;
-  let db = 0;
-  let da = 0;
-  while (isClinicClosed(before)) {
-    before = addDays(before, -1);
-    db += 1;
-  }
-  while (isClinicClosed(after)) {
-    after = addDays(after, 1);
-    da += 1;
-  }
-  if (db < da) return before;
-  if (da < db) return after;
-  return prefer === "before" ? before : after;
+export function shiftToClinicDay(iso: string): string {
+  let d = iso;
+  while (isClinicClosed(d)) d = addDays(d, -1);
+  return d;
 }

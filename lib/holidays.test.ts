@@ -33,26 +33,26 @@ describe("대체휴일 — 다담은 토요일 진료", () => {
   it("공휴일끼리 겹쳐 생긴 대체휴일은 휴진: 2028 추석·개천절 → 10/5 휴진", () => {
     expect(isClinicClosed("2028-10-05")).toBe(true);
   });
-  it("진료하는 대체휴일로는 일정이 옮겨질 수 있다: 8/16(일) 연락 → 8/17(월, 진료)", () => {
-    expect(shiftToClinicDay("2026-08-16", "after")).toBe("2026-08-17");
+  it("진료하는 대체휴일(8/17 월)에 잡힌 일정은 그대로 둔다", () => {
+    expect(shiftToClinicDay("2026-08-17")).toBe("2026-08-17");
   });
 });
 
-describe("shiftToClinicDay — 가까운 진료일로", () => {
+describe("shiftToClinicDay — 휴진일이면 그 전 진료일로 (뒤로 미루지 않음)", () => {
   it("진료일은 그대로", () => {
-    expect(shiftToClinicDay("2026-09-22", "after")).toBe("2026-09-22");
+    expect(shiftToClinicDay("2026-09-22")).toBe("2026-09-22");
   });
-  it("일요일은 앞뒤가 같아서 prefer 쪽: 연락은 월요일, 업무는 토요일", () => {
-    expect(shiftToClinicDay("2026-09-20", "after")).toBe("2026-09-21");
-    expect(shiftToClinicDay("2026-09-20", "before")).toBe("2026-09-19");
+  it("일요일은 토요일로", () => {
+    expect(shiftToClinicDay("2026-09-20")).toBe("2026-09-19");
   });
-  it("추석 연휴 9/24(목)~9/27(일): 앞쪽이 가까우면 앞으로, 뒤쪽이 가까우면 뒤로", () => {
-    expect(shiftToClinicDay("2026-09-24", "after")).toBe("2026-09-23"); // 앞 1일 vs 뒤 4일
-    expect(shiftToClinicDay("2026-09-25", "after")).toBe("2026-09-23"); // 앞 2일 vs 뒤 3일
-    expect(shiftToClinicDay("2026-09-26", "before")).toBe("2026-09-28"); // 앞 3일 vs 뒤 2일
-    expect(shiftToClinicDay("2026-09-27", "before")).toBe("2026-09-28"); // 앞 4일 vs 뒤 1일
+  it("추석 연휴 9/24(목)~9/27(일)은 모두 9/23(수)로", () => {
+    expect(shiftToClinicDay("2026-09-24")).toBe("2026-09-23");
+    expect(shiftToClinicDay("2026-09-25")).toBe("2026-09-23");
+    expect(shiftToClinicDay("2026-09-26")).toBe("2026-09-23");
+    expect(shiftToClinicDay("2026-09-27")).toBe("2026-09-23");
   });
-  it("토요일이 진료일이라 광복절(토)은 휴진, 그 전날 금요일이 가장 가깝다", () => {
-    expect(shiftToClinicDay("2026-08-15", "after")).toBe("2026-08-14");
+  it("토요일이 진료일이라 광복절(토)은 휴진 → 금요일. 그 다음 일요일도 금요일", () => {
+    expect(shiftToClinicDay("2026-08-15")).toBe("2026-08-14");
+    expect(shiftToClinicDay("2026-08-16")).toBe("2026-08-14");
   });
 });

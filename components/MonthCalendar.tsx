@@ -130,7 +130,7 @@ export default function MonthCalendar({
           <span className="inline-block h-2.5 w-2.5 rounded bg-red-600 align-middle" /> 지난 것
         </span>
         <span>
-          <span className="inline-block h-2.5 w-2.5 rounded border border-stone-300 bg-stone-50 align-middle" /> 휴진(일·공휴일) — 연락·업무는 가까운 진료일로 잡힘
+          <span className="inline-block h-2.5 w-2.5 rounded border border-stone-300 bg-stone-50 align-middle" /> 휴진(일·공휴일) — 연락·업무는 그 전 진료일로 당겨 잡힘
         </span>
       </p>
     </section>

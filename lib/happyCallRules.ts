@@ -6,10 +6,10 @@ export const NOTE_ROUND1 = "복용 1주일. 약 드시고 불편한 점 없는�
 export const NOTE_ROUND2 = "약 3일 뒤 소진. 재처방·예약 안내";
 export const NOTE_SINGLE = "복용 1주일. 불편한 점 확인 + 곧 소진, 재처방·예약 안내";
 
-/** 연락 예정일이 휴진일(일요일·공휴일)이면 가까운 진료일로. 앞뒤가 같으면 뒤(월요일). */
-const onClinicDay = (iso: string) => shiftToClinicDay(iso, "after");
+/** 연락 예정일이 휴진일(일요일·공휴일)이면 그 전 진료일로 당긴다. 뒤로 미루면 약이 끊긴 뒤가 되므로. */
+const onClinicDay = (iso: string) => shiftToClinicDay(iso);
 
-/** 12일 이하는 한 건(+7). 그 외 1차 +7, 2차 +days-3. 휴진일에 걸리면 가까운 진료일로 옮긴다. */
+/** 12일 이하는 한 건(+7). 그 외 1차 +7, 2차 +days-3. 휴진일에 걸리면 그 전 진료일로 당긴다. */
 export function planHappyCalls(
   receiveDate: string,
   days: number,

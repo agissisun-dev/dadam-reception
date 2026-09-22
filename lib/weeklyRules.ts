@@ -22,7 +22,7 @@ function snapToWeekday(iso: string, weekday: number): string {
  * 다음 발송일.
  * - includeToday=true(시작): from 이후 첫 지정 요일. from이 그 요일이면 from.
  * - includeToday=false(처리 후): from + interval*7을 지정 요일에 맞춤. 그래도 today보다 앞이면 today 이후 첫 지정 요일.
- * - 그 날이 휴진일(일요일·공휴일)이면 가까운 진료일로 옮긴다. 앞뒤가 같으면 뒤.
+ * - 그 날이 휴진일(일요일·공휴일)이면 그 전 진료일로 당긴다 (뒤로 미루지 않음).
  */
 export function nextWeeklyDate(
   fromISO: string,
@@ -42,7 +42,7 @@ export function nextWeeklyDate(
       next = addDays(today, diff);
     }
   }
-  return shiftToClinicDay(next, "after");
+  return shiftToClinicDay(next);
 }
 
 export function effectiveRound(round: number): number {

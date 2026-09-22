@@ -61,7 +61,7 @@ export default function TaskForm({ initial, submitLabel, onSubmit }: Props) {
           value={dueDate}
           onChange={(e) => {
             const picked = e.target.value;
-            const moved = picked ? shiftToClinicDay(picked, "before") : picked;
+            const moved = picked ? shiftToClinicDay(picked) : picked;
             setDueDate(moved);
             setShiftNote(
               moved !== picked

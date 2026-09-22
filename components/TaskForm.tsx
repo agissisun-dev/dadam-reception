@@ -3,6 +3,9 @@
 import { useState, type FormEvent } from "react";
 import type { TaskInput } from "@/lib/types";
 import { validateTaskInput } from "@/lib/validate";
+import { closedReason, shiftToClinicDay } from "@/lib/holidays";
+import { dayLabel } from "@/lib/calendarRules";
+import { weekdayKo } from "@/lib/dates";
 
 type Props = {
   initial: TaskInput;
@@ -13,6 +16,7 @@ type Props = {
 export default function TaskForm({ initial, submitLabel, onSubmit }: Props) {
   const [title, setTitle] = useState(initial.title);
   const [dueDate, setDueDate] = useState(initial.due_date);
+  const [shiftNote, setShiftNote] = useState<string | null>(null);
   const [guide, setGuide] = useState(initial.guide_text);
   const [errors, setErrors] = useState<{ title?: string; due_date?: string }>({});
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -55,9 +59,19 @@ export default function TaskForm({ initial, submitLabel, onSubmit }: Props) {
         <input
           type="date"
           value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
+          onChange={(e) => {
+            const picked = e.target.value;
+            const moved = picked ? shiftToClinicDay(picked, "before") : picked;
+            setDueDate(moved);
+            setShiftNote(
+              moved !== picked
+                ? `${dayLabel(picked)}(${weekdayKo(picked)})은 ${closedReason(picked)}로 휴진이라 ${dayLabel(moved)}(${weekdayKo(moved)})로 잡았습니다.`
+                : null,
+            );
+          }}
           className="mt-1 w-full rounded border border-stone-300 px-3 py-2"
         />
+        {shiftNote && <p className="mt-1 text-sm text-amber-700">{shiftNote}</p>}
         {errors.due_date && <p className="mt-1 text-sm text-red-600">{errors.due_date}</p>}
       </label>
 

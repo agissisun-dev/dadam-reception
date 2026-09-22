@@ -9,8 +9,14 @@ describe("planHappyCalls", () => {
       { round: 2, due_date: "2026-10-07", note: NOTE_ROUND2 },
     ]);
   });
-  it("13일분: 두 건 (1차 +7, 2차 +10)", () => {
-    expect(planHappyCalls("2026-09-10", 13).map((c) => c.due_date)).toEqual(["2026-09-17", "2026-09-20"]);
+  it("13일분: 두 건 (1차 +7, 2차 +10). +10이 일요일(9/20)이면 월요일로", () => {
+    expect(planHappyCalls("2026-09-10", 13).map((c) => c.due_date)).toEqual(["2026-09-17", "2026-09-21"]);
+  });
+  it("추석 연휴(9/24~27)에 걸리면 가까운 진료일로: 9/24 → 9/23, 9/27 → 9/28", () => {
+    // 수령 9/17 + 7 = 9/24(추석 연휴 첫날) → 앞 1일이 가까워 9/23
+    expect(planHappyCalls("2026-09-17", 30)[0].due_date).toBe("2026-09-23");
+    // 수령 9/10, 20일분 → 2차 = 9/27(일) → 뒤 1일이 가까워 9/28
+    expect(planHappyCalls("2026-09-10", 20)[1].due_date).toBe("2026-09-28");
   });
   it("12일 이하: 한 건, +7, 합친 메모", () => {
     expect(planHappyCalls("2026-09-10", 12)).toEqual([{ round: 1, due_date: "2026-09-17", note: NOTE_SINGLE }]);

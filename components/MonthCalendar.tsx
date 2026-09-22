@@ -2,6 +2,7 @@
 
 import { WEEKDAYS } from "@/lib/weeklyRules";
 import { isInMonth, monthGrid, monthLabel, type YearMonth } from "@/lib/calendarRules";
+import { holidayName } from "@/lib/holidays";
 
 export type DayCounts = { tasks: number; happyCalls: number; weekly: number };
 
@@ -77,23 +78,29 @@ export default function MonthCalendar({
           const isSelected = iso === selected;
           const late = iso < today;
           const w = new Date(iso + "T00:00:00").getDay();
-          const dayColor = w === 0 ? "text-red-600" : w === 6 ? "text-blue-600" : "text-stone-800";
+          const holiday = holidayName(iso);
+          const closed = w === 0 || holiday !== null;
+          const dayColor = closed ? "text-red-600" : w === 6 ? "text-blue-600" : "text-stone-800";
           return (
             <button
               type="button"
               key={iso}
               onClick={() => onSelect(iso)}
               aria-pressed={isSelected}
+              title={closed ? `휴진 (${holiday ?? "일요일"})` : undefined}
               className={`flex min-h-14 flex-col items-start gap-1 p-1 text-left align-top ${
-                isSelected ? "bg-stone-100" : "bg-white hover:bg-stone-50"
+                isSelected ? "bg-stone-100" : closed ? "bg-stone-50 hover:bg-stone-100" : "bg-white hover:bg-stone-50"
               } ${inMonth ? "" : "opacity-40"}`}
             >
-              <span
-                className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-sm ${dayColor} ${
-                  isToday ? "border-2 border-[#16863b] font-bold" : ""
-                }`}
-              >
-                {Number(iso.slice(8))}
+              <span className="flex items-center gap-1">
+                <span
+                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-sm ${dayColor} ${
+                    isToday ? "border-2 border-[#16863b] font-bold" : ""
+                  }`}
+                >
+                  {Number(iso.slice(8))}
+                </span>
+                {holiday && <span className="truncate text-[10px] leading-3 text-red-600">{holiday}</span>}
               </span>
               {c && (
                 <span className="flex flex-wrap gap-0.5">
@@ -119,6 +126,9 @@ export default function MonthCalendar({
         </span>
         <span>
           <span className="inline-block h-2.5 w-2.5 rounded bg-red-600 align-middle" /> 지난 것
+        </span>
+        <span>
+          <span className="inline-block h-2.5 w-2.5 rounded border border-stone-300 bg-stone-50 align-middle" /> 휴진(일·공휴일) — 연락·업무는 가까운 진료일로 잡힘
         </span>
       </p>
     </section>

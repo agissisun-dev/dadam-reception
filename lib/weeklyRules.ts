@@ -1,4 +1,5 @@
 import { addDays, daysBetween, todayISO } from "./dates";
+import { shiftToClinicDay } from "./holidays";
 import type { Condition, Template, WeeklyContact } from "./types";
 
 export const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
@@ -10,10 +11,18 @@ function weekdayOf(iso: string): number {
   return new Date(y, m - 1, d).getDay();
 }
 
+/** 가장 가까운 지정 요일로 맞춘다 (앞뒤 3일 안). 휴진일 때문에 옮겨진 날짜에서 다음 주를 셀 때 요일이 밀리지 않게. */
+function snapToWeekday(iso: string, weekday: number): string {
+  let diff = (weekday - weekdayOf(iso) + 7) % 7;
+  if (diff > 3) diff -= 7;
+  return addDays(iso, diff);
+}
+
 /**
  * 다음 발송일.
  * - includeToday=true(시작): from 이후 첫 지정 요일. from이 그 요일이면 from.
- * - includeToday=false(처리 후): from + interval*7. 그래도 today보다 앞이면 today 이후 첫 지정 요일.
+ * - includeToday=false(처리 후): from + interval*7을 지정 요일에 맞춤. 그래도 today보다 앞이면 today 이후 첫 지정 요일.
+ * - 그 날이 휴진일(일요일·공휴일)이면 가까운 진료일로 옮긴다. 앞뒤가 같으면 뒤.
  */
 export function nextWeeklyDate(
   fromISO: string,
@@ -22,16 +31,18 @@ export function nextWeeklyDate(
   includeToday: boolean,
   today: string = todayISO(),
 ): string {
+  let next: string;
   if (includeToday) {
     const diff = (weekday - weekdayOf(fromISO) + 7) % 7;
-    return addDays(fromISO, diff);
+    next = addDays(fromISO, diff);
+  } else {
+    next = snapToWeekday(addDays(fromISO, Math.max(1, intervalWeeks) * 7), weekday);
+    if (daysBetween(today, next) < 0) {
+      const diff = (weekday - weekdayOf(today) + 7) % 7;
+      next = addDays(today, diff);
+    }
   }
-  let next = addDays(fromISO, Math.max(1, intervalWeeks) * 7);
-  if (daysBetween(today, next) < 0) {
-    const diff = (weekday - weekdayOf(today) + 7) % 7;
-    next = addDays(today, diff);
-  }
-  return next;
+  return shiftToClinicDay(next, "after");
 }
 
 export function effectiveRound(round: number): number {

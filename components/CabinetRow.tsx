@@ -37,6 +37,8 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
 
   const st = expiryStatus(nearest, today);
   const short = stock <= 0 || (item.min_stock > 0 && stock <= item.min_stock);
+  /** 아직 기록이 하나도 없는 품목: 처음 수량을 넣는 단계라 세어 맞춤·사유를 묻지 않는다. */
+  const first = moves.length === 0;
   const dot = item.kind === "medicine" ? "bg-[#16863b]" : "bg-blue-500";
   const countedNum = counted === "" ? null : Number(counted);
   const diff = countedNum === null ? null : countDiff(stock, countedNum);
@@ -106,8 +108,19 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
           <button className={PRIMARY} onClick={() => (mode === "out" ? reset() : (reset(), setMode("out")))}>
             나감
           </button>
-          <button className={BTN} onClick={() => (mode === "in" ? reset() : (reset(), setMode("in")))}>
-            입고
+          <button
+            className={BTN}
+            onClick={() => {
+              if (mode === "in") return reset();
+              reset();
+              setMode("in");
+              if (first) {
+                setCounted("0");
+                setInStep(2);
+              }
+            }}
+          >
+            {first ? "처음 수량 넣기" : "입고"}
           </button>
           <button className={`${BTN} text-stone-500`} onClick={() => (mode === "history" ? reset() : (reset(), setMode("history")))}>
             …
@@ -199,24 +212,31 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
                 지금 실제로 몇 개 남았나요? <span className="text-stone-500">(있어야 할 수 {stock}개)</span>
               </p>
               <input type="number" min={0} value={counted} onChange={(e) => setCounted(e.target.value)} className="w-28 rounded border border-stone-300 px-2 py-1.5 text-sm" placeholder="센 수" />
-              {diff !== null && diff !== 0 && (
+              {first && <p className="text-sm text-stone-600">처음 등록이라 사유 없이 저장됩니다. 유통기한까지 적으려면 [처음 수량 넣기]를 쓰세요.</p>}
+              {!first && diff !== null && diff !== 0 && (
                 <p className="text-sm text-red-700">
                   {Math.abs(diff)}개 {diff > 0 ? "많습니다" : "모자랍니다"}. 사유를 적어야 저장됩니다.
                 </p>
               )}
-              {diff === 0 && <p className="text-sm text-green-700">장부와 같습니다.</p>}
-              {diff !== null && diff !== 0 && (
+              {!first && diff === 0 && <p className="text-sm text-green-700">장부와 같습니다.</p>}
+              {!first && diff !== null && diff !== 0 && (
                 <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="사유 (예: 지난주 리뷰 증정 기록 누락)" className={INPUT} />
               )}
               <StaffSelect value={staff} onChange={setStaff} />
               <div className="flex gap-2">
                 <button
                   className={PRIMARY}
-                  disabled={busy || countedNum === null || (diff !== 0 && !memo.trim())}
+                  disabled={busy || countedNum === null || (!first && diff !== 0 && !memo.trim())}
                   onClick={() => {
                     if (mode === "count") {
                       run(async () => {
-                        await recordCount({ item_id: item.id, counted: countedNum!, expected: stock, staff_name: staff, memo });
+                        await recordCount({
+                          item_id: item.id,
+                          counted: countedNum!,
+                          expected: stock,
+                          staff_name: staff,
+                          memo: first ? "처음 수량 등록" : memo,
+                        });
                       });
                     } else {
                       setInStep(2);
@@ -234,11 +254,13 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
           {inStep === 2 && (
             <>
               <p className="text-sm text-stone-600">
-                센 수 {countedNum}개{diff !== 0 ? ` (차이 ${diff! > 0 ? "+" : ""}${diff}, 사유: ${memo})` : ""} 기록 뒤, 새로 들어온 것을 적습니다.
+                {first
+                  ? "처음이라 지금 약장에 있는 수량과 유통기한을 그대로 적습니다. 기한이 다른 묶음이 섞여 있으면 묶음마다 따로 넣으세요."
+                  : `센 수 ${countedNum}개${diff !== 0 ? ` (차이 ${diff! > 0 ? "+" : ""}${diff}, 사유: ${memo})` : ""} 기록 뒤, 새로 들어온 것을 적습니다.`}
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-sm text-stone-600">들어온 수량</span>
+                  <span className="text-sm text-stone-600">{first ? "지금 있는 수량" : "들어온 수량"}</span>
                   <input type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value)))} className={`mt-1 ${INPUT}`} />
                 </label>
                 <label className="block">
@@ -246,25 +268,24 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
                   <input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} className={`mt-1 ${INPUT}`} />
                 </label>
               </div>
+              <StaffSelect value={staff} onChange={setStaff} />
               <div className="flex gap-2">
                 <button
                   className={PRIMARY}
                   disabled={busy || qty < 1}
                   onClick={() =>
                     run(async () => {
-                      if (diff !== 0) {
-                        await recordCount({ item_id: item.id, counted: countedNum!, expected: stock, staff_name: staff, memo });
-                      } else {
-                        await recordCount({ item_id: item.id, counted: countedNum!, expected: stock, staff_name: staff });
+                      if (!first) {
+                        await recordCount({ item_id: item.id, counted: countedNum!, expected: stock, staff_name: staff, memo: diff !== 0 ? memo : undefined });
                       }
-                      await recordIn({ item_id: item.id, qty, expiry: expiry || null, staff_name: staff });
+                      await recordIn({ item_id: item.id, qty, expiry: expiry || null, staff_name: staff, memo: first ? "처음 수량 등록" : undefined });
                     })
                   }
                 >
-                  {qty}개 입고 저장
+                  {first ? `${qty}개로 시작` : `${qty}개 입고 저장`}
                 </button>
-                <button className={BTN} onClick={() => setInStep(1)}>
-                  이전
+                <button className={BTN} onClick={() => (first ? reset() : setInStep(1))}>
+                  {first ? "취소" : "이전"}
                 </button>
               </div>
             </>

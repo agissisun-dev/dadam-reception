@@ -35,7 +35,7 @@
 ## 작업 순서
 1. 새 기능·동작 변경은 브레인스토밍(전역 규칙) 뒤에 시작. 설계는 `docs/superpowers/specs/`, 계획은 `plans/`, 확인 기록은 `qa/`.
 2. `npx vitest run` · `npx eslint .` · `npx tsc --noEmit` 통과 → 기능 단위로 커밋(Conventional Commits, 한국어 가능).
-3. 배포: `npx vercel deploy --prod --yes` → `npx vercel ls --prod`로 Ready 확인. push는 사용자가 시킬 때만.
+3. 배포: **GitHub 연동(2026-09-28)** — `git push origin main`이면 Vercel이 자동으로 프로덕션 배포한다. `npx vercel ls --prod`로 Ready 확인. 급할 때만 `npx vercel deploy --prod --yes`. push는 사용자가 시킬 때만(배포를 시키면 push까지 포함).
 4. 표·데이터 변경은 `supabase/schema-*.sql` 파일로 남기고 `docs/setup-supabase.md`에 절을 추가. 실행은 개발용 크롬(Claude in Chrome)의 Supabase SQL Editor에서: monaco `getModels()`로 본문 넣기 → Run → "Potential issue detected"면 Run query. 그 탭은 저장 안 된 쿼리 때문에 navigate가 막히니 새 탭으로 이동.
 5. 배포 뒤 개발용 크롬에서 실제 화면 확인. React 버튼은 ref 클릭이 안 먹힐 때가 있어 좌표 클릭이나 JS `click()`을 쓴다. 로컬 미리보기는 로그인이 필요해 제 브라우저로는 못 본다.
 

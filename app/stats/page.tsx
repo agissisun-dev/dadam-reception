@@ -6,8 +6,10 @@ import AppHeader from "@/components/AppHeader";
 import MonthColumns from "@/components/MonthColumns";
 import { loadStats, type StatsData } from "@/lib/stats";
 import { listSmsLogs } from "@/lib/smsLogs";
+import { loadCabinet, type CabinetStatus } from "@/lib/cabinet";
+import { expiryStatus } from "@/lib/cabinetRules";
 import { maskPhone } from "@/lib/phone";
-import type { SmsLog } from "@/lib/types";
+import type { CabinetMove, SmsLog } from "@/lib/types";
 import { todayISO } from "@/lib/dates";
 import {
   happyCallMonth,
@@ -160,8 +162,75 @@ function Board() {
         포 수는 처방에 적힌 포 수를 더한 값이고, 포 수가 없는 옛 처방은 일수 × 하루 포수로 봅니다. 신규 환자는 등록한 달 기준입니다.
       </p>
 
+      <CabinetSummary today={today} thisKey={thisKey} />
+
       <SmsLedger />
     </main>
+  );
+}
+
+/** 약장 요약: 이번 달 나간 수(품목·사유별), 세어 맞춤 차이, 기한 30일 안 품목. */
+function CabinetSummary({ today, thisKey }: { today: string; thisKey: string }) {
+  const [data, setData] = useState<{ statuses: CabinetStatus[]; moves: CabinetMove[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadCabinet()
+      .then((d) => setData({ statuses: d.statuses, moves: d.moves }))
+      .catch((e: Error) => setError(e.message));
+  }, []);
+
+  if (error) return <p className="text-sm text-red-600">약장: {error}</p>;
+  if (!data) return null;
+
+  const nameOf = new Map(data.statuses.map((s) => [s.item.id, s.item.name]));
+  const monthMoves = data.moves.filter((m) => monthKey(m.created_at.slice(0, 10)) === thisKey);
+  const outs = monthMoves.filter((m) => m.kind === "out");
+  const byItem = new Map<number, { total: number; review: number }>();
+  for (const m of outs) {
+    const c = byItem.get(m.item_id) ?? { total: 0, review: 0 };
+    c.total += m.qty;
+    if (m.purpose === "review") c.review += m.qty;
+    byItem.set(m.item_id, c);
+  }
+  const counts = monthMoves.filter((m) => m.kind === "count" && m.diff);
+  const diffSum = counts.reduce((a, m) => a + (m.diff ?? 0), 0);
+  const soon = data.statuses.filter((s) => ["expired", "soon30"].includes(expiryStatus(s.nearest, today) ?? ""));
+
+  return (
+    <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
+      <h2 className="mb-2 font-bold">약장</h2>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div>
+          <p className="text-xs text-stone-500">이번 달 나간 것 (리뷰 증정)</p>
+          {byItem.size === 0 && <p className="text-stone-500">없음</p>}
+          <ul>
+            {[...byItem.entries()].map(([id, c]) => (
+              <li key={id}>
+                {nameOf.get(id) ?? id} {c.total}개{c.review > 0 ? ` (리뷰 ${c.review})` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="text-xs text-stone-500">세어 맞춤에서 차이</p>
+          <p className={counts.length > 0 ? "text-red-700" : ""}>
+            {counts.length}회{counts.length > 0 ? ` · 합계 ${diffSum > 0 ? "+" : ""}${diffSum}개` : ""}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-stone-500">유통기한 30일 안</p>
+          {soon.length === 0 && <p>없음</p>}
+          <ul>
+            {soon.map((s) => (
+              <li key={s.item.id} className="text-red-700">
+                {s.item.name} {s.nearest}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
   );
 }
 

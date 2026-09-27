@@ -157,3 +157,35 @@ export type SmsLog = {
   message_id: string | null;
   created_at: string;
 };
+
+/** 약장 품목. 약(medicine)·외용제(topical). */
+export type CabinetKind = "medicine" | "topical";
+export type CabinetItem = {
+  id: number;
+  name: string;
+  kind: CabinetKind;
+  min_stock: number;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+};
+export type CabinetItemInput = Omit<CabinetItem, "id" | "created_at">;
+
+/** 약장 장부 한 줄. 넣기만 가능, 앱에서 수정·삭제 불가. */
+export type CabinetMoveKind = "in" | "out" | "count" | "discard";
+/** 나감 사유: 판매 · 리뷰 증정 · 서비스 · 기타 */
+export type CabinetPurpose = "sale" | "review" | "service" | "other";
+export type CabinetMove = {
+  id: number;
+  item_id: number;
+  kind: CabinetMoveKind;
+  qty: number;
+  expiry: string | null;
+  purpose: CabinetPurpose | null;
+  patient_id: number | null;
+  patient_name: string | null;
+  staff_name: string;
+  memo: string | null;
+  diff: number | null;
+  created_at: string;
+};

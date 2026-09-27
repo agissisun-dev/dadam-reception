@@ -14,12 +14,26 @@ import { listOpenTasks } from "@/lib/tasks";
 import { listOpenHappyCalls } from "@/lib/happyCalls";
 import { listWaitingDoctor, listWeeklyTargets } from "@/lib/weekly";
 import { listTemplates } from "@/lib/templates";
+import { loadCabinet } from "@/lib/cabinet";
+import { expiryStatus } from "@/lib/cabinetRules";
 import { weekEndISO } from "@/lib/weeklyRules";
 import { addDays, todayISO, weekdayKo } from "@/lib/dates";
 import { dayLabel, sameMonth, shiftMonth, yearMonthOf, type YearMonth } from "@/lib/calendarRules";
 import type { HappyCallRow as HcRow, Task, Template, WeeklyRow as WkRow } from "@/lib/types";
 
-type Data = { tasks: Task[]; happyCalls: HcRow[]; weekly: WkRow[]; waiting: number };
+type Data = { tasks: Task[]; happyCalls: HcRow[]; weekly: WkRow[]; waiting: number; cabinet: { soon: number; short: number } };
+
+/** 약장 요약: 기한 30일 안(지난 것 포함) 품목 수, 부족 품목 수. 실패하면 0으로. */
+async function cabinetSummary(today: string): Promise<{ soon: number; short: number }> {
+  try {
+    const { statuses } = await loadCabinet();
+    const soon = statuses.filter((s) => ["expired", "soon30"].includes(expiryStatus(s.nearest, today) ?? "")).length;
+    const short = statuses.filter((s) => s.stock <= 0 || (s.item.min_stock > 0 && s.stock <= s.item.min_stock)).length;
+    return { soon, short };
+  } catch {
+    return { soon: 0, short: 0 };
+  }
+}
 
 function weeklyDate(r: WkRow, today: string): string {
   return r.weekly_next_date ?? today;
@@ -76,9 +90,10 @@ function CalendarBoard() {
       listOpenHappyCalls(),
       listWeeklyTargets(addDays(now, 400)),
       listWaitingDoctor().then((l) => l.length).catch(() => 0),
+      cabinetSummary(now),
     ])
-      .then(([tasks, happyCalls, weekly, waiting]) => {
-        const next = { tasks, happyCalls, weekly, waiting };
+      .then(([tasks, happyCalls, weekly, waiting, cabinet]) => {
+        const next = { tasks, happyCalls, weekly, waiting, cabinet };
         setData(next);
         if (checkCelebration(next, now)) setCelebrate(true);
       })
@@ -133,6 +148,12 @@ function CalendarBoard() {
           {data.waiting > 0 && (
             <Link href="/weekly" className="text-amber-800 underline">
               원장 확인 대기 {data.waiting}건
+            </Link>
+          )}
+          {(data.cabinet.soon > 0 || data.cabinet.short > 0) && (
+            <Link href="/cabinet" className="text-red-700 underline">
+              약장{data.cabinet.soon > 0 ? ` 기한 임박 ${data.cabinet.soon}` : ""}
+              {data.cabinet.short > 0 ? ` 부족 ${data.cabinet.short}` : ""}
             </Link>
           )}
         </p>

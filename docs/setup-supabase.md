@@ -50,3 +50,6 @@
 
 ## 12. V3-5 휴진일에 걸린 기존 예정일 옮기기 (2026-09-22 실행 완료)
 - `supabase/schema-v3-5-shift-existing-dates.sql`: 휴진일 규칙(`lib/holidays.ts`)이 생기기 전에 잡힌 해피콜·주간 관리·업무 날짜 중 2026-09-22~12-31 사이 휴진일에 걸린 것을 그 전 진료일로 당겼다(24·25·26·27일 → 23일 등). 새로 잡히는 날짜는 앱이 알아서 옮기므로 다시 실행할 일은 없다.
+
+## 13. V3-6 약장 (2026-09-28 추가)
+- [SQL Editor]에서 `supabase/schema-v3-6-cabinet.sql` 실행. `cabinet_items`(품목 9개 seed)와 `cabinet_moves`(장부, 넣기만 가능) 표가 생긴다.

@@ -19,13 +19,13 @@ describe("nextWeeklyDate", () => {
     expect(nextWeeklyDate("2026-09-16", 2, 1, true)).toBe("2026-09-22");
   });
   it("처리 후: 예정일 + 주기×7", () => {
-    expect(nextWeeklyDate("2026-09-15", 2, 1, false)).toBe("2026-09-22");
-    expect(nextWeeklyDate("2026-09-15", 2, 2, false)).toBe("2026-09-29");
+    expect(nextWeeklyDate("2026-09-15", 2, 1, false, "2026-09-15")).toBe("2026-09-22");
+    expect(nextWeeklyDate("2026-09-15", 2, 2, false, "2026-09-15")).toBe("2026-09-29");
   });
   it("휴진일에 걸리면 그 전 진료일로: 목요일 주간 관리가 추석(9/24)에 걸리면 9/23", () => {
-    expect(nextWeeklyDate("2026-09-17", 4, 1, false)).toBe("2026-09-23");
+    expect(nextWeeklyDate("2026-09-17", 4, 1, false, "2026-09-17")).toBe("2026-09-23");
     // 일요일(0) 주간 관리는 토요일로 당김
-    expect(nextWeeklyDate("2026-09-16", 0, 1, true)).toBe("2026-09-19");
+    expect(nextWeeklyDate("2026-09-16", 0, 1, true, "2026-09-16")).toBe("2026-09-19");
   });
   it("옮겨진 날짜에서 다음 주를 세도 원래 요일로 돌아온다", () => {
     // 9/23(수, 추석 때문에 옮겨진 것)에서 목요일 주간 → 다음은 10/1(목)

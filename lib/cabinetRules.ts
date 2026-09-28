@@ -1,5 +1,5 @@
 import { daysBetween } from "./dates";
-import type { CabinetMove, CabinetMoveKind, CabinetPurpose } from "./types";
+import type { CabinetKind, CabinetMove, CabinetMoveKind, CabinetPurpose } from "./types";
 
 /**
  * 있어야 할 수. 장부를 시간순으로 따라간다.
@@ -77,4 +77,15 @@ export const PURPOSES: { value: CabinetPurpose; label: string }[] = [
 
 export function purposeLabel(p: CabinetPurpose | null): string {
   return PURPOSES.find((x) => x.value === p)?.label ?? "";
+}
+
+/** 품목 구분: 약(초록) · 외용제(파랑) · 용품(회색, 핫팩·한방파스 등). */
+export const CABINET_KINDS: { value: CabinetKind; label: string; dot: string; order: number }[] = [
+  { value: "medicine", label: "약", dot: "bg-[#16863b]", order: 1 },
+  { value: "topical", label: "외용제", dot: "bg-blue-500", order: 11 },
+  { value: "supply", label: "용품", dot: "bg-stone-400", order: 21 },
+];
+
+export function kindInfo(kind: CabinetKind) {
+  return CABINET_KINDS.find((k) => k.value === kind) ?? CABINET_KINDS[2];
 }

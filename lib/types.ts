@@ -158,8 +158,8 @@ export type SmsLog = {
   created_at: string;
 };
 
-/** 약장 품목. 약(medicine)·외용제(topical). */
-export type CabinetKind = "medicine" | "topical";
+/** 약장 품목. 약(medicine)·외용제(topical)·용품(supply: 핫팩·한방파스 등). */
+export type CabinetKind = "medicine" | "topical" | "supply";
 export type CabinetItem = {
   id: number;
   name: string;

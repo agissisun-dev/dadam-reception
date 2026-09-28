@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { CabinetStatus } from "@/lib/cabinet";
 import { recordCount, recordDiscard, recordIn, recordOut } from "@/lib/cabinet";
-import { KIND_LABEL, PURPOSES, countDiff, expiryStatus, purposeLabel } from "@/lib/cabinetRules";
+import { KIND_LABEL, PURPOSES, countDiff, expiryStatus, kindInfo, purposeLabel } from "@/lib/cabinetRules";
 import { daysBetween } from "@/lib/dates";
 import { conditionLabel } from "@/lib/conditions";
 import { listPatients } from "@/lib/patients";
@@ -39,7 +39,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
   const short = stock <= 0 || (item.min_stock > 0 && stock <= item.min_stock);
   /** 아직 기록이 하나도 없는 품목: 처음 수량을 넣는 단계라 세어 맞춤·사유를 묻지 않는다. */
   const first = moves.length === 0;
-  const dot = item.kind === "medicine" ? "bg-[#16863b]" : "bg-blue-500";
+  const dot = kindInfo(item.kind).dot;
   const countedNum = counted === "" ? null : Number(counted);
   const diff = countedNum === null ? null : countDiff(stock, countedNum);
 
@@ -99,7 +99,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
   return (
     <div className={`rounded-lg border bg-white p-3 ${st === "expired" || short ? "border-red-300" : "border-stone-200"}`}>
       <div className="flex flex-wrap items-center gap-3">
-        <span className={`inline-block h-2.5 w-2.5 rounded-full ${dot}`} title={item.kind === "medicine" ? "약" : "외용제"} />
+        <span className={`inline-block h-2.5 w-2.5 rounded-full ${dot}`} title={kindInfo(item.kind).label} />
         <span className="font-medium">{item.name}</span>
         <span className={`text-lg font-semibold ${short ? "text-red-700" : ""}`}>{stock}개</span>
         {short && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700">부족</span>}

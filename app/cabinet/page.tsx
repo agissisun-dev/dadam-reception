@@ -5,7 +5,7 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import CabinetRow from "@/components/CabinetRow";
 import { createCabinetItem, listCabinetItems, loadCabinet, updateCabinetItem, type CabinetStatus } from "@/lib/cabinet";
-import { KIND_LABEL, purposeLabel } from "@/lib/cabinetRules";
+import { CABINET_KINDS, KIND_LABEL, kindInfo, purposeLabel } from "@/lib/cabinetRules";
 import { todayISO } from "@/lib/dates";
 import type { CabinetItem, CabinetKind, CabinetMove } from "@/lib/types";
 
@@ -53,9 +53,9 @@ function ItemManager({ onChanged }: { onChanged: () => void }) {
       <ul className="divide-y divide-stone-100">
         {(items ?? []).map((it) => (
           <li key={it.id} className="flex flex-wrap items-center gap-2 py-1.5">
-            <span className={`inline-block h-2.5 w-2.5 rounded-full ${it.kind === "medicine" ? "bg-[#16863b]" : "bg-blue-500"}`} />
+            <span className={`inline-block h-2.5 w-2.5 rounded-full ${kindInfo(it.kind).dot}`} />
             <span className={it.active ? "" : "text-stone-400 line-through"}>{it.name}</span>
-            <span className="text-xs text-stone-500">{it.kind === "medicine" ? "약" : "외용제"}</span>
+            <span className="text-xs text-stone-500">{kindInfo(it.kind).label}</span>
             <label className="ml-2 text-xs text-stone-500">
               부족 기준{" "}
               <input
@@ -83,8 +83,7 @@ function ItemManager({ onChanged }: { onChanged: () => void }) {
         <label className="block">
           <span className="text-xs text-stone-500">구분</span>
           <select value={kind} onChange={(e) => setKind(e.target.value as CabinetKind)} className={`mt-1 ${INPUT}`}>
-            <option value="medicine">약</option>
-            <option value="topical">외용제</option>
+            {CABINET_KINDS.map((k) => (<option key={k.value} value={k.value}>{k.label}</option>))}
           </select>
         </label>
         <label className="block">
@@ -96,7 +95,7 @@ function ItemManager({ onChanged }: { onChanged: () => void }) {
           disabled={!name.trim()}
           onClick={() =>
             run(async () => {
-              const order = (items ?? []).filter((i) => i.kind === kind).length + (kind === "medicine" ? 1 : 11);
+              const order = (items ?? []).filter((i) => i.kind === kind).length + kindInfo(kind).order;
               await createCabinetItem({ name: name.trim(), kind, min_stock: minStock, active: true, sort_order: order });
               setName("");
               setMinStock(0);
@@ -153,6 +152,9 @@ function Board() {
         </span>
         <span>
           <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500 align-middle" /> 외용제
+        </span>
+        <span>
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-stone-400 align-middle" /> 용품(핫팩·파스)
         </span>
         <span>숫자는 있어야 할 수. 유통기한은 남은 것 중 가장 빠른 것. 30일 안 붉게, 60일 안 노랗게.</span>
       </p>

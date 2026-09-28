@@ -53,3 +53,6 @@
 
 ## 13. V3-6 약장 (2026-09-28 추가)
 - [SQL Editor]에서 `supabase/schema-v3-6-cabinet.sql` 실행. `cabinet_items`(품목 9개 seed)와 `cabinet_moves`(장부, 넣기만 가능) 표가 생긴다.
+
+## 14. V3-7 약장 용품 구분 (2026-09-28 추가)
+- [SQL Editor]에서 `supabase/schema-v3-7-cabinet-supply.sql` 실행. 품목 구분에 `supply`(용품)가 허용되고 핫팩이 들어간다.

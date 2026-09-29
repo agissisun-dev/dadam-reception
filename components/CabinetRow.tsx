@@ -17,7 +17,7 @@ const INPUT = "w-full rounded border border-stone-300 px-3 py-2 text-sm";
 
 type Mode = null | "out" | "in" | "count" | "discard" | "history";
 
-const REVIEW_HINT = "리뷰 증정 기준: 소화기 환자는 소합원 3알 · 피부 환자는 사진까지 올리면 외용제 1개";
+const REVIEW_HINT = "리뷰 증정 기준: 소화기 환자는 소합원 3개 · 일반 환자는 한방파스 1장 · 피부 환자는 사진까지 올리면 외용제 1개";
 
 export default function CabinetRow({ status, today, onDone }: { status: CabinetStatus; today: string; onDone: () => void }) {
   const { item, stock, nearest, moves } = status;

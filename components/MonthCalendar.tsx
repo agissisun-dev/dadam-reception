@@ -4,7 +4,22 @@ import { WEEKDAYS } from "@/lib/weeklyRules";
 import { isInMonth, monthGrid, monthLabel, type YearMonth } from "@/lib/calendarRules";
 import { holidayLabel, isClinicClosed } from "@/lib/holidays";
 
-export type DayCounts = { tasks: number; happyCalls: number; weekly: number };
+export type DayCounts = {
+  tasks: number;
+  happyCalls: number;
+  weekly: number;
+  doneTasks: number;
+  doneHappyCalls: number;
+  doneWeekly: number;
+};
+
+export const EMPTY_COUNTS: DayCounts = { tasks: 0, happyCalls: 0, weekly: 0, doneTasks: 0, doneHappyCalls: 0, doneWeekly: 0 };
+
+/** 완료된 것: 같은 색의 연한 테두리에 ✓. 그날 칸에 남아서 "언제 얼마나 했는지"가 보인다. */
+function DoneBadge({ n, cls }: { n: number; cls: string }) {
+  if (n === 0) return null;
+  return <span className={`inline-block rounded border bg-white px-1 text-[11px] leading-4 ${cls}`}>✓{n}</span>;
+}
 
 type Props = {
   month: YearMonth;
@@ -109,6 +124,9 @@ export default function MonthCalendar({
                   <Badge n={c.tasks} color="bg-stone-700" late={late} />
                   <Badge n={c.happyCalls} color="bg-amber-500" late={late} />
                   <Badge n={c.weekly} color="bg-[#16863b]" late={late} />
+                  <DoneBadge n={c.doneTasks} cls="border-stone-400 text-stone-600" />
+                  <DoneBadge n={c.doneHappyCalls} cls="border-amber-400 text-amber-700" />
+                  <DoneBadge n={c.doneWeekly} cls="border-[#16863b] text-[#16863b]" />
                 </span>
               )}
             </button>
@@ -128,6 +146,9 @@ export default function MonthCalendar({
         </span>
         <span>
           <span className="inline-block h-2.5 w-2.5 rounded bg-red-600 align-middle" /> 지난 것
+        </span>
+        <span>
+          <span className="inline-block rounded border border-stone-400 bg-white px-1 align-middle text-[10px] leading-3 text-stone-600">✓</span> 완료한 것(연한 테두리)
         </span>
         <span>
           <span className="inline-block h-2.5 w-2.5 rounded border border-stone-300 bg-stone-50 align-middle" /> 휴진(일·공휴일) — 연락·업무는 그 전 진료일로 당겨 잡힘

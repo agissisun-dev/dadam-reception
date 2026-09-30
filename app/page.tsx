@@ -7,21 +7,46 @@ import AppHeader from "@/components/AppHeader";
 import TaskCard from "@/components/TaskCard";
 import HappyCallRow from "@/components/HappyCallRow";
 import WeeklyRow from "@/components/WeeklyRow";
-import MonthCalendar, { type DayCounts } from "@/components/MonthCalendar";
+import MonthCalendar, { EMPTY_COUNTS, type DayCounts } from "@/components/MonthCalendar";
 import Celebration from "@/components/Celebration";
 import { pickMessage, shouldCelebrate } from "@/lib/celebrationRules";
-import { listOpenTasks } from "@/lib/tasks";
-import { listOpenHappyCalls } from "@/lib/happyCalls";
-import { listWaitingDoctor, listWeeklyTargets } from "@/lib/weekly";
+import { listDoneTasks, listOpenTasks } from "@/lib/tasks";
+import { listHandledHappyCalls, listOpenHappyCalls } from "@/lib/happyCalls";
+import { listAllWeeklyContacts, listWaitingDoctor, listWeeklyTargets } from "@/lib/weekly";
 import { listTemplates } from "@/lib/templates";
 import { loadCabinet } from "@/lib/cabinet";
 import { expiryStatus } from "@/lib/cabinetRules";
 import { weekEndISO } from "@/lib/weeklyRules";
 import { addDays, todayISO, weekdayKo } from "@/lib/dates";
 import { dayLabel, sameMonth, shiftMonth, yearMonthOf, type YearMonth } from "@/lib/calendarRules";
-import type { HappyCallRow as HcRow, Task, Template, WeeklyRow as WkRow } from "@/lib/types";
+import type { HandledHappyCall, HappyCallRow as HcRow, Task, Template, WeeklyContactWithName, WeeklyRow as WkRow } from "@/lib/types";
 
-type Data = { tasks: Task[]; happyCalls: HcRow[]; weekly: WkRow[]; waiting: number; cabinet: { soon: number; short: number } };
+type Data = {
+  tasks: Task[];
+  happyCalls: HcRow[];
+  weekly: WkRow[];
+  waiting: number;
+  cabinet: { soon: number; short: number };
+  /** 완료된 것들 — 달력에 ✓로 남기고 그날 목록 아래 "완료됨"에 보인다 */
+  doneTasks: Task[];
+  handledHc: HandledHappyCall[];
+  weeklyDone: WeeklyContactWithName[];
+};
+
+const HC_RESULT: Record<string, string> = {
+  contacted: "연락함",
+  represcribed: "재처방·예약됨",
+  excluded: "연락 제외",
+  missed: "안 받음",
+  closed: "닫힘",
+};
+const WK_RESULT: Record<string, string> = {
+  sent: "발송함",
+  skipped_visited: "내원해 건너뜀",
+  no_reply: "답 없음",
+  dormant: "휴면",
+  excluded: "연락 제외",
+};
 
 /** 약장 요약: 기한 30일 안(지난 것 포함) 품목 수, 부족 품목 수. 실패하면 0으로. */
 async function cabinetSummary(today: string): Promise<{ soon: number; short: number }> {
@@ -42,13 +67,17 @@ function weeklyDate(r: WkRow, today: string): string {
 function buildCounts(data: Data, today: string): Map<string, DayCounts> {
   const m = new Map<string, DayCounts>();
   const bump = (iso: string, key: keyof DayCounts) => {
-    const c = m.get(iso) ?? { tasks: 0, happyCalls: 0, weekly: 0 };
+    const c = m.get(iso) ?? { ...EMPTY_COUNTS };
     c[key] += 1;
     m.set(iso, c);
   };
   for (const t of data.tasks) bump(t.due_date, "tasks");
   for (const h of data.happyCalls) bump(h.due_date, "happyCalls");
   for (const w of data.weekly) bump(weeklyDate(w, today), "weekly");
+  // 완료된 것은 예정됐던 날에 남긴다 ("그날 예정된 걸 다 했는지"와 짝이 맞게)
+  for (const t of data.doneTasks) bump(t.due_date, "doneTasks");
+  for (const h of data.handledHc) bump(h.due_date, "doneHappyCalls");
+  for (const w of data.weeklyDone) bump(w.planned_date, "doneWeekly");
   return m;
 }
 
@@ -91,9 +120,12 @@ function CalendarBoard() {
       listWeeklyTargets(addDays(now, 400)),
       listWaitingDoctor().then((l) => l.length).catch(() => 0),
       cabinetSummary(now),
+      listDoneTasks().catch(() => [] as Task[]),
+      listHandledHappyCalls().catch(() => [] as HandledHappyCall[]),
+      listAllWeeklyContacts().catch(() => [] as WeeklyContactWithName[]),
     ])
-      .then(([tasks, happyCalls, weekly, waiting, cabinet]) => {
-        const next = { tasks, happyCalls, weekly, waiting, cabinet };
+      .then(([tasks, happyCalls, weekly, waiting, cabinet, doneTasks, handledHc, weeklyDone]) => {
+        const next = { tasks, happyCalls, weekly, waiting, cabinet, doneTasks, handledHc, weeklyDone };
         setData(next);
         if (checkCelebration(next, now)) setCelebrate(true);
       })
@@ -120,6 +152,10 @@ function CalendarBoard() {
   const dayHc = data.happyCalls.filter((h) => h.due_date === selected);
   const dayWk = data.weekly.filter((w) => weeklyDate(w, today) === selected);
   const dayEmpty = dayTasks.length === 0 && dayHc.length === 0 && dayWk.length === 0;
+  const doneDayTasks = data.doneTasks.filter((t) => t.due_date === selected);
+  const doneDayHc = data.handledHc.filter((h) => h.due_date === selected);
+  const doneDayWk = data.weeklyDone.filter((w) => w.planned_date === selected);
+  const doneCount = doneDayTasks.length + doneDayHc.length + doneDayWk.length;
 
   const hcToday = data.happyCalls.filter((h) => h.due_date === today).length;
   const weekEnd = weekEndISO(today);
@@ -215,6 +251,51 @@ function CalendarBoard() {
             <WeeklyRow key={`w${r.id}`} row={r} today={today} templates={templates} onDone={load} />
           ))}
         </div>
+
+        {doneCount > 0 && (
+          <div className="mt-4">
+            <h3 className="mb-2 text-sm font-bold text-stone-500">완료됨 ({doneCount})</h3>
+            <ul className="divide-y divide-stone-100 rounded-lg border border-stone-200 bg-white text-sm">
+              {doneDayTasks.map((t) => (
+                <li key={`dt${t.id}`} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                  <span className="inline-block h-2 w-2 rounded-sm bg-stone-500" />
+                  <Link href={`/tasks/${t.id}`} className="font-medium hover:underline">
+                    {t.title}
+                  </Link>
+                  <span className="text-xs text-stone-500">
+                    완료 {t.completed_at ? t.completed_at.slice(0, 10) : ""} · {t.completed_by ?? ""}
+                    {t.completion_memo ? ` · ${t.completion_memo}` : ""}
+                  </span>
+                </li>
+              ))}
+              {doneDayHc.map((h) => (
+                <li key={`dh${h.id}`} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                  <span className="inline-block h-2 w-2 rounded-sm bg-amber-500" />
+                  <Link href={`/patients/${h.prescription.patient.id}`} className="font-medium hover:underline">
+                    {h.prescription.patient.name}
+                  </Link>
+                  <span className="rounded bg-stone-100 px-1.5 py-0.5 text-xs">{h.round}차</span>
+                  <span className="text-xs text-stone-500">
+                    {HC_RESULT[h.last?.action ?? h.status] ?? h.status}
+                    {h.last ? ` · ${h.last.created_at.slice(0, 10)} · ${h.last.staff_name}` : ""}
+                  </span>
+                </li>
+              ))}
+              {doneDayWk.map((w) => (
+                <li key={`dw${w.id}`} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                  <span className="inline-block h-2 w-2 rounded-sm bg-[#16863b]" />
+                  <Link href={`/patients/${w.patient_id}`} className="font-medium hover:underline">
+                    {w.patient?.name ?? "환자"}
+                  </Link>
+                  <span className="rounded bg-stone-100 px-1.5 py-0.5 text-xs">{w.round}회차</span>
+                  <span className="text-xs text-stone-500">
+                    {WK_RESULT[w.action] ?? w.action} · {w.created_at.slice(0, 10)} · {w.staff_name}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
     </main>
   );

@@ -1,7 +1,7 @@
 import { getSupabase } from "./supabaseClient";
 import { todayISO } from "./dates";
 import { consecutiveNoReply, nextWeeklyDate } from "./weeklyRules";
-import type { Patient, WeeklyAction, WeeklyContact, WeeklyRow } from "./types";
+import type { Patient, WeeklyAction, WeeklyContact, WeeklyContactWithName, WeeklyRow } from "./types";
 
 function fail(action: string, message: string): never {
   throw new Error(`${action} 실패: ${message}`);
@@ -145,6 +145,16 @@ export async function reviewReply(contactId: number, doctorNote: string): Promis
     .update({ doctor_note: doctorNote, reply_status: "reviewed" })
     .eq("id", contactId);
   if (error) fail("원장 확인", error.message);
+}
+
+/** 모든 주간 관리 기록 + 환자 이름. 달력에 "그날 보낸 것"을 남기려고 쓴다. */
+export async function listAllWeeklyContacts(): Promise<WeeklyContactWithName[]> {
+  const { data, error } = await getSupabase()
+    .from("weekly_contacts")
+    .select("*, patient:patients(name)")
+    .order("planned_date");
+  if (error) fail("주간 관리 기록", error.message);
+  return (data ?? []) as WeeklyContactWithName[];
 }
 
 export async function listWeeklyContacts(patientId: number): Promise<WeeklyContact[]> {

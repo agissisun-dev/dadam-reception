@@ -1,6 +1,6 @@
 import { getSupabase } from "./supabaseClient";
 import { addDays, todayISO } from "./dates";
-import type { ContactChannel, HappyCallRow } from "./types";
+import type { ContactChannel, ContactLog, HandledHappyCall, HappyCallRow } from "./types";
 
 function fail(action: string, message: string): never {
   throw new Error(`${action} 실패: ${message}`);
@@ -34,6 +34,35 @@ export async function listOpenHappyCalls(): Promise<HappyCallRow[]> {
     }
   }
   return rows.map((r) => ({ ...r, prescription_seq: seq.get(r.prescription_id) ?? 1 }));
+}
+
+/**
+ * 처리가 끝난 해피콜(연락함·재처방·제외 등, pending이 아닌 것) + 마지막 기록(누가·언제·무엇을).
+ * 달력에 "그날 한 것"을 남기려고 쓴다. 제외된 환자의 것도 기록이므로 포함한다.
+ */
+export async function listHandledHappyCalls(): Promise<HandledHappyCall[]> {
+  const { data, error } = await getSupabase()
+    .from("happy_calls")
+    .select("*, prescription:prescriptions!inner(*, patient:patients!inner(*))")
+    .neq("status", "pending")
+    .order("due_date");
+  if (error) fail("처리한 해피콜", error.message);
+  const rows = (data ?? []) as Omit<HappyCallRow, "prescription_seq">[];
+  const ids = rows.map((r) => r.id);
+  const last = new Map<number, ContactLog>();
+  if (ids.length > 0) {
+    const { data: logs, error: e2 } = await getSupabase()
+      .from("contact_logs")
+      .select("*")
+      .in("happy_call_id", ids)
+      .order("created_at", { ascending: true });
+    if (e2) fail("해피콜 기록", e2.message);
+    for (const l of (logs ?? []) as ContactLog[]) {
+      if (l.action === "rescheduled") continue; // 예정일 옮기기는 처리가 아님
+      last.set(l.happy_call_id, l); // 오름차순이라 마지막 것이 남는다
+    }
+  }
+  return rows.map((r) => ({ ...r, prescription_seq: 0, last: last.get(r.id) ?? null }));
 }
 
 export async function countOpenHappyCalls(today: string): Promise<{ today: number; overdue: number }> {

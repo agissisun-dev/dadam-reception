@@ -189,3 +189,9 @@ export type CabinetMove = {
   diff: number | null;
   created_at: string;
 };
+
+/** 처리가 끝난 해피콜 + 마지막 처리 기록(달력 완료 표시용). prescription_seq는 여기선 안 쓴다(0). */
+export type HandledHappyCall = HappyCallRow & { last: ContactLog | null };
+
+/** 주간 관리 기록 + 환자 이름(달력 완료 표시용) */
+export type WeeklyContactWithName = WeeklyContact & { patient: { name: string } | null };

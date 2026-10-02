@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   happyCallMonth,
+  ledgerItemCounts,
+  ledgerMonth,
   monthShort,
   monthlyRows,
   niceMax,
@@ -89,5 +91,39 @@ describe("weeklyMonth", () => {
       "2026-09",
     );
     expect(r).toEqual({ sent: 2, visited: 1, noReply: 1, replies: 1, dormant: 0 });
+  });
+});
+
+describe("ledgerMonth — 한 달 매출", () => {
+  const entries = [
+    { day: "2026-10-01", cash: 11000, cash_receipt: 0, card: 0 },
+    { day: "2026-10-01", cash: 0, cash_receipt: 44700, card: 0 },
+    { day: "2026-10-02", cash: 0, cash_receipt: 0, card: 240000 },
+    { day: "2026-10-02", cash: -11000, cash_receipt: 0, card: 11000 }, // 정정 줄
+    { day: "2026-09-30", cash: 99999, cash_receipt: 0, card: 0 },
+  ];
+  const expenses = [{ day: "2026-10-01", amount: 11600 }, { day: "2026-09-30", amount: 5 }];
+  it("그 달만 더하고, 정정 줄은 부호대로, 줄이 있는 날 수", () => {
+    expect(ledgerMonth(entries, expenses, "2026-10")).toEqual({ cash: 0, cash_receipt: 44700, card: 251000, subtotal: 295700, expenses: 11600, days: 2 });
+  });
+  it("줄이 없는 달은 0", () => {
+    expect(ledgerMonth(entries, expenses, "2026-08").subtotal).toBe(0);
+  });
+});
+
+describe("ledgerItemCounts — 한 달 항목별", () => {
+  it("이름별 합, 묶음 순 뒤 수량 순", () => {
+    const items = [
+      { day: "2026-10-01", name: "전침", group: "treatment", qty: 1, amount: null },
+      { day: "2026-10-02", name: "전침", group: "treatment", qty: 1, amount: null },
+      { day: "2026-10-02", name: "공진단", group: "cabinet", qty: 5, amount: null },
+      { day: "2026-10-02", name: "일반 탕약", group: "decoction", qty: 1, amount: 420000 },
+      { day: "2026-09-30", name: "전침", group: "treatment", qty: 9, amount: null },
+    ];
+    expect(ledgerItemCounts(items, "2026-10")).toEqual([
+      { name: "일반 탕약", group: "decoction", qty: 1, amount: 420000 },
+      { name: "공진단", group: "cabinet", qty: 5, amount: 0 },
+      { name: "전침", group: "treatment", qty: 2, amount: 0 },
+    ]);
   });
 });

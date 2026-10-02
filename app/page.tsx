@@ -16,6 +16,8 @@ import { listAllWeeklyContacts, listWaitingDoctor, listWeeklyTargets } from "@/l
 import { listTemplates } from "@/lib/templates";
 import { loadCabinet } from "@/lib/cabinet";
 import { expiryStatus } from "@/lib/cabinetRules";
+import { listLedgerDaysOpen, loadDay } from "@/lib/ledger";
+import { sumEntries, won } from "@/lib/ledgerRules";
 import { weekEndISO } from "@/lib/weeklyRules";
 import { addDays, todayISO, weekdayKo } from "@/lib/dates";
 import { dayLabel, sameMonth, shiftMonth, yearMonthOf, type YearMonth } from "@/lib/calendarRules";
@@ -27,6 +29,8 @@ type Data = {
   weekly: WkRow[];
   waiting: number;
   cabinet: { soon: number; short: number };
+  /** 오늘 장부: 줄 수·소계, 어제까지 마감 안 한 날 */
+  ledger: { count: number; subtotal: number; openDays: string[] };
   /** 완료된 것들 — 달력에 ✓로 남기고 그날 목록 아래 "완료됨"에 보인다 */
   doneTasks: Task[];
   handledHc: HandledHappyCall[];
@@ -57,6 +61,16 @@ async function cabinetSummary(today: string): Promise<{ soon: number; short: num
     return { soon, short };
   } catch {
     return { soon: 0, short: 0 };
+  }
+}
+
+/** 오늘 장부 요약. 실패하면 0으로. */
+async function ledgerSummary(today: string): Promise<{ count: number; subtotal: number; openDays: string[] }> {
+  try {
+    const [d, openDays] = await Promise.all([loadDay(today), listLedgerDaysOpen(today)]);
+    return { count: d.entries.filter((e) => e.kind === "normal").length, subtotal: sumEntries(d.entries).subtotal, openDays };
+  } catch {
+    return { count: 0, subtotal: 0, openDays: [] };
   }
 }
 
@@ -123,9 +137,10 @@ function CalendarBoard() {
       listDoneTasks().catch(() => [] as Task[]),
       listHandledHappyCalls().catch(() => [] as HandledHappyCall[]),
       listAllWeeklyContacts().catch(() => [] as WeeklyContactWithName[]),
+      ledgerSummary(now),
     ])
-      .then(([tasks, happyCalls, weekly, waiting, cabinet, doneTasks, handledHc, weeklyDone]) => {
-        const next = { tasks, happyCalls, weekly, waiting, cabinet, doneTasks, handledHc, weeklyDone };
+      .then(([tasks, happyCalls, weekly, waiting, cabinet, doneTasks, handledHc, weeklyDone, ledger]) => {
+        const next = { tasks, happyCalls, weekly, waiting, cabinet, ledger, doneTasks, handledHc, weeklyDone };
         setData(next);
         if (checkCelebration(next, now)) setCelebrate(true);
       })
@@ -175,6 +190,14 @@ function CalendarBoard() {
           오늘 {today} ({weekdayKo(today)})
         </p>
         <p className="flex flex-wrap gap-3 text-sm">
+          <Link href="/ledger" className="underline">
+            오늘 장부 {data.ledger.count}줄{data.ledger.count > 0 ? ` · ${won(data.ledger.subtotal)}원` : ""}
+          </Link>
+          {data.ledger.openDays.length > 0 && (
+            <Link href="/ledger" className="text-red-700 underline">
+              마감 안 한 날 {data.ledger.openDays.length}일 ({data.ledger.openDays.map((d) => d.slice(5).replace("-", "/")).join(", ")})
+            </Link>
+          )}
           <Link href="/happy-calls" className="underline">
             해피콜 오늘 {hcToday}명
           </Link>

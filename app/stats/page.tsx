@@ -11,8 +11,15 @@ import { expiryStatus } from "@/lib/cabinetRules";
 import { maskPhone } from "@/lib/phone";
 import type { CabinetMove, SmsLog } from "@/lib/types";
 import { todayISO } from "@/lib/dates";
+import { listMonthEntries } from "@/lib/ledger";
+import { GROUP_LABEL, won } from "@/lib/ledgerRules";
+import type { LedgerGroup } from "@/lib/types";
 import {
   happyCallMonth,
+  ledgerItemCounts,
+  ledgerMonth,
+  type ItemCount,
+  type LedgerMonth,
   monthKey,
   monthShort,
   monthlyRows,
@@ -162,10 +169,75 @@ function Board() {
         포 수는 처방에 적힌 포 수를 더한 값이고, 포 수가 없는 옛 처방은 일수 × 하루 포수로 봅니다. 신규 환자는 등록한 달 기준입니다.
       </p>
 
+      <LedgerSummary thisKey={thisKey} />
+
       <CabinetSummary today={today} thisKey={thisKey} />
 
       <SmsLedger />
     </main>
+  );
+}
+
+/** 수납 장부 요약(접혀 있음): 이번 달 매출·지출·일 평균, 지난달 비교, 항목별 건수. */
+function LedgerSummary({ thisKey }: { thisKey: string }) {
+  const [data, setData] = useState<{ cur: LedgerMonth; prev: LedgerMonth; items: ItemCount[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const prevKey = prevMonthKey(thisKey);
+    Promise.all([listMonthEntries(thisKey), listMonthEntries(prevKey)])
+      .then(([a, b]) => {
+        const cur = ledgerMonth(a.entries, a.expenses, thisKey);
+        const prev = ledgerMonth(b.entries, b.expenses, prevKey);
+        const items = ledgerItemCounts(
+          a.entries.filter((e) => e.kind === "normal").flatMap((e) => e.items.map((i) => ({ day: e.day, name: i.name, group: i.group, qty: i.qty, amount: i.amount }))),
+          thisKey,
+        );
+        setData({ cur, prev, items });
+      })
+      .catch((e: Error) => setError(e.message));
+  }, [thisKey]);
+
+  if (error) return <p className="text-sm text-red-600">장부: {error}</p>;
+  if (!data) return null;
+  const { cur, prev, items } = data;
+  const avg = cur.days > 0 ? Math.round(cur.subtotal / cur.days) : 0;
+
+  return (
+    <details className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
+      <summary className="cursor-pointer font-bold">이번 달 매출 보기 (오늘 장부에서 집계)</summary>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Tile label="소계" value={won(cur.subtotal)} sub={`지난달 ${won(prev.subtotal)}`} />
+        <Tile label="현금" value={won(cur.cash)} sub={`지난달 ${won(prev.cash)}`} />
+        <Tile label="현영" value={won(cur.cash_receipt)} sub={`지난달 ${won(prev.cash_receipt)}`} />
+        <Tile label="카드" value={won(cur.card)} sub={`지난달 ${won(prev.card)}`} />
+        <Tile label="지출" value={won(cur.expenses)} sub={`지난달 ${won(prev.expenses)}`} />
+        <Tile label="하루 평균 소계" value={won(avg)} sub={`장부 적은 날 ${cur.days}일`} />
+      </div>
+      {items.length > 0 && (
+        <table className="mt-3 w-full text-sm">
+          <thead className="bg-stone-50 text-left text-xs text-stone-500">
+            <tr>
+              <th className="px-3 py-1.5">항목</th>
+              <th className="px-3 py-1.5">묶음</th>
+              <th className="px-3 py-1.5 text-right">건수·개수</th>
+              <th className="px-3 py-1.5 text-right">기타 칸 금액</th>
+            </tr>
+          </thead>
+          <tbody className="tabular-nums">
+            {items.map((i) => (
+              <tr key={`${i.group}:${i.name}`} className="border-t border-stone-100">
+                <td className="px-3 py-1">{i.name}</td>
+                <td className="px-3 py-1 text-xs text-stone-500">{GROUP_LABEL[i.group as LedgerGroup] ?? i.group}</td>
+                <td className="px-3 py-1 text-right">{i.qty}</td>
+                <td className="px-3 py-1 text-right">{i.amount ? won(i.amount) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className="mt-2 text-xs text-stone-500">정정 줄은 금액에 더해져 있고, 항목 건수에는 들어가지 않습니다. 기타 칸 금액은 &ldquo;일반(42)&rdquo;처럼 괄호에 적은 만원 금액의 합입니다.</p>
+    </details>
   );
 }
 

@@ -146,6 +146,47 @@ export function weeklyMonth(contacts: WeeklyContactLite[], key: string): WeeklyM
   return out;
 }
 
+export type LedgerEntryLite = { day: string; cash: number; cash_receipt: number; card: number };
+export type LedgerMonth = { cash: number; cash_receipt: number; card: number; subtotal: number; expenses: number; days: number };
+
+/** 한 달 매출: 현금·현영·카드·소계·지출, 줄이 있는 날 수(일 평균용). 정정 줄은 음수로 들어 있어 그냥 더한다. */
+export function ledgerMonth(entries: LedgerEntryLite[], expenses: { day: string; amount: number }[], key: string): LedgerMonth {
+  const out: LedgerMonth = { cash: 0, cash_receipt: 0, card: 0, subtotal: 0, expenses: 0, days: 0 };
+  const days = new Set<string>();
+  for (const e of entries) {
+    if (monthKey(e.day) !== key) continue;
+    out.cash += e.cash;
+    out.cash_receipt += e.cash_receipt;
+    out.card += e.card;
+    days.add(e.day);
+  }
+  out.subtotal = out.cash + out.cash_receipt + out.card;
+  for (const x of expenses) if (monthKey(x.day) === key) out.expenses += x.amount;
+  out.days = days.size;
+  return out;
+}
+
+export type LedgerItemLite = { day: string; name: string; group: string; qty: number; amount: number | null };
+export type ItemCount = { name: string; group: string; qty: number; amount: number };
+
+const ITEM_GROUP_ORDER = ["decoction", "cabinet", "treatment", "extract", "other"];
+
+/** 한 달 항목별 건수·금액(이름별 합). 묶음 순(탕약·약장·치료·엑스제·기타), 그 안에서 수량 많은 순 */
+export function ledgerItemCounts(items: LedgerItemLite[], key: string): ItemCount[] {
+  const map = new Map<string, ItemCount>();
+  for (const i of items) {
+    if (monthKey(i.day) !== key) continue;
+    const k = `${i.group}:${i.name}`;
+    const c = map.get(k) ?? { name: i.name, group: i.group, qty: 0, amount: 0 };
+    c.qty += i.qty;
+    c.amount += i.amount ?? 0;
+    map.set(k, c);
+  }
+  return [...map.values()].sort(
+    (a, b) => ITEM_GROUP_ORDER.indexOf(a.group) - ITEM_GROUP_ORDER.indexOf(b.group) || b.qty - a.qty || a.name.localeCompare(b.name),
+  );
+}
+
 /** 눈금 위 끝값: 1·2·2.5·3·4·5·6·8·10 × 자릿수로 올림 (23 → 25, 7 → 8) */
 export function niceMax(max: number): number {
   if (max <= 0) return 1;

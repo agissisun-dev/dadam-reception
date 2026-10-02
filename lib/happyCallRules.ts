@@ -23,6 +23,38 @@ export function planHappyCalls(
   ];
 }
 
+type PlannedCall = { round: 1 | 2; due_date: string; note: string };
+type ExistingCall = { id: number; round: 1 | 2; status: "pending" | "contacted" | "closed" };
+
+/**
+ * 수령일·포 수를 바꿨을 때 해피콜을 새 계획에 맞춘다.
+ * 대기(pending)인 것만 손댄다: 같은 회차가 있으면 날짜를 바꾸고, 없어진 회차는 종료하고, 새로 생긴 회차는 넣는다.
+ * 이미 연락한 것(contacted·closed)은 그대로 둔다.
+ */
+export function reconcileHappyCalls(
+  existing: ExistingCall[],
+  plan: PlannedCall[],
+): { update: { id: number; due_date: string; note: string }[]; insert: PlannedCall[]; close: number[] } {
+  const update: { id: number; due_date: string; note: string }[] = [];
+  const close: number[] = [];
+  const seen = new Set<number>();
+  for (const c of existing) {
+    if (c.status !== "pending") {
+      seen.add(c.round);
+      continue;
+    }
+    const p = plan.find((x) => x.round === c.round);
+    if (p) {
+      update.push({ id: c.id, due_date: p.due_date, note: p.note });
+      seen.add(c.round);
+    } else {
+      close.push(c.id);
+    }
+  }
+  const insert = plan.filter((p) => !seen.has(p.round));
+  return { update, insert, close };
+}
+
 const byDue = (a: HappyCallRow, b: HappyCallRow) => a.due_date.localeCompare(b.due_date);
 
 export function bucketHappyCalls(

@@ -15,6 +15,7 @@ import {
   listPrescriptionsWithCalls,
   unexcludePatient,
   updatePatient,
+  updatePrescription,
   type PrescriptionWithCalls,
 } from "@/lib/patients";
 import { CONDITIONS, conditionLabel } from "@/lib/conditions";
@@ -68,6 +69,7 @@ function Detail() {
     () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("add") === "1",
   );
   const [excluding, setExcluding] = useState(false);
+  const [editingPresc, setEditingPresc] = useState<number | null>(null);
   const [reason, setReason] = useState("");
   const [staff, setStaff] = useState<StaffName>(() =>
     typeof window === "undefined" ? STAFF_NAMES[0] : loadLastStaff(),
@@ -374,11 +376,44 @@ function Detail() {
         <div className="space-y-3">
           {prescs.map((p, i) => (
             <div key={p.id} className="rounded-lg border border-stone-200 bg-white p-3">
-              <p className="text-sm font-medium">
-                {prescs.length - i}번째 · 수령 {p.receive_date} · {describePrescription(p)} ·{" "}
-                {p.status === "active" ? "진행" : "종료"}
-                {p.memo ? ` · ${p.memo}` : ""}
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium">
+                  {prescs.length - i}번째 · 수령 {p.receive_date} · {describePrescription(p)} ·{" "}
+                  {p.status === "active" ? "진행" : "종료"}
+                  {p.memo ? ` · ${p.memo}` : ""}
+                </p>
+                {p.happy_calls.some((c) => c.status === "pending") && editingPresc !== p.id && (
+                  <button className={`${BTN} ml-auto`} onClick={() => setEditingPresc(p.id)}>
+                    수령일 바꾸기
+                  </button>
+                )}
+              </div>
+              {editingPresc === p.id && (
+                <div className="mt-3 border-t border-stone-200 pt-3">
+                  <p className="mb-2 text-xs text-stone-500">
+                    약 배송이 늦어지거나 포 수가 바뀌었을 때 씁니다. 저장하면 아직 연락 안 한 해피콜만 새 수령일 기준으로 다시 잡힙니다. 이미 연락한 것은 그대로입니다.
+                  </p>
+                  <PrescriptionForm
+                    key={p.id}
+                    initial={{
+                      receive_date: p.receive_date,
+                      days: p.days,
+                      packs: p.packs,
+                      per_day: p.per_day ?? DEFAULT_PER_DAY,
+                      memo: p.memo ?? "",
+                    }}
+                    submitLabel="수령일 저장"
+                    onSubmit={async (v) => {
+                      await updatePrescription(p.id, v);
+                      setEditingPresc(null);
+                      load();
+                    }}
+                  />
+                  <button className={`${BTN} mt-2`} onClick={() => setEditingPresc(null)}>
+                    취소
+                  </button>
+                </div>
+              )}
               <ul className="mt-2 space-y-1 text-sm">
                 {[...p.happy_calls]
                   .sort((a, b) => a.round - b.round)

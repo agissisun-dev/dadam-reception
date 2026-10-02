@@ -1,5 +1,31 @@
 import { describe, it, expect } from "vitest";
-import { planHappyCalls, bucketHappyCalls, NOTE_ROUND1, NOTE_ROUND2, NOTE_SINGLE } from "./happyCallRules";
+import { planHappyCalls, bucketHappyCalls, reconcileHappyCalls, NOTE_ROUND1, NOTE_ROUND2, NOTE_SINGLE } from "./happyCallRules";
+
+describe("reconcileHappyCalls — 수령일·포 수 변경", () => {
+  const plan30 = planHappyCalls("2026-10-10", 30); // 1차 10/17, 2차 11/6
+  it("대기 중인 회차는 새 날짜로, 이미 연락한 회차는 그대로", () => {
+    const r = reconcileHappyCalls(
+      [{ id: 1, round: 1, status: "contacted" }, { id: 2, round: 2, status: "pending" }],
+      plan30,
+    );
+    expect(r.update).toEqual([{ id: 2, due_date: plan30[1].due_date, note: NOTE_ROUND2 }]);
+    expect(r.insert).toEqual([]);
+    expect(r.close).toEqual([]);
+  });
+  it("포 수를 줄여 한 번만 연락하게 되면 대기 중인 2차는 종료", () => {
+    const plan10 = planHappyCalls("2026-10-10", 10);
+    const r = reconcileHappyCalls(
+      [{ id: 1, round: 1, status: "pending" }, { id: 2, round: 2, status: "pending" }],
+      plan10,
+    );
+    expect(r.update).toEqual([{ id: 1, due_date: "2026-10-17", note: NOTE_SINGLE }]);
+    expect(r.close).toEqual([2]);
+  });
+  it("포 수를 늘려 2차가 생기면 새로 넣는다", () => {
+    const r = reconcileHappyCalls([{ id: 1, round: 1, status: "pending" }], plan30);
+    expect(r.insert.map((c) => c.round)).toEqual([2]);
+  });
+});
 import type { HappyCallRow } from "./types";
 
 describe("planHappyCalls", () => {

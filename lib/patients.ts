@@ -1,6 +1,6 @@
 import { getSupabase } from "./supabaseClient";
 import { normalizePhone } from "./phone";
-import { planHappyCalls } from "./happyCallRules";
+import { planHappyCalls, reconcileHappyCalls } from "./happyCallRules";
 import type {
   Condition,
   ContactLog,
@@ -145,6 +145,57 @@ export async function addPrescription(
     .select("*");
   if (e2) fail("해피콜 생성", e2.message);
   return { prescription, calls: (calls ?? []) as HappyCall[] };
+}
+
+/**
+ * 수령일·포 수 바꾸기. 처방을 고치고, 대기 중인 해피콜만 새 수령일 기준으로 다시 잡는다.
+ * 이미 연락한 해피콜은 그대로 둔다.
+ */
+export async function updatePrescription(prescriptionId: number, input: PrescriptionInput): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("prescriptions")
+    .update({
+      receive_date: input.receive_date,
+      days: input.days,
+      packs: input.packs,
+      per_day: input.per_day,
+      memo: input.memo.trim() || null,
+    })
+    .eq("id", prescriptionId);
+  if (error) fail("처방 수정", error.message);
+
+  const { data: calls, error: e1 } = await sb
+    .from("happy_calls")
+    .select("id, round, status")
+    .eq("prescription_id", prescriptionId);
+  if (e1) fail("해피콜 조회", e1.message);
+  const plan = planHappyCalls(input.receive_date, input.days);
+  const r = reconcileHappyCalls((calls ?? []) as { id: number; round: 1 | 2; status: HappyCall["status"] }[], plan);
+
+  for (const u of r.update) {
+    const { error: e } = await sb
+      .from("happy_calls")
+      .update({ due_date: u.due_date, auto_due_date: u.due_date, note: u.note })
+      .eq("id", u.id);
+    if (e) fail("해피콜 날짜 변경", e.message);
+  }
+  if (r.close.length > 0) {
+    const { error: e } = await sb.from("happy_calls").update({ status: "closed" }).in("id", r.close);
+    if (e) fail("해피콜 정리", e.message);
+  }
+  if (r.insert.length > 0) {
+    const { error: e } = await sb.from("happy_calls").insert(
+      r.insert.map((c) => ({
+        prescription_id: prescriptionId,
+        round: c.round,
+        due_date: c.due_date,
+        auto_due_date: c.due_date,
+        note: c.note,
+      })),
+    );
+    if (e) fail("해피콜 추가", e.message);
+  }
 }
 
 export type PrescriptionWithCalls = Prescription & {

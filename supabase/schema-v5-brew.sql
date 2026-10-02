@@ -46,14 +46,14 @@ create policy "auth_all" on public.brew_jobs for all to authenticated using (tru
 drop policy if exists "auth_all" on public.brew_weekday_rules;
 create policy "auth_all" on public.brew_weekday_rules for all to authenticated using (true) with check (true);
 
--- 요일별 기준 초기값 (26년약대장 엑셀의 되풀이 메모)
+-- 요일별 기준 초기값 (접수실 2026년 약대장 사진, 2026-10-02: 월 약12개(짜는 것 포함) · 화 6 · 수 10 · 목 6 · 금 시외택배(경기권만) 10 · 토 3 직접·발효시작만)
 insert into public.brew_weekday_rules (weekday, note, max_jobs)
 select * from (values
-  (1, '지방택배 마감', 4),
-  (2, '서울택배 마감', 4),
-  (3, '', 4),
-  (4, '지방택배 마감', 4),
-  (5, '서울택배 마감', 4),
-  (6, '노원구만 2개 이상 · 직접만', 2)
+  (1, '', 12),
+  (2, '', 6),
+  (3, '', 10),
+  (4, '', 6),
+  (5, '시외택배(경기권만 가능)', 10),
+  (6, '직접·발효시작만 가능', 3)
 ) as v(weekday, note, max_jobs)
 where not exists (select 1 from public.brew_weekday_rules);

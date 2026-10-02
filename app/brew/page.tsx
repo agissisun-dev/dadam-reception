@@ -264,7 +264,7 @@ function RulesEditor({ rules, onSaved, onClose }: { rules: BrewWeekdayRule[]; on
   }
   return (
     <section className="rounded-lg border border-stone-300 bg-white p-3 text-sm">
-      <p className="mb-2 text-xs text-stone-500">요일마다 매주 되풀이되는 메모와 하루 한도(달이는 수). 한 번 고치면 계속 적용됩니다. 넘겨도 막지는 않고 붉게만 보입니다.</p>
+      <p className="mb-2 text-xs text-stone-500">요일마다 매주 되풀이되는 메모와 하루 한도(달이는 것 + 짜는 것). 한 번 고치면 계속 적용됩니다. 넘겨도 막지는 않고 붉게만 보입니다.</p>
       <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((r, i) => (
           <div key={r.weekday} className="flex items-center gap-1.5">
@@ -358,7 +358,7 @@ function Board() {
         <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border border-[#06478f] bg-[#f5f8fc] align-middle" />묶음 생산</span>
         <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border border-yellow-600 bg-yellow-50 align-middle" />메모</span>
         <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border border-stone-400 bg-stone-200 align-middle" />끝남 o</span>
-        <span>· 색 점 = 파우치 · &ldquo;달이기 3/4&rdquo; = 잡힌 수/한도 (넘으면 붉게, 막지는 않음)</span>
+        <span>· 색 점 = 파우치 · &ldquo;3/12개&rdquo; = 잡힌 수(짜는 것 포함)/그 요일 한도 (넘으면 붉게, 막지는 않음)</span>
       </p>
 
       {loadedFor !== monday ? (
@@ -370,7 +370,7 @@ function Board() {
               {days.map((iso) => {
                 const dj = jobs.filter((j) => j.day === iso);
                 const c = dayCounts(dj, ruleOf(iso));
-                const over = c.brew > c.max;
+                const over = c.brew + c.press > c.max; // 한도는 짜는 것까지 포함 (접수실 2026-10-02)
                 const closed = isClinicClosed(iso);
                 const hol = holidayLabel(iso);
                 return (
@@ -378,8 +378,8 @@ function Board() {
                     <div className="flex flex-wrap items-baseline gap-1.5">
                       <b className={closed ? "text-red-600" : iso.endsWith(days[5].slice(-2)) && iso === days[5] ? "text-blue-700" : ""}>{dayHeader(iso)}</b>
                       <span className={`text-[11px] font-bold ${over ? "text-red-700" : "text-[#0f3d23]"}`}>
-                        달이기 {c.brew}/{c.max}{over ? " ↑" : ""}
-                        {c.press > 0 && ` · 짜기 ${c.press}`}
+                        {c.brew + c.press}/{c.max}개{over ? " ↑" : ""}
+                        {c.press > 0 && ` (짜기 ${c.press} 포함)`}
                         {c.batch > 0 && ` · 묶음 ${c.batch}`}
                       </span>
                     </div>

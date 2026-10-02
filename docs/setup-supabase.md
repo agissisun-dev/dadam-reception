@@ -68,3 +68,6 @@
 - 마감된 날은 RLS가 잠근다(`ledger_day_closed(day)` 함수). 마감 뒤엔 정정 줄(`kind='correction'`)만 넣을 수 있고, 마감 되돌리기는 없다.
 - 약어 초안 31개가 들어간다. 뜻·묶음·약장 품목 연결은 앱 [오늘 장부 → 약어 표 고치기]에서 바꾼다. 공진단은 대보·사향 둘이라 어느 품목으로 뺄지 거기서 고른다.
 - 설계: `docs/superpowers/specs/2026-10-02-수납장부-v4-design.md`.
+
+## 18. V4-1 장부 줄 "합계에서 빼기" (2026-10-02, 실행 완료)
+- `supabase/schema-v4-1-ledger-offtotal.sql`: `ledger_entries.off_total`(붉은 금액, 그날 합계에서 뺌)·`pay_note`(제로페이·서울페이·계좌입금·기타). 접수실에 돈은 없지만 현금영수증은 끊는 줄.

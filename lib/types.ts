@@ -229,6 +229,9 @@ export type LedgerEntry = {
   corrects_id: number | null;
   correction_reason: string | null;
   packs_missing: boolean;
+  /** 합계에서 빼기(붉은 금액): 제로페이·서울페이·계좌입금처럼 접수실에 돈이 없는 줄 */
+  off_total: boolean;
+  pay_note: string | null;
   created_at: string;
   updated_at: string;
 };

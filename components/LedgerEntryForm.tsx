@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { planHappyCalls } from "@/lib/happyCallRules";
 import { saveEntry, upsertCode } from "@/lib/ledger";
-import { GROUP_LABEL, GROUP_ORDER, chipClass, parseNote, parseWon, won, type ParsedItem } from "@/lib/ledgerRules";
+import { GROUP_LABEL, GROUP_ORDER, INSURANCE_KINDS, PAY_NOTES, chipClass, parseNote, parseWon, won, type ParsedItem } from "@/lib/ledgerRules";
 import { DEFAULT_PER_DAY, PACK_PRESETS, daysFromPacks } from "@/lib/packs";
 import { maskPhone } from "@/lib/phone";
 import { weekdayKo } from "@/lib/dates";
@@ -125,6 +125,8 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
   const [receiveDate, setReceiveDate] = useState(day);
   const [newPhone, setNewPhone] = useState("");
   const [memo, setMemo] = useState("");
+  const [offTotal, setOffTotal] = useState(false);
+  const [payNote, setPayNote] = useState<string>(PAY_NOTES[0]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fixing, setFixing] = useState<string | null>(null);
@@ -158,6 +160,8 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
     setReceiveDate(day);
     setNewPhone("");
     setMemo("");
+    setOffTotal(false);
+    setPayNote(PAY_NOTES[0]);
     setFixing(null);
     nameRef.current?.focus();
   }
@@ -187,6 +191,8 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
         items: parsed.items,
         review: parsed.review,
         decoction: hasDecoction && packsN > 0 ? { packs: packsN, per_day: perDay, receive_date: receiveDate } : null,
+        off_total: offTotal,
+        pay_note: offTotal ? payNote : null,
       });
       reset();
       onSaved();
@@ -228,12 +234,11 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
         </label>
         <label className="block lg:col-span-1">
           <span className={LABEL}>구분</span>
-          <input list="ledger-kinds" value={insuranceKind} onChange={(e) => setInsuranceKind(e.target.value)} placeholder="1종" className={INPUT} />
+          <input list="ledger-kinds" value={insuranceKind} onChange={(e) => setInsuranceKind(e.target.value)} placeholder="보험" autoComplete="off" className={INPUT} />
           <datalist id="ledger-kinds">
-            <option value="1종" />
-            <option value="2종" />
-            <option value="일반" />
-            <option value="자보" />
+            {INSURANCE_KINDS.map((k) => (
+              <option key={k} value={k} />
+            ))}
           </datalist>
         </label>
         <label className="block lg:col-span-1">
@@ -341,8 +346,20 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
         </div>
       )}
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="메모 (선택)" className="h-8 flex-1 rounded border border-stone-200 px-2 text-xs" />
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <label className={`flex items-center gap-1.5 text-xs ${offTotal ? "font-bold text-red-700" : "text-stone-600"}`}>
+          <input type="checkbox" checked={offTotal} onChange={(e) => setOffTotal(e.target.checked)} />
+          합계에서 빼기 (붉은 금액)
+        </label>
+        {offTotal && (
+          <select value={payNote} onChange={(e) => setPayNote(e.target.value)} className="h-8 rounded border border-red-300 px-2 text-xs text-red-700">
+            {PAY_NOTES.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        )}
+        {offTotal && <span className="text-[11px] text-stone-500">접수실에 돈은 없지만 현금영수증은 끊는 줄. 오늘 합계에서 빠지고 장부엔 남습니다.</span>}
+        <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="메모 (선택)" className="h-8 min-w-[160px] flex-1 rounded border border-stone-200 px-2 text-xs" />
         <span className="text-xs text-stone-500">처리자 {staff}</span>
       </div>
       {error && <p className="mt-2 rounded border border-red-300 bg-red-50 p-2 text-sm text-red-700">{error}</p>}

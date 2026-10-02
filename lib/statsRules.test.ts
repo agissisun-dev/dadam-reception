@@ -104,7 +104,12 @@ describe("ledgerMonth — 한 달 매출", () => {
   ];
   const expenses = [{ day: "2026-10-01", amount: 11600 }, { day: "2026-09-30", amount: 5 }];
   it("그 달만 더하고, 정정 줄은 부호대로, 줄이 있는 날 수", () => {
-    expect(ledgerMonth(entries, expenses, "2026-10")).toEqual({ cash: 0, cash_receipt: 44700, card: 251000, subtotal: 295700, expenses: 11600, days: 2 });
+    expect(ledgerMonth(entries, expenses, "2026-10")).toEqual({ cash: 0, cash_receipt: 44700, card: 251000, subtotal: 295700, offTotal: 0, expenses: 11600, days: 2 });
+  });
+  it("합계에서 빼기 줄은 소계에 넣되 offTotal로 따로", () => {
+    const r = ledgerMonth([{ day: "2026-10-01", cash: 0, cash_receipt: 10500, card: 0, off_total: true }], [], "2026-10");
+    expect(r.subtotal).toBe(10500);
+    expect(r.offTotal).toBe(10500);
   });
   it("줄이 없는 달은 0", () => {
     expect(ledgerMonth(entries, expenses, "2026-08").subtotal).toBe(0);

@@ -207,7 +207,7 @@ function LedgerSummary({ thisKey }: { thisKey: string }) {
     <details className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
       <summary className="cursor-pointer font-bold">이번 달 매출 보기 (오늘 장부에서 집계)</summary>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <Tile label="소계" value={won(cur.subtotal)} sub={`지난달 ${won(prev.subtotal)}`} />
+        <Tile label="소계" value={won(cur.subtotal)} sub={`지난달 ${won(prev.subtotal)}${cur.offTotal > 0 ? ` · 그중 제로페이·계좌입금 ${won(cur.offTotal)}` : ""}`} />
         <Tile label="현금" value={won(cur.cash)} sub={`지난달 ${won(prev.cash)}`} />
         <Tile label="현영" value={won(cur.cash_receipt)} sub={`지난달 ${won(prev.cash_receipt)}`} />
         <Tile label="카드" value={won(cur.card)} sub={`지난달 ${won(prev.card)}`} />
@@ -236,7 +236,7 @@ function LedgerSummary({ thisKey }: { thisKey: string }) {
           </tbody>
         </table>
       )}
-      <p className="mt-2 text-xs text-stone-500">정정 줄은 금액에 더해져 있고, 항목 건수에는 들어가지 않습니다. 기타 칸 금액은 &ldquo;일반(42)&rdquo;처럼 괄호에 적은 만원 금액의 합입니다.</p>
+      <p className="mt-2 text-xs text-stone-500">정정 줄은 금액에 더해져 있고, 항목 건수에는 들어가지 않습니다. 합계에서 뺀 줄(제로페이·계좌입금)은 매출이라 여기 소계에는 들어갑니다. 기타 칸 금액은 &ldquo;일반(42)&rdquo;처럼 괄호에 적은 만원 금액의 합입니다.</p>
     </details>
   );
 }

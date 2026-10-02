@@ -146,18 +146,22 @@ export function weeklyMonth(contacts: WeeklyContactLite[], key: string): WeeklyM
   return out;
 }
 
-export type LedgerEntryLite = { day: string; cash: number; cash_receipt: number; card: number };
-export type LedgerMonth = { cash: number; cash_receipt: number; card: number; subtotal: number; expenses: number; days: number };
+export type LedgerEntryLite = { day: string; cash: number; cash_receipt: number; card: number; off_total?: boolean };
+export type LedgerMonth = { cash: number; cash_receipt: number; card: number; subtotal: number; offTotal: number; expenses: number; days: number };
 
-/** 한 달 매출: 현금·현영·카드·소계·지출, 줄이 있는 날 수(일 평균용). 정정 줄은 음수로 들어 있어 그냥 더한다. */
+/**
+ * 한 달 매출: 현금·현영·카드·소계·지출, 줄이 있는 날 수(일 평균용). 정정 줄은 음수로 들어 있어 그냥 더한다.
+ * 합계에서 빼기(제로페이·계좌입금) 줄도 매출이므로 소계에 넣되, 얼마인지 offTotal로 따로 보여 준다.
+ */
 export function ledgerMonth(entries: LedgerEntryLite[], expenses: { day: string; amount: number }[], key: string): LedgerMonth {
-  const out: LedgerMonth = { cash: 0, cash_receipt: 0, card: 0, subtotal: 0, expenses: 0, days: 0 };
+  const out: LedgerMonth = { cash: 0, cash_receipt: 0, card: 0, subtotal: 0, offTotal: 0, expenses: 0, days: 0 };
   const days = new Set<string>();
   for (const e of entries) {
     if (monthKey(e.day) !== key) continue;
     out.cash += e.cash;
     out.cash_receipt += e.cash_receipt;
     out.card += e.card;
+    if (e.off_total) out.offTotal += e.cash + e.cash_receipt + e.card;
     days.add(e.day);
   }
   out.subtotal = out.cash + out.cash_receipt + out.card;

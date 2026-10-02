@@ -123,6 +123,9 @@ export type SaveEntryInput = {
   items: ParsedItem[];
   review: boolean;
   decoction: { packs: number; per_day: number; receive_date: string } | null;
+  /** 합계에서 빼기(붉은 금액) + 사유 */
+  off_total?: boolean;
+  pay_note?: string | null;
 };
 
 /**
@@ -161,6 +164,8 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
       memo: input.memo.trim() || null,
       staff_name: input.staff_name,
       packs_missing: decoctionItems.length > 0 && !makePresc,
+      off_total: !!input.off_total,
+      pay_note: input.off_total ? input.pay_note?.trim() || null : null,
     })
     .select("*")
     .single();
@@ -233,8 +238,18 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
 /** 돈·이름·구분·메모만 고치기(마감 전). 항목은 지우고 다시 넣는다. */
 export async function updateEntryMoney(
   id: number,
-  patch: { patient_name: string; insurance_kind: string | null; cash: number; cash_receipt: number; card: number; memo: string },
+  patch: {
+    patient_name: string;
+    insurance_kind: string | null;
+    cash: number;
+    cash_receipt: number;
+    card: number;
+    memo: string;
+    off_total: boolean;
+    pay_note: string | null;
+  },
 ): Promise<void> {
+  if (!patch.patient_name.trim()) throw new Error("성함을 적어 주세요.");
   const { error } = await getSupabase()
     .from("ledger_entries")
     .update({
@@ -244,6 +259,8 @@ export async function updateEntryMoney(
       cash_receipt: patch.cash_receipt,
       card: patch.card,
       memo: patch.memo.trim() || null,
+      off_total: patch.off_total,
+      pay_note: patch.off_total ? patch.pay_note?.trim() || null : null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);

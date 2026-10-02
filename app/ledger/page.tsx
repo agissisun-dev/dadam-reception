@@ -174,6 +174,7 @@ function Board() {
             setDCard("");
             setDReason("");
           }}
+          onChanged={load}
         />
       )}
 

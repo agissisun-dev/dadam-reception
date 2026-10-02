@@ -10,6 +10,12 @@ export const GROUP_LABEL: Record<LedgerGroup, string> = {
 };
 export const GROUP_ORDER: LedgerGroup[] = ["decoction", "cabinet", "treatment", "extract", "other"];
 
+/** 구분(보험 종류) 후보. 사용자 지정 2026-10-02. 직접 쳐도 된다. */
+export const INSURANCE_KINDS = ["보험", "일반", "1종지정", "차상1종", "차상2종", "희귀1종", "2종장애", "초진", "재초진", "전화상담"] as const;
+
+/** 합계에서 뺄 때 사유 후보: 접수실에 돈은 없지만 현금영수증은 끊는 경우 */
+export const PAY_NOTES = ["제로페이", "서울페이", "계좌입금", "기타"] as const;
+
 /** 기타 칸 한 조각을 읽은 결과 */
 export type ParsedItem = {
   raw: string;
@@ -58,7 +64,19 @@ export function parseNote(raw: string, codes: LedgerCode[]): { items: ParsedItem
     let split: number | null = null;
     let qty = 1;
 
-    let m = rest.match(/(\d+)일$/);
+    // "보험(처방)*2"처럼 약어 뒤 *N은 N건
+    let m = rest.match(/\*(\d+)$/);
+    if (m) {
+      qty = Number(m[1]);
+      rest = rest.slice(0, -m[0].length);
+      const again = byCode.get(rest);
+      if (again) {
+        items.push(make(token, again, { qty }));
+        continue;
+      }
+    }
+
+    m = rest.match(/(\d+)일$/);
     if (m) {
       days = Number(m[1]);
       rest = rest.slice(0, -m[0].length);
@@ -115,9 +133,14 @@ function make(
   };
 }
 
-export function sumEntries(entries: { cash: number; cash_receipt: number; card: number }[]) {
-  const t = { cash: 0, cash_receipt: 0, card: 0, subtotal: 0 };
+/** 그날 합계. 합계에서 빼기(off_total) 줄은 따로 모아 offTotal로 돌려준다. */
+export function sumEntries(entries: { cash: number; cash_receipt: number; card: number; off_total?: boolean }[]) {
+  const t = { cash: 0, cash_receipt: 0, card: 0, subtotal: 0, offTotal: 0 };
   for (const e of entries) {
+    if (e.off_total) {
+      t.offTotal += e.cash + e.cash_receipt + e.card;
+      continue;
+    }
     t.cash += e.cash;
     t.cash_receipt += e.cash_receipt;
     t.card += e.card;

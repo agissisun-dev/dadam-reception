@@ -65,10 +65,18 @@ describe("parseNote — 기타 칸 약어 → 항목", () => {
 });
 
 describe("합계·번호·금액", () => {
-  it("sumEntries", () => {
+  it("sumEntries — 합계에서 빼기 줄은 offTotal로 따로", () => {
     expect(sumEntries([{ cash: 1000, cash_receipt: 0, card: 500 }, { cash: 0, cash_receipt: 200, card: 0 }])).toEqual({
-      cash: 1000, cash_receipt: 200, card: 500, subtotal: 1700,
+      cash: 1000, cash_receipt: 200, card: 500, subtotal: 1700, offTotal: 0,
     });
+    expect(sumEntries([{ cash: 1000, cash_receipt: 0, card: 0 }, { cash: 0, cash_receipt: 10500, card: 0, off_total: true }])).toEqual({
+      cash: 1000, cash_receipt: 0, card: 0, subtotal: 1000, offTotal: 10500,
+    });
+  });
+  it("약어 뒤 *N은 N건: 보험(처방)*2 → 보험 탕약 2건, mo-0.6*3 → mo 3건(용량 0.6은 글자로만)", () => {
+    expect(parseNote("보험(처방)*2", CODES).items[0]).toMatchObject({ name: "보험 탕약", qty: 2 });
+    expect(parseNote("mo-0.6*3", CODES).items[0]).toMatchObject({ name: "mo", qty: 3, unknown: false });
+    expect(parseNote("mo-0.6", CODES).items[0]).toMatchObject({ name: "mo", qty: 1 });
   });
   it("sumExpenses", () => expect(sumExpenses([{ amount: 11600 }, { amount: 20000 }])).toBe(31600));
   it("nextSeq는 가장 큰 번호 + 1, 비면 1", () => {

@@ -72,6 +72,10 @@
 ## 18. V4-1 장부 줄 "합계에서 빼기" (2026-10-02, 실행 완료)
 - `supabase/schema-v4-1-ledger-offtotal.sql`: `ledger_entries.off_total`(붉은 금액, 그날 합계에서 뺌)·`pay_note`(제로페이·서울페이·계좌입금·기타). 접수실에 돈은 없지만 현금영수증은 끊는 줄.
 
+## 22. V7 예약차트 (2026-10-02, 실행 완료)
+- `supabase/schema-v7-appointments.sql`: `appointments`(예약 한 줄: 날짜·시간·종류 상담/침·환자·출처 접수실/네이버/해피콜/수납·상태 예약/내원/노쇼/취소·네이버 예약번호·안내 보낸 시각) · `clinic_day_overrides`(그날만 진료/휴진 바꾸기) · `appointment_settings`(칸 간격 30, 한 칸 상담 1·침 3, 예약 안내 문구). 모두 병원별 RLS. 새 표만 만들어 기존 표는 그대로.
+- 설계: `docs/superpowers/specs/2026-10-02-예약차트-v7-design.md`.
+
 ## 21. V6 병원 칸 — 다담에스·노원다담 한 앱 (2026-10-02, 실행 완료 — 사용자가 직접 실행, accounts 1 · clinic_policies 21)
 - `supabase/schema-v6-clinic.sql`: `clinic_accounts`(로그인 계정 → 병원 S/N, 지금 계정은 S) · `current_clinic()` 함수 · 병원별 표(환자·처방·해피콜·연락 기록·주간 관리·업무·문구 틀·약어 표·장부·문자 장부·약대장)에 `clinic` 칸(기본값 = 로그인한 병원, 기존 줄은 S) · 병원별 표의 RLS를 "자기 병원 것만"으로 교체 · 장부 마감 기본키를 (clinic, day)로, 장부 번호·약어 표 유일 조건에 clinic 추가.
 - 약대장(`brew_jobs`)·요일 기준·약장은 두 병원 공통(정책 그대로). 약대장은 `clinic` 칸을 색 구분에만 쓴다.

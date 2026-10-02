@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { linkLedgerEntry } from "@/lib/appointments";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import LedgerEntryForm from "@/components/LedgerEntryForm";
@@ -42,6 +44,12 @@ function dayLabel(iso: string) {
 }
 
 function Board() {
+  const router = useRouter();
+  const params = useSearchParams();
+  // 예약 화면 [내원]에서 넘어온 경우: 이름을 미리 채우고, 저장되면 그 예약에 수납 줄을 붙인다
+  const presetName = params.get("name");
+  const presetAppt = params.get("appt");
+  const presetPid = params.get("pid");
   const [day, setDay] = useState(() => todayISO());
   const [dayRow, setDayRow] = useState<LedgerDay | null>(null);
   const [entries, setEntries] = useState<LedgerEntryWithItems[]>([]);
@@ -142,6 +150,11 @@ function Board() {
         <Link href="/ledger/codes" className="text-sm text-stone-500 underline">약어 표 고치기</Link>
       </div>
 
+      {presetName && !locked && (
+        <p className="rounded border border-[#16863b] bg-[#f0f7f3] px-3 py-2 text-sm text-[#0f3d23]">
+          예약에서 넘어왔습니다. <b>{presetName}</b> 수납을 적고 저장하면 그 예약에 &ldquo;수납 끝&rdquo;이 붙습니다.
+        </p>
+      )}
       {!loading && !locked && (
         <LedgerEntryForm
           key={`${day}-${seq}`}
@@ -151,7 +164,12 @@ function Board() {
           patients={patients}
           cabinetItems={cabinetItems}
           staff={staff}
-          onSaved={() => {
+          preset={presetName ? { name: presetName, patientId: presetPid ? Number(presetPid) : null } : null}
+          onSaved={(entry) => {
+            if (presetAppt) {
+              linkLedgerEntry(Number(presetAppt), entry.id).catch(() => undefined);
+              router.replace("/ledger");
+            }
             load();
             loadStatic();
           }}
@@ -336,7 +354,9 @@ export default function LedgerPage() {
       {() => (
         <>
           <AppHeader />
-          <Board />
+          <Suspense fallback={<p className="p-6 text-stone-500">불러오는 중…</p>}>
+            <Board />
+          </Suspense>
         </>
       )}
     </AuthGate>

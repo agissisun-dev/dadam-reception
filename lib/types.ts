@@ -289,3 +289,44 @@ export type BrewJob = {
   updated_at: string;
 };
 export type BrewWeekdayRule = { weekday: number; note: string; max_jobs: number };
+
+/** 예약차트 (V7) */
+export type AppointmentKind = "consult" | "treatment";
+export type Appointment = {
+  id: number;
+  clinic: "S" | "N";
+  day: string;
+  time: string; // HH:MM
+  kind: AppointmentKind;
+  patient_id: number | null;
+  patient_name: string;
+  phone: string | null;
+  source: "desk" | "naver" | "happycall" | "ledger";
+  status: "booked" | "arrived" | "noshow" | "cancelled";
+  memo: string | null;
+  naver_key: string | null;
+  happy_call_id: number | null;
+  ledger_entry_id: number | null;
+  notified_at: string | null;
+  notify_note: string | null;
+  staff_name: string;
+  created_at: string;
+  updated_at: string;
+};
+export type ClinicDayOverride = {
+  clinic: "S" | "N";
+  day: string;
+  open: boolean;
+  start_time: string | null;
+  end_time: string | null;
+  lunch_start: string | null;
+  lunch_end: string | null;
+  memo: string | null;
+};
+export type AppointmentSettings = {
+  clinic: "S" | "N";
+  slot_minutes: number;
+  consult_per_slot: number;
+  treatment_per_slot: number;
+  notify_body: string;
+};

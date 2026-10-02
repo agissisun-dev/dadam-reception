@@ -14,6 +14,7 @@ import { clinicInfo, fetchCurrentClinic, forgetClinic, type ClinicCode } from "@
 const MENU: { href: string; label: string }[] = [
   { href: "/ledger", label: "오늘 장부" },
   { href: "/brew", label: "약대장" },
+  { href: "/appointments", label: "예약" },
   { href: "/happy-calls", label: "해피콜" },
   { href: "/patients", label: "환자" },
   { href: "/cabinet", label: "약장" },

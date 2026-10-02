@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { updateEntryMoney } from "@/lib/ledger";
 import { INSURANCE_KINDS, PAY_NOTES, chipClass, itemLabel, itemSummary, parseWon, sumEntries, won } from "@/lib/ledgerRules";
 import type { LedgerEntryWithItems } from "@/lib/types";
@@ -198,10 +199,18 @@ export default function LedgerTable({ entries, closed, onDelete, onCorrect, onCh
               <div className="text-xs">
                 {e.staff_name}
                 {!closed && !correction && (
-                  <span className="mt-0.5 flex gap-2 text-[11px] text-stone-500">
+                  <span className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-stone-500">
                     <button type="button" onClick={() => setEditing(e.id)} className="underline">고치기</button>
                     <button type="button" onClick={() => onDelete(e)} className="underline">지우기</button>
                   </span>
+                )}
+                {!correction && (
+                  <Link
+                    href={`/appointments?for=${e.patient_id ?? ""}&name=${encodeURIComponent(e.patient_name)}&entry=${e.id}`}
+                    className="mt-0.5 block text-[11px] text-[#0f3d23] underline"
+                  >
+                    다음 예약
+                  </Link>
                 )}
                 {closed && !correction && (
                   <button type="button" onClick={() => onCorrect(e)} className="mt-0.5 block text-[11px] text-stone-500 underline">정정</button>

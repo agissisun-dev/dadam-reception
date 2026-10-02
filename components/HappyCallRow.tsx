@@ -269,6 +269,18 @@ export default function HappyCallRow({
                   onClick={() =>
                     run(async () => {
                       await markRepresc(row.id, memo, staff);
+                      router.push(`/appointments?for=${pt.id}&hc=${row.id}`);
+                    })
+                  }
+                >
+                  저장하고 예약 잡기
+                </button>
+                <button
+                  className={BTN}
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () => {
+                      await markRepresc(row.id, memo, staff);
                       router.push(`/patients/${pt.id}?add=1`);
                     })
                   }

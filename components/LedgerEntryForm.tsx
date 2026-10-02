@@ -10,7 +10,7 @@ import { weekdayKo } from "@/lib/dates";
 import { POUCHES, defaultReceiveDay } from "@/lib/brewRules";
 import { conditionLabel } from "@/lib/conditions";
 import type { StaffName } from "@/lib/staff";
-import type { CabinetItem, DecoctionKind, LedgerCode, LedgerGroup, Patient } from "@/lib/types";
+import type { CabinetItem, DecoctionKind, LedgerCode, LedgerEntryWithItems, LedgerGroup, Patient } from "@/lib/types";
 
 type Props = {
   day: string;
@@ -19,7 +19,9 @@ type Props = {
   patients: Patient[];
   cabinetItems: CabinetItem[];
   staff: StaffName;
-  onSaved: () => void;
+  /** 예약 화면 [내원]에서 넘어올 때 이름·환자를 미리 채움 */
+  preset?: { name: string; patientId: number | null } | null;
+  onSaved: (entry: LedgerEntryWithItems) => void;
   onCodesChanged: () => void;
 };
 
@@ -113,9 +115,9 @@ function UnknownCodeForm({
   );
 }
 
-export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItems, staff, onSaved, onCodesChanged }: Props) {
-  const [name, setName] = useState("");
-  const [patientId, setPatientId] = useState<number | null>(null);
+export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItems, staff, preset, onSaved, onCodesChanged }: Props) {
+  const [name, setName] = useState(preset?.name ?? "");
+  const [patientId, setPatientId] = useState<number | null>(preset?.patientId ?? null);
   const [insuranceKind, setInsuranceKind] = useState("");
   const [cash, setCash] = useState("");
   const [cashReceipt, setCashReceipt] = useState("");
@@ -191,7 +193,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
     }
     setBusy(true);
     try {
-      await saveEntry({
+      const saved = await saveEntry({
         day,
         seq,
         patient_id: linked?.id ?? null,
@@ -212,7 +214,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
         pay_note: offTotal ? payNote : null,
       });
       reset();
-      onSaved();
+      onSaved(saved);
     } catch (err) {
       setError(`저장되지 않았습니다. ${(err as Error).message}`);
     } finally {

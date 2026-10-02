@@ -18,6 +18,7 @@ import { loadCabinet } from "@/lib/cabinet";
 import { expiryStatus } from "@/lib/cabinetRules";
 import { listLedgerDaysOpen, loadDay } from "@/lib/ledger";
 import { sumEntries, won } from "@/lib/ledgerRules";
+import { countToday } from "@/lib/appointments";
 import { weekEndISO } from "@/lib/weeklyRules";
 import { addDays, todayISO, weekdayKo } from "@/lib/dates";
 import { dayLabel, sameMonth, shiftMonth, yearMonthOf, type YearMonth } from "@/lib/calendarRules";
@@ -31,6 +32,8 @@ type Data = {
   cabinet: { soon: number; short: number };
   /** 오늘 장부: 줄 수·소계, 어제까지 마감 안 한 날 */
   ledger: { count: number; subtotal: number; openDays: string[] };
+  /** 오늘 예약 수·내원 수 */
+  appts: { total: number; arrived: number };
   /** 완료된 것들 — 달력에 ✓로 남기고 그날 목록 아래 "완료됨"에 보인다 */
   doneTasks: Task[];
   handledHc: HandledHappyCall[];
@@ -138,9 +141,10 @@ function CalendarBoard() {
       listHandledHappyCalls().catch(() => [] as HandledHappyCall[]),
       listAllWeeklyContacts().catch(() => [] as WeeklyContactWithName[]),
       ledgerSummary(now),
+      countToday(now),
     ])
-      .then(([tasks, happyCalls, weekly, waiting, cabinet, doneTasks, handledHc, weeklyDone, ledger]) => {
-        const next = { tasks, happyCalls, weekly, waiting, cabinet, ledger, doneTasks, handledHc, weeklyDone };
+      .then(([tasks, happyCalls, weekly, waiting, cabinet, doneTasks, handledHc, weeklyDone, ledger, appts]) => {
+        const next = { tasks, happyCalls, weekly, waiting, cabinet, ledger, appts, doneTasks, handledHc, weeklyDone };
         setData(next);
         if (checkCelebration(next, now)) setCelebrate(true);
       })
@@ -190,6 +194,9 @@ function CalendarBoard() {
           오늘 {today} ({weekdayKo(today)})
         </p>
         <p className="flex flex-wrap gap-3 text-sm">
+          <Link href="/appointments" className="underline">
+            오늘 예약 {data.appts.total}명{data.appts.arrived > 0 ? ` · 내원 ${data.appts.arrived}` : ""}
+          </Link>
           <Link href="/ledger" className="underline">
             오늘 장부 {data.ledger.count}줄{data.ledger.count > 0 ? ` · ${won(data.ledger.subtotal)}원` : ""}
           </Link>

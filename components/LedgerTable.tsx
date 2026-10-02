@@ -96,12 +96,13 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
         <div className="text-stone-400">{e.seq}</div>
         <div><input value={name} onChange={(x) => setName(x.target.value)} className={IN} /></div>
         <div>
-          <input list="ledger-kinds-edit" value={kind} onChange={(x) => setKind(x.target.value)} className={IN} />
-          <datalist id="ledger-kinds-edit">
+          <select value={kind} onChange={(x) => setKind(x.target.value)} className={IN}>
+            <option value="">(없음)</option>
+            {kind && !(INSURANCE_KINDS as readonly string[]).includes(kind) && <option value={kind}>{kind}</option>}
             {INSURANCE_KINDS.map((k) => (
-              <option key={k} value={k} />
+              <option key={k} value={k}>{k}</option>
             ))}
-          </datalist>
+          </select>
         </div>
         <div><input value={cash} onChange={(x) => setCash(x.target.value)} inputMode="numeric" placeholder="0" className={`${IN} text-right`} /></div>
         <div><input value={cashReceipt} onChange={(x) => setCashReceipt(x.target.value)} inputMode="numeric" placeholder="0" className={`${IN} text-right`} /></div>

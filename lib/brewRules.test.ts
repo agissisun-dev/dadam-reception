@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayCounts, defaultReceiveDay, fermentEndDay, jobLabel, planJobsFromLedger, weekDays, weekMonday } from "./brewRules";
+import { dayCounts, defaultReceiveDay, fermentEndDay, fermentMidDays, jobLabel, planJobsFromLedger, weekDays, weekMonday } from "./brewRules";
 import type { BrewJob } from "./types";
 
 describe("주 계산", () => {
@@ -55,6 +55,17 @@ describe("planJobsFromLedger", () => {
     expect(r).toHaveLength(2);
     expect(r[0]).toMatchObject({ split_no: 1, split_of: 2, day: "2026-10-08" });
     expect(r[1]).toMatchObject({ split_no: 2, split_of: 2, day: null });
+  });
+});
+
+describe("fermentMidDays", () => {
+  it("목 발효시작 · 토 발효끝이면 금요일에 발효중", () => {
+    const base = { slot: "am" as const, patient_id: null, title: "발효", delivery: null, region: null, pouch: null, split_no: null, split_of: null, memo: null, max_jobs: null, status: "planned" as const, done_at: null, done_by: null, receive_day: null, prescription_id: null, ledger_entry_id: null, sort_order: 0, staff_name: "", created_at: "", updated_at: "" };
+    const jobs: BrewJob[] = [
+      { ...base, id: 1, day: "2026-10-08", kind: "ferment_start", patient_name: "김하나", pair_id: 2 },
+      { ...base, id: 2, day: "2026-10-10", kind: "ferment_end", patient_name: "김하나", pair_id: 1 },
+    ];
+    expect(fermentMidDays(jobs)).toEqual([{ day: "2026-10-09", jobId: 1, label: "김하나" }]);
   });
 });
 

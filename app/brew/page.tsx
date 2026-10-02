@@ -6,7 +6,7 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import StaffSelect from "@/components/StaffSelect";
 import { createJobs, deleteJob, listJobs, listUnscheduled, listWeekdayRules, markDone, saveWeekdayRule, updateJob } from "@/lib/brew";
-import { KIND_LABEL, POUCHES, dayCounts, dayHeader, jobLabel, weekDays, weekMonday } from "@/lib/brewRules";
+import { KIND_LABEL, POUCHES, dayCounts, dayHeader, fermentMidDays, jobLabel, planJobsFromLedger, weekDays, weekMonday } from "@/lib/brewRules";
 import { addDays, todayISO } from "@/lib/dates";
 import { holidayLabel, isClinicClosed } from "@/lib/holidays";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
@@ -166,6 +166,7 @@ function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; s
   const [slot, setSlot] = useState<"am" | "pm">("am");
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
+  const [fermented, setFermented] = useState(false);
   const [delivery, setDelivery] = useState<"pickup" | "courier" | "">("");
   const [region, setRegion] = useState("");
   const [maxJobs, setMaxJobs] = useState("");
@@ -178,6 +179,28 @@ function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; s
       return;
     }
     try {
+      if (kind === "decoction" && fermented && day) {
+        // 발효는 사흘: 시작 칸 + 셋째 날 발효끝 칸을 짝으로
+        await createJobs(
+          planJobsFromLedger({
+            patient_id: null,
+            patient_name: name.trim(),
+            title: title.trim(),
+            fermented: true,
+            day,
+            slot,
+            delivery: delivery || null,
+            region: region.trim() || null,
+            pouch: null,
+            split: null,
+            staff_name: staff,
+            prescription_id: null,
+            ledger_entry_id: null,
+          }),
+        );
+        onDone();
+        return;
+      }
       await createJobs([
         {
           day: day || null,
@@ -214,7 +237,7 @@ function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; s
           <select value={kind} onChange={(e) => setKind(e.target.value as BrewKind)} className={`${IN} block`}>
             <option value="batch">묶음 생산 (디스크 100팩)</option>
             <option value="note">메모 (월차 · 택배 마감)</option>
-            <option value="decoction">탕약 (장부 없이)</option>
+            <option value="decoction">탕약 (수납 없이 미리 잡기)</option>
           </select>
         </label>
         <label className="block">
@@ -229,6 +252,9 @@ function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; s
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === "batch" ? "디스크 100팩" : kind === "note" ? "탕쌤 월차" : "보험(처방)"} className={`${IN} w-44`} />
         {kind === "decoction" && (
           <>
+            <label className="flex items-center gap-1 text-xs">
+              <input type="checkbox" checked={fermented} onChange={(e) => setFermented(e.target.checked)} /> 발효 (사흘 · 셋째 날 발효끝 칸 자동)
+            </label>
             <select value={delivery} onChange={(e) => setDelivery(e.target.value as "pickup" | "courier" | "")} className={IN}>
               <option value="">받는 방법</option>
               <option value="pickup">직접</option>
@@ -319,6 +345,8 @@ function Board() {
 
   const weeks = [weekDays(monday), weekDays(addDays(monday, 7))];
   const ruleOf = (iso: string) => rules.find((r) => r.weekday === new Date(iso + "T00:00:00").getDay());
+  /** 발효 중인 날(시작과 끝 사이)에 보여 줄 표시. 저장하지 않고 화면에서만 계산한다. */
+  const mids = fermentMidDays(jobs);
   const real = jobs.filter((j) => j.kind !== "note" && j.day && j.day <= addDays(monday, 5));
   const doneCount = real.filter((j) => j.status === "done").length;
 
@@ -397,6 +425,13 @@ function Board() {
                     {am.map((j) => (
                       <Card key={j.id} j={j} staff={staff} onChanged={changed} />
                     ))}
+                    {mids
+                      .filter((m) => m.day === iso)
+                      .map((m) => (
+                        <div key={`mid-${m.jobId}`} className="rounded border border-dashed border-[#16863b] bg-[#f0f7f3]/60 px-2 py-1 text-xs text-[#0f3d23]">
+                          {m.label}-발효중
+                        </div>
+                      ))}
                     {pm.length > 0 && <div className="py-0.5 text-center text-[10px] text-stone-400">↓(오후)↓</div>}
                     {pm.map((j) => (
                       <Card key={j.id} j={j} staff={staff} onChanged={changed} />

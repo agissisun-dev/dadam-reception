@@ -27,6 +27,9 @@ describe("dayBlock — 일일장부 모양", () => {
     expect(total.slice(3, 7)).toEqual([11000, null, 24000, 35000]);
     expect(total[8]).toBe("지출 합계");
     expect(total[9]).toBe(11600);
+    const last = rows[rows.length - 1];
+    expect(last[0]).toBe("합계(소계−지출)");
+    expect(last[6]).toBe(35000 - 11600);
   });
   it("정정 줄은 이름에 (정정), 기타에 사유", () => {
     const r = dayBlock({ day: "2026-10-02", entries: [entry(1, { kind: "correction", cash: -11000, card: 11000, correction_reason: "카드였음" })], expenses: [] });

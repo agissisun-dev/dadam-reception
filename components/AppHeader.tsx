@@ -18,6 +18,9 @@ export default function AppHeader() {
         다담 접수실
       </Link>
       <nav className="flex flex-wrap items-center gap-2 text-sm">
+        <Link href="/ledger" className="rounded bg-[#16863b] px-3 py-1.5 font-bold text-white">
+          오늘 장부
+        </Link>
         <Link href="/happy-calls" className="rounded border border-stone-300 px-3 py-1.5">
           해피콜
         </Link>

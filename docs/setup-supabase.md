@@ -62,3 +62,9 @@
 
 ## 16. V3-9 약장에 한방파스 (2026-09-29)
 - `supabase/schema-v3-9-cabinet-pas.sql`: 리뷰 증정(일반 환자 파스 1장)을 약장에서 기록하려고 용품에 한방파스 추가.
+
+## 17. V4 수납 장부 (2026-10-02)
+- `supabase/schema-v4-ledger.sql`: 엑셀 일일매출장부를 앱으로 옮기는 표 5개 — `ledger_codes`(약어 사전) · `ledger_days`(하루 마감) · `ledger_entries`(환자 줄, 정정 줄 포함) · `ledger_items`(줄 안의 항목) · `ledger_expenses`(지출). `prescriptions.ledger_entry_id` 열 추가.
+- 마감된 날은 RLS가 잠근다(`ledger_day_closed(day)` 함수). 마감 뒤엔 정정 줄(`kind='correction'`)만 넣을 수 있고, 마감 되돌리기는 없다.
+- 약어 초안 31개가 들어간다. 뜻·묶음·약장 품목 연결은 앱 [오늘 장부 → 약어 표 고치기]에서 바꾼다. 공진단은 대보·사향 둘이라 어느 품목으로 뺄지 거기서 고른다.
+- 설계: `docs/superpowers/specs/2026-10-02-수납장부-v4-design.md`.

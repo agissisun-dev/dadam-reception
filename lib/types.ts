@@ -195,3 +195,61 @@ export type HandledHappyCall = HappyCallRow & { last: ContactLog | null };
 
 /** 주간 관리 기록 + 환자 이름(달력 완료 표시용) */
 export type WeeklyContactWithName = WeeklyContact & { patient: { name: string } | null };
+
+/** 수납 장부 (V4). 약어 묶음: 탕약·약장 품목·치료·엑스제·기타 */
+export type LedgerGroup = "decoction" | "cabinet" | "treatment" | "extract" | "other";
+export type DecoctionKind = "insurance" | "general" | "fermented";
+export type LedgerCode = {
+  id: number;
+  code: string;
+  name: string;
+  group: LedgerGroup;
+  cabinet_item_id: number | null;
+  decoction_kind: DecoctionKind | null;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+};
+export type LedgerCodeInput = Omit<LedgerCode, "id" | "created_at">;
+export type LedgerDay = { day: string; closed_at: string | null; closed_by: string | null; memo: string | null };
+export type LedgerEntry = {
+  id: number;
+  day: string;
+  seq: number;
+  patient_id: number | null;
+  patient_name: string;
+  insurance_kind: string | null;
+  cash: number;
+  cash_receipt: number;
+  card: number;
+  note_raw: string;
+  memo: string | null;
+  staff_name: string;
+  kind: "normal" | "correction";
+  corrects_id: number | null;
+  correction_reason: string | null;
+  packs_missing: boolean;
+  created_at: string;
+  updated_at: string;
+};
+export type LedgerItem = {
+  id: number;
+  entry_id: number;
+  code: string;
+  name: string;
+  group: LedgerGroup;
+  qty: number;
+  amount: number | null;
+  days: number | null;
+  split: number | null;
+  raw: string;
+  prescription_id: number | null;
+  cabinet_move_id: number | null;
+  created_at: string;
+};
+/** 줄 + 항목 + (처방이 있으면) 해피콜 날짜 */
+export type LedgerEntryWithItems = LedgerEntry & {
+  items: LedgerItem[];
+  prescriptions: { id: number; happy_calls: { round: number; due_date: string; status: string }[] }[];
+};
+export type LedgerExpense = { id: number; day: string; title: string; amount: number; staff_name: string; created_at: string };

@@ -72,5 +72,9 @@
 ## 18. V4-1 장부 줄 "합계에서 빼기" (2026-10-02, 실행 완료)
 - `supabase/schema-v4-1-ledger-offtotal.sql`: `ledger_entries.off_total`(붉은 금액, 그날 합계에서 뺌)·`pay_note`(제로페이·서울페이·계좌입금·기타). 접수실에 돈은 없지만 현금영수증은 끊는 줄.
 
+## 20. V5 약대장 (2026-10-02, 실행 완료)
+- `supabase/schema-v5-brew.sql`: `brew_jobs`(약대장 한 칸: 달이는 날·오전/오후·종류·이름·받는 방법·지역·파우치·분할·끝남·받는 날·처방/장부 줄 연결·발효 짝) · `brew_weekday_rules`(요일별 메모·한도, 초기값 월 지방택배 마감/4 … 토 노원구만 2개 이상/2). `prescriptions.brew_day`·`delivery` 열 추가. 잠그지 않는다(일정은 자주 옮기므로).
+- 설계: `docs/superpowers/specs/2026-10-02-약대장-v5-design.md`.
+
 ## 19. V4-2 마감 잠금은 다음 날부터 (2026-10-02, 실행 완료)
 - `supabase/schema-v4-2-ledger-lock-next-day.sql`: `ledger_day_locked(day)` = 마감했고 그 날짜가 한국 시간 오늘보다 앞일 때. 정책을 이 함수로 바꿈. 마감 당일은 고칠 수 있고 다음 날부터 정정 줄만.

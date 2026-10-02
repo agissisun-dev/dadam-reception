@@ -198,6 +198,22 @@ export async function updatePrescription(prescriptionId: number, input: Prescrip
   }
 }
 
+/** 수령일만 바꾸기(약대장에서 칸을 옮길 때). 대기 중인 해피콜을 다시 잡는다. */
+export async function setPrescriptionReceiveDate(prescriptionId: number, receiveDate: string): Promise<void> {
+  const sb = getSupabase();
+  const { data, error } = await sb.from("prescriptions").select("*").eq("id", prescriptionId).maybeSingle();
+  if (error) fail("처방 조회", error.message);
+  const p = data as Prescription | null;
+  if (!p || p.receive_date === receiveDate) return;
+  await updatePrescription(prescriptionId, {
+    receive_date: receiveDate,
+    days: p.days,
+    packs: p.packs,
+    per_day: p.per_day,
+    memo: p.memo ?? "",
+  });
+}
+
 export type PrescriptionWithCalls = Prescription & {
   happy_calls: (HappyCall & { contact_logs: ContactLog[] })[];
 };

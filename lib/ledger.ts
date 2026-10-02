@@ -3,6 +3,8 @@ import { addPrescription, createPatient, findPatientByPhone } from "./patients";
 import { recordIn, recordOut } from "./cabinet";
 import { daysFromPacks } from "./packs";
 import { isValidPhone } from "./phone";
+import { createJobs, deleteJobsOfEntry } from "./brew";
+import { planJobsFromLedger } from "./brewRules";
 import type { ParsedItem } from "./ledgerRules";
 import type {
   LedgerCode,
@@ -122,7 +124,10 @@ export type SaveEntryInput = {
   staff_name: string;
   items: ParsedItem[];
   review: boolean;
+  /** 포 수(없으면 처방·해피콜은 안 만든다). receive_date는 약대장 받는 날에서 온다. */
   decoction: { packs: number; per_day: number; receive_date: string } | null;
+  /** 약대장 칸: 달이는 날·오전/오후·받는 방법·지역·파우치. 탕약 항목이 있으면 항상 만든다. */
+  brew?: { day: string; slot: "am" | "pm"; delivery: "pickup" | "courier" | null; region: string; pouch: string | null } | null;
   /** 합계에서 빼기(붉은 금액) + 사유 */
   off_total?: boolean;
   pay_note?: string | null;
@@ -185,9 +190,36 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
         per_day: input.decoction.per_day,
         memo,
       });
-      const { error: e1 } = await sb.from("prescriptions").update({ ledger_entry_id: entry.id }).eq("id", prescription.id);
+      const { error: e1 } = await sb
+        .from("prescriptions")
+        .update({ ledger_entry_id: entry.id, brew_day: input.brew?.day ?? null, delivery: input.brew?.delivery ?? null })
+        .eq("id", prescription.id);
       if (e1) fail("처방 연결", e1.message);
       prescriptionId = prescription.id;
+    }
+
+    // 약대장 칸 (탕약 항목이 있고 달이는 날이 있으면. 포 수가 없어도 탕전은 해야 하므로 만든다)
+    if (decoctionItems.length > 0 && input.brew) {
+      const fermented = decoctionItems.some((i) => i.decoction_kind === "fermented");
+      const title = decoctionItems.map((i) => itemTitle(i)).join("·");
+      const split = decoctionItems.find((i) => i.split)?.split ?? null;
+      await createJobs(
+        planJobsFromLedger({
+          patient_id: patientId,
+          patient_name: name,
+          title,
+          fermented,
+          day: input.brew.day,
+          slot: input.brew.slot,
+          delivery: input.brew.delivery,
+          region: input.brew.region.trim() || null,
+          pouch: input.brew.pouch,
+          split,
+          staff_name: input.staff_name,
+          prescription_id: prescriptionId,
+          ledger_entry_id: entry.id,
+        }).map((j) => ({ ...j, memo: !makePresc ? "포 수 없음" : null })),
+      );
     }
 
     const rows = [];
@@ -229,10 +261,17 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
     if (e3) fail("장부 다시 읽기", e3.message);
     return { ...(full as LedgerEntryWithItems), items };
   } catch (err) {
+    await sb.from("brew_jobs").delete().eq("ledger_entry_id", entry.id);
     await sb.from("prescriptions").delete().eq("ledger_entry_id", entry.id);
     await sb.from("ledger_entries").delete().eq("id", entry.id);
     throw err;
   }
+}
+
+/** 약대장 칸 제목: "보험(처방)" · "일반 42만원" · "발효 48만원" */
+function itemTitle(i: ParsedItem): string {
+  const base = i.decoction_kind === "insurance" ? "보험(처방)" : i.decoction_kind === "fermented" ? "발효" : i.decoction_kind === "general" ? "일반" : i.name;
+  return i.amount ? `${base} ${i.amount / 10000}만원` : base;
 }
 
 /** 돈·이름·구분·메모만 고치기(마감 전). 항목은 지우고 다시 넣는다. */
@@ -293,6 +332,7 @@ export async function deleteEntry(entry: LedgerEntryWithItems, staff: string): P
     const { error: e1 } = await sb.from("prescriptions").delete().in("id", list.map((p) => p.id));
     if (e1) fail("처방 삭제", e1.message);
   }
+  await deleteJobsOfEntry(entry.id);
   const { error } = await sb.from("ledger_entries").delete().eq("id", entry.id);
   if (error) fail("장부 줄 삭제", error.message.includes("row-level") ? "마감된 날은 지울 수 없습니다." : error.message);
 }

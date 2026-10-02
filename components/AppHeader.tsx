@@ -10,12 +10,13 @@ import { getSupabase } from "@/lib/supabaseClient";
  * 넓은 화면에서는 왼쪽에 고정, 좁은 화면(폰)에서는 위 가로 메뉴로.
  * 순서는 접수실이 정함: 오늘 장부 · 해피콜 · 환자 · 약장 · 업무 등록 · 문구 틀 · 지난 기록 · 현황 · 로그아웃.
  */
-const MENU: { href: string; label: string; dark?: boolean }[] = [
+const MENU: { href: string; label: string }[] = [
   { href: "/ledger", label: "오늘 장부" },
+  { href: "/brew", label: "약대장" },
   { href: "/happy-calls", label: "해피콜" },
   { href: "/patients", label: "환자" },
   { href: "/cabinet", label: "약장" },
-  { href: "/tasks/new", label: "업무 등록", dark: true },
+  { href: "/tasks/new", label: "업무 등록" },
   { href: "/templates", label: "문구 틀" },
   { href: "/history", label: "지난 기록" },
   { href: "/stats", label: "현황" },
@@ -57,13 +58,7 @@ export default function AppHeader() {
               <Link
                 key={m.href}
                 href={m.href}
-                className={`rounded px-3 py-2 text-sm ${
-                  active
-                    ? "bg-[#f0f7f3] font-bold text-[#0f3d23]"
-                    : m.dark
-                      ? "bg-stone-900 text-white hover:bg-stone-700"
-                      : "text-stone-800 hover:bg-stone-100"
-                }`}
+                className={`rounded px-3 py-2 text-sm ${active ? "bg-[#f0f7f3] font-bold text-[#0f3d23]" : "text-stone-800 hover:bg-stone-100"}`}
               >
                 {m.label}
               </Link>

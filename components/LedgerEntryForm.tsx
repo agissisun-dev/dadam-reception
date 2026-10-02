@@ -7,6 +7,7 @@ import { GROUP_LABEL, GROUP_ORDER, INSURANCE_KINDS, PAY_NOTES, chipClass, parseN
 import { DEFAULT_PER_DAY, PACK_PRESETS, daysFromPacks } from "@/lib/packs";
 import { maskPhone } from "@/lib/phone";
 import { weekdayKo } from "@/lib/dates";
+import { POUCHES, defaultReceiveDay } from "@/lib/brewRules";
 import { conditionLabel } from "@/lib/conditions";
 import type { StaffName } from "@/lib/staff";
 import type { CabinetItem, DecoctionKind, LedgerCode, LedgerGroup, Patient } from "@/lib/types";
@@ -122,7 +123,11 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
   const [note, setNote] = useState("");
   const [packs, setPacks] = useState("");
   const [perDay, setPerDay] = useState(DEFAULT_PER_DAY);
-  const [receiveDate, setReceiveDate] = useState(day);
+  const [brewDay, setBrewDay] = useState(day);
+  const [slot, setSlot] = useState<"am" | "pm">("am");
+  const [delivery, setDelivery] = useState<"pickup" | "courier" | null>("pickup");
+  const [region, setRegion] = useState("");
+  const [pouch, setPouch] = useState<string>("");
   const [newPhone, setNewPhone] = useState("");
   const [memo, setMemo] = useState("");
   const [offTotal, setOffTotal] = useState(false);
@@ -137,6 +142,9 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
   const hasDecoction = decoction.length > 0;
   const packsN = Number(packs);
   const days = daysFromPacks(packsN, perDay);
+  const fermented = decoction.some((i) => i.decoction_kind === "fermented");
+  const split = decoction.find((i) => i.split)?.split ?? null;
+  const receiveDate = /^\d{4}-\d{2}-\d{2}$/.test(brewDay) ? defaultReceiveDay(brewDay, fermented) : day;
   const preview = hasDecoction && days > 0 ? planHappyCalls(receiveDate, days) : [];
 
   const trimmed = name.trim();
@@ -157,7 +165,11 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
     setNote("");
     setPacks("");
     setPerDay(DEFAULT_PER_DAY);
-    setReceiveDate(day);
+    setBrewDay(day);
+    setSlot("am");
+    setDelivery("pickup");
+    setRegion("");
+    setPouch("");
     setNewPhone("");
     setMemo("");
     setOffTotal(false);
@@ -171,6 +183,10 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
     setError(null);
     if (!trimmed) {
       setError("성함을 적어 주세요.");
+      return;
+    }
+    if (hasDecoction && !/^\d{4}-\d{2}-\d{2}$/.test(brewDay)) {
+      setError("달이는 날을 골라 주세요.");
       return;
     }
     setBusy(true);
@@ -191,6 +207,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
         items: parsed.items,
         review: parsed.review,
         decoction: hasDecoction && packsN > 0 ? { packs: packsN, per_day: perDay, receive_date: receiveDate } : null,
+        brew: hasDecoction ? { day: brewDay, slot, delivery, region, pouch: pouch || null } : null,
         off_total: offTotal,
         pay_note: offTotal ? payNote : null,
       });
@@ -320,9 +337,32 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
                   </select>
                 </div>
               </div>
+              <div>
+                <span className="text-[11px] font-bold text-[#0f3d23]">달이는 날 (환자와 정한 날) → 약대장</span>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <input type="date" value={brewDay} onChange={(e) => setBrewDay(e.target.value)} className="h-8 rounded border border-[#16863b] px-2 text-sm" />
+                  <select value={slot} onChange={(e) => setSlot(e.target.value as "am" | "pm")} className="h-8 rounded border border-stone-300 px-1.5 text-sm">
+                    <option value="am">오전</option>
+                    <option value="pm">오후</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <span className={LABEL}>받는 방법</span>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <button type="button" onClick={() => setDelivery("pickup")} className={`h-8 rounded border px-2.5 text-sm ${delivery === "pickup" ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300"}`}>직접</button>
+                  <button type="button" onClick={() => setDelivery("courier")} className={`h-8 rounded border px-2.5 text-sm ${delivery === "courier" ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300"}`}>택배</button>
+                  <input value={region} onChange={(e) => setRegion(e.target.value)} placeholder={delivery === "courier" ? "지역 (예: 안양)" : "시간 메모 (예: 화 오전)"} className="h-8 w-36 rounded border border-stone-300 px-2 text-sm" />
+                </div>
+              </div>
               <label className="block">
-                <span className={LABEL}>약 받는 날</span>
-                <input type="date" value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} className="h-8 rounded border border-stone-300 px-2 text-sm" />
+                <span className={LABEL}>파우치</span>
+                <select value={pouch} onChange={(e) => setPouch(e.target.value)} className="mt-1 block h-8 rounded border border-stone-300 px-1.5 text-sm">
+                  <option value="">(없음)</option>
+                  {POUCHES.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
               </label>
               {!linked && (
                 <label className="block">
@@ -330,15 +370,18 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
                   <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} inputMode="numeric" placeholder="01012345678" className="h-8 w-40 rounded border border-stone-300 px-2 text-sm" />
                 </label>
               )}
-              <p className="text-xs text-stone-600">
+              <p className="w-full text-xs text-stone-600">
+                약대장 {brewDay.slice(5).replace("-", "/")}({weekdayKo(brewDay)}) {slot === "am" ? "오전" : "오후"}에 들어갑니다
+                {fermented && ` · 발효끝 ${receiveDate.slice(5).replace("-", "/")}(${weekdayKo(receiveDate)})`}
+                {split && split > 1 && ` · ${split}회분은 날짜 미정으로`}.{" "}
                 {preview.length > 0 ? (
                   <>
-                    저장하면 처방 {packsN}포 · {days}일분 → 해피콜{" "}
+                    받는 날 {receiveDate.slice(5).replace("-", "/")} → 처방 {packsN}포 · {days}일분 → 해피콜{" "}
                     {preview.map((c) => `${c.round}차 ${c.due_date.slice(5)} (${weekdayKo(c.due_date)})`).join(" · ")}
                     {!linked && !newPhone && <span className="text-red-700"> — 환자 연결이 없어 처방은 만들지 않습니다</span>}
                   </>
                 ) : (
-                  <span className="text-amber-800">포 수를 고르면 해피콜 날짜가 미리 보입니다. 안 고르면 &ldquo;포 수 없음&rdquo;으로 남습니다.</span>
+                  <span className="text-amber-800">포 수를 고르면 해피콜 날짜가 미리 보입니다. 안 고르면 약대장 칸에 &ldquo;포 수 없음&rdquo;으로 남습니다.</span>
                 )}
               </p>
             </div>

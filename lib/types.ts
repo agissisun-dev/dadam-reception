@@ -256,3 +256,34 @@ export type LedgerEntryWithItems = LedgerEntry & {
   prescriptions: { id: number; happy_calls: { round: number; due_date: string; status: string }[] }[];
 };
 export type LedgerExpense = { id: number; day: string; title: string; amount: number; staff_name: string; created_at: string };
+
+/** 약대장 (V5). 한 칸 = 탕전 일정 하나 */
+export type BrewKind = "decoction" | "ferment_start" | "ferment_end" | "batch" | "note";
+export type BrewJob = {
+  id: number;
+  day: string | null; // 달이는 날, null = 날짜 미정
+  slot: "am" | "pm";
+  kind: BrewKind;
+  patient_id: number | null;
+  patient_name: string;
+  title: string;
+  delivery: "pickup" | "courier" | null;
+  region: string | null;
+  pouch: string | null;
+  split_no: number | null;
+  split_of: number | null;
+  memo: string | null;
+  max_jobs: number | null;
+  status: "planned" | "done";
+  done_at: string | null;
+  done_by: string | null;
+  receive_day: string | null;
+  prescription_id: number | null;
+  ledger_entry_id: number | null;
+  pair_id: number | null;
+  sort_order: number;
+  staff_name: string;
+  created_at: string;
+  updated_at: string;
+};
+export type BrewWeekdayRule = { weekday: number; note: string; max_jobs: number };

@@ -1,54 +1,106 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabaseClient";
+
+/**
+ * 왼쪽 메뉴(2026-10-02 접수실 요청: 장부가 길어져 위 메뉴가 올라가 버려서).
+ * 넓은 화면에서는 왼쪽에 고정, 좁은 화면(폰)에서는 위 가로 메뉴로.
+ * 순서는 접수실이 정함: 오늘 장부 · 해피콜 · 환자 · 약장 · 업무 등록 · 문구 틀 · 지난 기록 · 현황 · 로그아웃.
+ */
+const MENU: { href: string; label: string; dark?: boolean }[] = [
+  { href: "/ledger", label: "오늘 장부" },
+  { href: "/happy-calls", label: "해피콜" },
+  { href: "/patients", label: "환자" },
+  { href: "/cabinet", label: "약장" },
+  { href: "/tasks/new", label: "업무 등록", dark: true },
+  { href: "/templates", label: "문구 틀" },
+  { href: "/history", label: "지난 기록" },
+  { href: "/stats", label: "현황" },
+];
+
+const MORE: { href: string; label: string }[] = [
+  { href: "/weekly", label: "주간 관리" },
+  { href: "/ledger/codes", label: "약어 표" },
+];
 
 export default function AppHeader() {
   const router = useRouter();
+  const pathname = usePathname();
+
+  // 본문을 메뉴 폭만큼 오른쪽으로 민다 (넓은 화면에서만). 메뉴가 없는 화면(로그인)은 그대로.
+  useEffect(() => {
+    document.body.classList.add("md:pl-44");
+    return () => document.body.classList.remove("md:pl-44");
+  }, []);
 
   async function logout() {
     await getSupabase().auth.signOut();
     router.replace("/login");
   }
 
+  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
+
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 py-3">
-      <Link href="/" className="text-lg font-bold">
-        다담 접수실
-      </Link>
-      <nav className="flex flex-wrap items-center gap-2 text-sm">
-        <Link href="/ledger" className="rounded bg-[#16863b] px-3 py-1.5 font-bold text-white">
-          오늘 장부
+    <>
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-44 flex-col border-r border-stone-200 bg-white md:flex">
+        <Link href="/" className={`px-4 py-4 text-lg font-bold ${isActive("/") ? "text-[#16863b]" : ""}`}>
+          다담 접수실
+          <span className="block text-[11px] font-normal text-stone-500">첫 화면 · 달력</span>
         </Link>
-        <Link href="/happy-calls" className="rounded border border-stone-300 px-3 py-1.5">
-          해피콜
+        <nav className="flex flex-col gap-0.5 px-2">
+          {MENU.map((m) => {
+            const active = isActive(m.href);
+            return (
+              <Link
+                key={m.href}
+                href={m.href}
+                className={`rounded px-3 py-2 text-sm ${
+                  active
+                    ? "bg-[#f0f7f3] font-bold text-[#0f3d23]"
+                    : m.dark
+                      ? "bg-stone-900 text-white hover:bg-stone-700"
+                      : "text-stone-800 hover:bg-stone-100"
+                }`}
+              >
+                {m.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="mt-auto flex flex-col gap-1 border-t border-stone-100 px-4 py-3 text-xs text-stone-500">
+          {MORE.map((m) => (
+            <Link key={m.href} href={m.href} className={`hover:underline ${isActive(m.href) ? "font-bold text-[#0f3d23]" : ""}`}>
+              {m.label}
+            </Link>
+          ))}
+          <button onClick={logout} className="mt-2 w-fit rounded border border-stone-300 px-2 py-1 text-xs text-stone-500 hover:bg-stone-50">
+            로그아웃
+          </button>
+        </div>
+      </aside>
+
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 bg-white px-4 py-3 md:hidden">
+        <Link href="/" className="text-lg font-bold">
+          다담 접수실
         </Link>
-        <Link href="/weekly" className="rounded border border-stone-300 px-3 py-1.5">
-          주간 관리
-        </Link>
-        <Link href="/patients" className="rounded border border-stone-300 px-3 py-1.5">
-          환자
-        </Link>
-        <Link href="/cabinet" className="rounded border border-stone-300 px-3 py-1.5">
-          약장
-        </Link>
-        <Link href="/templates" className="rounded border border-stone-300 px-3 py-1.5">
-          문구 틀
-        </Link>
-        <Link href="/tasks/new" className="rounded bg-stone-900 px-3 py-1.5 text-white">
-          업무 등록
-        </Link>
-        <Link href="/history" className="rounded border border-stone-300 px-3 py-1.5">
-          지난 기록
-        </Link>
-        <Link href="/stats" className="rounded border border-stone-300 px-3 py-1.5">
-          현황
-        </Link>
-        <button onClick={logout} className="rounded border border-stone-300 px-3 py-1.5">
-          로그아웃
-        </button>
-      </nav>
-    </header>
+        <nav className="flex flex-wrap items-center gap-1.5 text-sm">
+          {[...MENU, ...MORE].map((m) => (
+            <Link
+              key={m.href}
+              href={m.href}
+              className={`rounded px-2.5 py-1 ${isActive(m.href) ? "bg-[#16863b] text-white" : "border border-stone-300"}`}
+            >
+              {m.label}
+            </Link>
+          ))}
+          <button onClick={logout} className="rounded border border-stone-300 px-2.5 py-1 text-stone-500">
+            로그아웃
+          </button>
+        </nav>
+      </header>
+    </>
   );
 }

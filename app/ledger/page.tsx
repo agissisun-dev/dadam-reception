@@ -103,6 +103,8 @@ function Board() {
   const loading = loadedDay !== day;
   const closed = !!dayRow?.closed_at;
   const today = todayISO();
+  /** 마감했어도 그날 밤 12시까지는 고칠 수 있다. 다음 날부터 잠긴다(정정 줄만). */
+  const locked = closed && day < today;
   const total = sumEntries(entries);
   const exp = sumExpenses(expenses);
   const seq = nextSeq(entries);
@@ -117,8 +119,8 @@ function Board() {
           {day !== today && (
             <button type="button" onClick={() => setDay(today)} className="text-sm text-stone-500 underline">오늘</button>
           )}
-          <span className={`rounded px-2 py-0.5 text-xs ${closed ? "bg-stone-800 text-white" : "bg-amber-100 text-amber-900"}`}>
-            {closed ? `마감됨 · ${dayRow?.closed_by ?? ""}` : "마감 전"}
+          <span className={`rounded px-2 py-0.5 text-xs ${locked ? "bg-stone-800 text-white" : closed ? "bg-stone-200 text-stone-800" : "bg-amber-100 text-amber-900"}`}>
+            {locked ? `마감됨 · ${dayRow?.closed_by ?? ""} · 정정 줄만` : closed ? `마감됨 · ${dayRow?.closed_by ?? ""} · 오늘 안에는 고칠 수 있음` : "마감 전"}
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -139,7 +141,7 @@ function Board() {
         <Link href="/ledger/codes" className="text-sm text-stone-500 underline">약어 표 고치기</Link>
       </div>
 
-      {!loading && !closed && (
+      {!loading && !locked && (
         <LedgerEntryForm
           key={`${day}-${seq}`}
           day={day}
@@ -161,7 +163,7 @@ function Board() {
       ) : (
         <LedgerTable
           entries={entries}
-          closed={closed}
+          closed={locked}
           onDelete={(e) => {
             if (window.confirm(`${e.seq}번 ${e.patient_name} 줄을 지울까요? 따라온 처방·해피콜은 같이 지워지고, 약장 나감은 되돌림 입고로 남습니다.`)) {
               run(() => deleteEntry(e, staff));
@@ -232,7 +234,7 @@ function Board() {
                 <span>{x.title}</span>
                 <span className="flex items-center gap-2">
                   {won(x.amount)}
-                  {!closed && (
+                  {!locked && (
                     <button type="button" onClick={() => run(() => deleteExpense(x.id))} className="text-[11px] text-stone-400 underline">지우기</button>
                   )}
                 </span>
@@ -240,7 +242,7 @@ function Board() {
             ))}
             {expenses.length === 0 && <li className="text-xs text-stone-400">없음</li>}
           </ul>
-          {!closed && (
+          {!locked && (
             <form
               className="mt-2 flex gap-1"
               onSubmit={(e) => {
@@ -261,7 +263,7 @@ function Board() {
 
         <section className="rounded-lg border border-stone-200 bg-white p-3 text-sm">
           <h2 className="font-bold">오늘 마감</h2>
-          <p className="mt-1 text-xs text-stone-500">종이 장부와 소계를 맞춘 뒤 누릅니다. 마감하면 줄을 고치거나 지울 수 없고, 틀린 것은 정정 줄로 남깁니다. 되돌리기는 없습니다.</p>
+          <p className="mt-1 text-xs text-stone-500">종이 장부와 소계를 맞춘 뒤 누릅니다. 마감해도 그날 밤 12시까지는 고칠 수 있고, 다음 날부터는 잠겨서 정정 줄로만 남깁니다.</p>
           {closed ? (
             <p className="mt-2 text-xs">
               마감 {dayRow?.closed_at ? new Date(dayRow.closed_at).toLocaleString("ko-KR") : ""} · {dayRow?.closed_by}

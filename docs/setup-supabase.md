@@ -71,3 +71,6 @@
 
 ## 18. V4-1 장부 줄 "합계에서 빼기" (2026-10-02, 실행 완료)
 - `supabase/schema-v4-1-ledger-offtotal.sql`: `ledger_entries.off_total`(붉은 금액, 그날 합계에서 뺌)·`pay_note`(제로페이·서울페이·계좌입금·기타). 접수실에 돈은 없지만 현금영수증은 끊는 줄.
+
+## 19. V4-2 마감 잠금은 다음 날부터 (2026-10-02, 실행 완료)
+- `supabase/schema-v4-2-ledger-lock-next-day.sql`: `ledger_day_locked(day)` = 마감했고 그 날짜가 한국 시간 오늘보다 앞일 때. 정책을 이 함수로 바꿈. 마감 당일은 고칠 수 있고 다음 날부터 정정 줄만.

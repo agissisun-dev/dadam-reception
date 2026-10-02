@@ -201,7 +201,7 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
     // 약대장 칸 (탕약 항목이 있고 달이는 날이 있으면. 포 수가 없어도 탕전은 해야 하므로 만든다)
     if (decoctionItems.length > 0 && input.brew) {
       const fermented = decoctionItems.some((i) => i.decoction_kind === "fermented");
-      const title = decoctionItems.map((i) => itemTitle(i)).join("·");
+      const title = [...new Set(decoctionItems.map((i) => itemTitle(i)))].join("·");
       const split = decoctionItems.find((i) => i.split)?.split ?? null;
       await createJobs(
         planJobsFromLedger({
@@ -268,10 +268,9 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
   }
 }
 
-/** 약대장 칸 제목: "보험(처방)" · "일반 42만원" · "발효 48만원" */
+/** 약대장 칸 제목은 두 가지만: 탕약발효 · 탕약일반 (접수실 2026-10-02) */
 function itemTitle(i: ParsedItem): string {
-  const base = i.decoction_kind === "insurance" ? "보험(처방)" : i.decoction_kind === "fermented" ? "발효" : i.decoction_kind === "general" ? "일반" : i.name;
-  return i.amount ? `${base} ${i.amount / 10000}만원` : base;
+  return i.decoction_kind === "fermented" ? "탕약발효" : "탕약일반";
 }
 
 /** 돈·이름·구분·메모만 고치기(마감 전). 항목은 지우고 다시 넣는다. */

@@ -6,7 +6,7 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import StaffSelect from "@/components/StaffSelect";
 import { createJobs, deleteJob, listJobs, listUnscheduled, listWeekdayRules, markDone, saveWeekdayRule, updateJob } from "@/lib/brew";
-import { KIND_LABEL, POUCHES, dayCounts, dayHeader, fermentMidDays, jobLabel, planJobsFromLedger, weekDays, weekMonday } from "@/lib/brewRules";
+import { KIND_LABEL, POUCHES, dayCounts, dayHeader, fermentMidDays, jobLabel, weekDays, weekMonday } from "@/lib/brewRules";
 import { addDays, todayISO } from "@/lib/dates";
 import { holidayLabel, isClinicClosed } from "@/lib/holidays";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
@@ -159,64 +159,38 @@ function Card({ j, staff, onChanged }: { j: BrewJob; staff: StaffName; onChanged
   );
 }
 
-/** 손으로 칸 넣기: 묶음 생산·메모·환자 없는 탕약 */
+/** 손으로 칸 넣기: 묶음 생산·메모. 탕약은 오늘 장부에서만 들어온다(접수실 2026-10-02). */
 function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; staff: StaffName; onDone: () => void; onCancel: () => void }) {
   const [kind, setKind] = useState<BrewKind>("batch");
   const [day, setDay] = useState(defaultDay);
   const [slot, setSlot] = useState<"am" | "pm">("am");
-  const [name, setName] = useState("");
   const [title, setTitle] = useState("");
-  const [fermented, setFermented] = useState(false);
-  const [delivery, setDelivery] = useState<"pickup" | "courier" | "">("");
-  const [region, setRegion] = useState("");
   const [maxJobs, setMaxJobs] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
     setError(null);
     if (!title.trim()) {
-      setError("종류나 내용을 적어 주세요.");
+      setError("내용을 적어 주세요.");
       return;
     }
     try {
-      if (kind === "decoction" && fermented && day) {
-        // 발효는 사흘: 시작 칸 + 셋째 날 발효끝 칸을 짝으로
-        await createJobs(
-          planJobsFromLedger({
-            patient_id: null,
-            patient_name: name.trim(),
-            title: title.trim(),
-            fermented: true,
-            day,
-            slot,
-            delivery: delivery || null,
-            region: region.trim() || null,
-            pouch: null,
-            split: null,
-            staff_name: staff,
-            prescription_id: null,
-            ledger_entry_id: null,
-          }),
-        );
-        onDone();
-        return;
-      }
       await createJobs([
         {
           day: day || null,
           slot,
           kind,
           patient_id: null,
-          patient_name: kind === "decoction" ? name.trim() : "",
+          patient_name: "",
           title: title.trim(),
-          delivery: kind === "decoction" && delivery ? delivery : null,
-          region: kind === "decoction" ? region.trim() || null : null,
+          delivery: null,
+          region: null,
           pouch: null,
           split_no: null,
           split_of: null,
           memo: null,
           max_jobs: kind === "note" && maxJobs !== "" ? Number(maxJobs) : null,
-          receive_day: kind === "decoction" ? day || null : null,
+          receive_day: null,
           prescription_id: null,
           ledger_entry_id: null,
           sort_order: 0,
@@ -237,7 +211,6 @@ function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; s
           <select value={kind} onChange={(e) => setKind(e.target.value as BrewKind)} className={`${IN} block`}>
             <option value="batch">묶음 생산 (디스크 100팩)</option>
             <option value="note">메모 (월차 · 택배 마감)</option>
-            <option value="decoction">탕약 (수납 없이 미리 잡기)</option>
           </select>
         </label>
         <label className="block">
@@ -248,21 +221,7 @@ function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; s
           <option value="am">오전</option>
           <option value="pm">오후</option>
         </select>
-        {kind === "decoction" && <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름" className={`${IN} w-28`} />}
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === "batch" ? "디스크 100팩" : kind === "note" ? "탕쌤 월차" : "보험(처방)"} className={`${IN} w-44`} />
-        {kind === "decoction" && (
-          <>
-            <label className="flex items-center gap-1 text-xs">
-              <input type="checkbox" checked={fermented} onChange={(e) => setFermented(e.target.checked)} /> 발효 (사흘 · 셋째 날 발효끝 칸 자동)
-            </label>
-            <select value={delivery} onChange={(e) => setDelivery(e.target.value as "pickup" | "courier" | "")} className={IN}>
-              <option value="">받는 방법</option>
-              <option value="pickup">직접</option>
-              <option value="courier">택배</option>
-            </select>
-            <input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="지역 · 시간" className={`${IN} w-28`} />
-          </>
-        )}
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === "batch" ? "디스크 100팩" : "탕쌤 월차"} className={`${IN} w-44`} />
         {kind === "note" && (
           <label className="flex items-center gap-1 text-[11px] text-stone-600">
             그날 한도 <input type="number" min={0} value={maxJobs} onChange={(e) => setMaxJobs(e.target.value)} placeholder="비우면 그대로" className={`${IN} w-24`} />
@@ -460,7 +419,7 @@ function Board() {
       )}
 
       <p className="text-xs text-stone-500">
-        칸을 누르면 날짜·오전/오후·받는 방법·지역·파우치·메모를 고칩니다. 날짜를 옮기면 받는 날과 해피콜이 따라가고, 발효 짝은 같이 움직입니다. 오늘 장부에서 탕약 줄을 저장하면 여기 자동으로 들어옵니다.
+        탕약 칸은 오늘 장부에서 탕약 줄을 저장할 때 자동으로 들어옵니다. 여기서는 묶음 생산과 메모만 손으로 넣습니다. 칸을 누르면 날짜·오전/오후·받는 방법·지역·파우치·메모를 고치고, 날짜를 옮기면 받는 날과 해피콜이 따라가며 발효 짝은 같이 움직입니다.
       </p>
     </main>
   );

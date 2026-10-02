@@ -8,7 +8,7 @@ export const KIND_LABEL: Record<BrewKind, string> = {
   decoction: "탕약",
   ferment_start: "발효시작",
   ferment_end: "발효끝",
-  batch: "묶음 생산",
+  batch: "지정처방",
   note: "메모",
 };
 

@@ -65,7 +65,7 @@ describe("fermentMidDays", () => {
       { ...base, id: 1, day: "2026-10-08", kind: "ferment_start", patient_name: "김하나", pair_id: 2 },
       { ...base, id: 2, day: "2026-10-10", kind: "ferment_end", patient_name: "김하나", pair_id: 1 },
     ];
-    expect(fermentMidDays(jobs)).toEqual([{ day: "2026-10-09", jobId: 1, label: "김하나" }]);
+    expect(fermentMidDays(jobs)).toEqual([{ day: "2026-10-09", jobId: 1, label: "김하나", clinic: "S" }]);
   });
 });
 

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabaseClient";
+import { clinicInfo, fetchCurrentClinic, forgetClinic, type ClinicCode } from "@/lib/clinic";
 
 /**
  * 왼쪽 메뉴(2026-10-02 접수실 요청: 장부가 길어져 위 메뉴가 올라가 버려서).
@@ -30,6 +31,7 @@ const MORE: { href: string; label: string }[] = [
 export default function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
+  const [clinic, setClinic] = useState<ClinicCode | null>(null);
 
   // 본문을 메뉴 폭만큼 오른쪽으로 민다 (넓은 화면에서만). 메뉴가 없는 화면(로그인)은 그대로.
   useEffect(() => {
@@ -37,10 +39,23 @@ export default function AppHeader() {
     return () => document.body.classList.remove("md:pl-44");
   }, []);
 
+  // 로그인한 계정의 병원 이름 (다담에스 / 노원다담)
+  useEffect(() => {
+    let active = true;
+    fetchCurrentClinic().then((c) => {
+      if (active) setClinic(c);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   async function logout() {
     await getSupabase().auth.signOut();
+    forgetClinic();
     router.replace("/login");
   }
+  const info = clinic ? clinicInfo(clinic) : null;
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
 
@@ -50,6 +65,11 @@ export default function AppHeader() {
         <Link href="/" className={`px-4 py-4 text-lg font-bold ${isActive("/") ? "text-[#16863b]" : ""}`}>
           다담 접수실
           <span className="block text-[11px] font-normal text-stone-500">첫 화면 · 달력</span>
+          {info && (
+            <span className="mt-1 inline-block rounded px-2 py-0.5 text-[11px] font-bold" style={{ background: info.bg, color: info.text, border: `1px solid ${info.color}` }}>
+              {info.short}
+            </span>
+          )}
         </Link>
         <nav className="flex flex-col gap-0.5 px-2">
           {MENU.map((m) => {
@@ -79,7 +99,7 @@ export default function AppHeader() {
 
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 bg-white px-4 py-3 md:hidden">
         <Link href="/" className="text-lg font-bold">
-          다담 접수실
+          다담 접수실{info ? <span className="ml-2 text-xs font-normal" style={{ color: info.text }}>{info.short}</span> : null}
         </Link>
         <nav className="flex flex-wrap items-center gap-1.5 text-sm">
           {[...MENU, ...MORE].map((m) => (

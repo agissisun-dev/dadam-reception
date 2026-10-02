@@ -174,7 +174,7 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
     })
     .select("*")
     .single();
-  if (error) fail("장부 저장", error.message.includes("ledger_entries_day_seq_key") ? "번호가 겹칩니다. 화면을 새로고침해 주세요." : error.message);
+  if (error) fail("장부 저장", /day_seq_key/.test(error.message) ? "번호가 겹칩니다. 화면을 새로고침해 주세요." : error.message);
   const entry = e as LedgerEntry;
 
   try {

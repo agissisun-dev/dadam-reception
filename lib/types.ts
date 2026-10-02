@@ -283,6 +283,8 @@ export type BrewJob = {
   pair_id: number | null;
   sort_order: number;
   staff_name: string;
+  /** 어느 병원 약인지 (S 다담에스 · N 노원다담). 약대장은 두 병원이 같이 보고 색으로 구분한다. 넣을 때는 비워 두면 로그인한 병원. */
+  clinic?: "S" | "N";
   created_at: string;
   updated_at: string;
 };

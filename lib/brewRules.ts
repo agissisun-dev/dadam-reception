@@ -122,15 +122,15 @@ export function planJobsFromLedger(p: {
 }
 
 /** 발효 중인 날: 발효시작과 짝 발효끝 사이의 날들. 화면 표시용(저장 안 함). 짝이 없으면 시작 +1일 하나. */
-export function fermentMidDays(jobs: BrewJob[]): { day: string; jobId: number; label: string }[] {
+export function fermentMidDays(jobs: BrewJob[]): { day: string; jobId: number; label: string; clinic: "S" | "N" }[] {
   const byId = new Map(jobs.map((j) => [j.id, j]));
-  const out: { day: string; jobId: number; label: string }[] = [];
+  const out: { day: string; jobId: number; label: string; clinic: "S" | "N" }[] = [];
   for (const j of jobs) {
     if (j.kind !== "ferment_start" || !j.day) continue;
     const end = j.pair_id ? byId.get(j.pair_id) : undefined;
     const endDay = end?.day ?? fermentEndDay(j.day);
     for (let d = addDays(j.day, 1); d < endDay; d = addDays(d, 1)) {
-      out.push({ day: d, jobId: j.id, label: j.patient_name || j.title });
+      out.push({ day: d, jobId: j.id, label: j.patient_name || j.title, clinic: j.clinic ?? "S" });
     }
   }
   return out;

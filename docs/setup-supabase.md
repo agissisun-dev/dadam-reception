@@ -72,6 +72,12 @@
 ## 18. V4-1 장부 줄 "합계에서 빼기" (2026-10-02, 실행 완료)
 - `supabase/schema-v4-1-ledger-offtotal.sql`: `ledger_entries.off_total`(붉은 금액, 그날 합계에서 뺌)·`pay_note`(제로페이·서울페이·계좌입금·기타). 접수실에 돈은 없지만 현금영수증은 끊는 줄.
 
+## 21. V6 병원 칸 — 다담에스·노원다담 한 앱 (2026-10-02, **실행 대기**)
+- `supabase/schema-v6-clinic.sql`: `clinic_accounts`(로그인 계정 → 병원 S/N, 지금 계정은 S) · `current_clinic()` 함수 · 병원별 표(환자·처방·해피콜·연락 기록·주간 관리·업무·문구 틀·약어 표·장부·문자 장부·약대장)에 `clinic` 칸(기본값 = 로그인한 병원, 기존 줄은 S) · 병원별 표의 RLS를 "자기 병원 것만"으로 교체 · 장부 마감 기본키를 (clinic, day)로, 장부 번호·약어 표 유일 조건에 clinic 추가.
+- 약대장(`brew_jobs`)·요일 기준·약장은 두 병원 공통(정책 그대로). 약대장은 `clinic` 칸을 색 구분에만 쓴다.
+- 실행 전에는 앱이 모두 다담에스로 동작한다(함수가 없으면 S로 봄). 실행 뒤 노원 계정을 만들면 `insert into clinic_accounts (user_id, clinic) select id, 'N' from auth.users where email = '<노원 계정>'`.
+- 설계 배경: 약대장·약장·(앞으로) 약재 재고는 두 병원 합산, 오늘 장부·해피콜·예약은 병원마다 따로.
+
 ## 20. V5 약대장 (2026-10-02, 실행 완료)
 - `supabase/schema-v5-brew.sql`: `brew_jobs`(약대장 한 칸: 달이는 날·오전/오후·종류·이름·받는 방법·지역·파우치·분할·끝남·받는 날·처방/장부 줄 연결·발효 짝) · `brew_weekday_rules`(요일별 메모·한도, 초기값 월 지방택배 마감/4 … 토 노원구만 2개 이상/2). `prescriptions.brew_day`·`delivery` 열 추가. 잠그지 않는다(일정은 자주 옮기므로).
 - 설계: `docs/superpowers/specs/2026-10-02-약대장-v5-design.md`.

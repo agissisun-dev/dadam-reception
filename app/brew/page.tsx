@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import StaffSelect from "@/components/StaffSelect";
 import { createJobs, deleteJob, listJobs, listUnscheduled, listWeekdayRules, markDone, saveWeekdayRule, updateJob } from "@/lib/brew";
 import { KIND_LABEL, POUCHES, dayCounts, dayHeader, fermentMidDays, jobLabel, planJobsFromLedger, weekDays, weekMonday } from "@/lib/brewRules";
+import { CLINICS, clinicInfo } from "@/lib/clinic";
 import { addDays, todayISO } from "@/lib/dates";
 import { holidayLabel, isClinicClosed } from "@/lib/holidays";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
@@ -17,12 +18,15 @@ const PRIMARY = "rounded bg-stone-900 px-3 py-1.5 text-sm text-white disabled:op
 const IN = "h-8 rounded border border-stone-300 px-2 text-sm";
 const WEEKDAY_KO = ["", "월", "화", "수", "목", "금", "토"];
 
-function cardClass(j: BrewJob): string {
-  if (j.status === "done") return "border-stone-400 bg-stone-200 text-stone-500";
-  if (j.kind === "ferment_start" || j.kind === "ferment_end") return "border-[#16863b] bg-[#f0f7f3]";
-  if (j.kind === "batch") return "border-[#06478f] bg-[#f5f8fc]";
-  if (j.kind === "note") return "border-yellow-600 bg-yellow-50";
-  return "border-amber-600 bg-amber-50";
+/**
+ * 칸 색은 "어느 병원 약인지"가 먼저 보이게(접수실 2026-10-02): 다담에스 초록, 노원다담 남색.
+ * 발효·지정처방은 글자 표시로, 메모는 노랑, 끝난 것은 회색.
+ */
+function cardStyle(j: BrewJob): { className: string; style?: React.CSSProperties } {
+  if (j.status === "done") return { className: "border-stone-400 bg-stone-200 text-stone-500" };
+  if (j.kind === "note") return { className: "border-yellow-600 bg-yellow-50" };
+  const c = clinicInfo(j.clinic);
+  return { className: "", style: { borderColor: c.color, background: c.bg, color: c.text } };
 }
 
 const POUCH_COLOR: Record<string, string> = { 다담: "#16863b", 애장금: "#bfa37a", 자연과사람: "#06478f", 공룡: "#b91c1c" };
@@ -53,13 +57,16 @@ function Card({ j, staff, onChanged }: { j: BrewJob; staff: StaffName; onChanged
   }
 
   const label = jobLabel(j);
+  const cs = cardStyle(j);
+  const tag = j.kind === "ferment_start" || j.kind === "ferment_end" ? "발효" : j.kind === "batch" ? "지정" : null;
   return (
-    <div className={`rounded border px-2 py-1.5 text-xs ${cardClass(j)}`}>
+    <div className={`rounded border px-2 py-1.5 text-xs ${cs.className}`} style={cs.style}>
       <div className="flex items-center gap-1">
         {j.pouch && <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: POUCH_COLOR[j.pouch] ?? "#a8a29e" }} title={`파우치 ${j.pouch}`} />}
         <button type="button" onClick={() => setOpen((v) => !v)} className="min-w-0 flex-1 truncate text-left" title={label}>
+          {tag && <span className="mr-1 rounded bg-white/70 px-1 text-[10px] font-bold">{tag}</span>}
           {label}
-          {j.memo && <span className={`ml-1 ${j.memo === "포 수 없음" ? "text-red-700" : "text-stone-500"}`}>· {j.memo}</span>}
+          {j.memo && <span className={`ml-1 ${j.memo === "포 수 없음" ? "text-red-700" : "opacity-70"}`}>· {j.memo}</span>}
         </button>
         {j.kind !== "note" && (
           <button
@@ -388,9 +395,9 @@ function Board() {
       {editingRules && <RulesEditor rules={rules} onSaved={() => { setEditingRules(false); changed(); }} onClose={() => setEditingRules(false)} />}
 
       <p className="flex flex-wrap gap-3 text-[11px] text-stone-500">
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border border-amber-600 bg-amber-50 align-middle" />보험·일반 탕약</span>
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border border-[#16863b] bg-[#f0f7f3] align-middle" />발효 (시작→끝 짝)</span>
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border border-[#06478f] bg-[#f5f8fc] align-middle" />지정처방</span>
+        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border align-middle" style={{ borderColor: CLINICS.S.color, background: CLINICS.S.bg }} />{CLINICS.S.short} 약</span>
+        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border align-middle" style={{ borderColor: CLINICS.N.color, background: CLINICS.N.bg }} />{CLINICS.N.short} 약</span>
+        <span><b className="rounded bg-white px-1 text-[10px]">발효</b> <b className="rounded bg-white px-1 text-[10px]">지정</b> 표시로 종류 구분</span>
         <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border border-yellow-600 bg-yellow-50 align-middle" />메모</span>
         <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border border-stone-400 bg-stone-200 align-middle" />끝남 o</span>
         <span>· 색 점 = 파우치 · &ldquo;3/12개&rdquo; = 잡힌 수(짜는 것 포함)/그 요일 한도 (넘으면 붉게, 막지는 않음)</span>
@@ -435,7 +442,7 @@ function Board() {
                     {mids
                       .filter((m) => m.day === iso)
                       .map((m) => (
-                        <div key={`mid-${m.jobId}`} className="rounded border border-dashed border-[#16863b] bg-[#f0f7f3]/60 px-2 py-1 text-xs text-[#0f3d23]">
+                        <div key={`mid-${m.jobId}`} className="rounded border border-dashed px-2 py-1 text-xs" style={{ borderColor: clinicInfo(m.clinic).color, color: clinicInfo(m.clinic).text, background: clinicInfo(m.clinic).bg, opacity: 0.8 }}>
                           {m.label}-발효중
                         </div>
                       ))}

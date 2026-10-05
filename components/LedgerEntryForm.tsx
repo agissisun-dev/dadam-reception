@@ -8,6 +8,7 @@ import { DEFAULT_PER_DAY, PACK_PRESETS, daysFromPacks } from "@/lib/packs";
 import { maskPhone } from "@/lib/phone";
 import { weekdayKo } from "@/lib/dates";
 import { POUCHES, defaultReceiveDay } from "@/lib/brewRules";
+import MoneyInput from "@/components/MoneyInput";
 import { conditionLabel } from "@/lib/conditions";
 import type { StaffName } from "@/lib/staff";
 import type { CabinetItem, DecoctionKind, LedgerCode, LedgerEntryWithItems, LedgerGroup, Patient } from "@/lib/types";
@@ -133,7 +134,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
   const [newPhone, setNewPhone] = useState("");
   const [memo, setMemo] = useState("");
   const [offTotal, setOffTotal] = useState(false);
-  const [payNote, setPayNote] = useState<string>(PAY_NOTES[0]);
+  const [payNote, setPayNote] = useState<string>("계좌입금");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fixing, setFixing] = useState<string | null>(null);
@@ -175,7 +176,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
     setNewPhone("");
     setMemo("");
     setOffTotal(false);
-    setPayNote(PAY_NOTES[0]);
+    setPayNote("계좌입금");
     setFixing(null);
     nameRef.current?.focus();
   }
@@ -260,18 +261,15 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
             ))}
           </datalist>
         </label>
-        <label className="block lg:col-span-1">
-          <span className={LABEL}>현금</span>
-          <input value={cash} onChange={(e) => setCash(e.target.value)} inputMode="numeric" placeholder="0" className={`${INPUT} text-right`} />
-        </label>
-        <label className="block lg:col-span-1">
-          <span className={LABEL}>현영</span>
-          <input value={cashReceipt} onChange={(e) => setCashReceipt(e.target.value)} inputMode="numeric" placeholder="0" className={`${INPUT} text-right`} />
-        </label>
-        <label className="block lg:col-span-1">
-          <span className={LABEL}>카드</span>
-          <input value={card} onChange={(e) => setCard(e.target.value)} inputMode="numeric" placeholder="0" className={`${INPUT} text-right`} />
-        </label>
+        <div className="lg:col-span-1">
+          <MoneyInput label="현금" value={cash} onChange={setCash} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} />
+        </div>
+        <div className="lg:col-span-1">
+          <MoneyInput label="현영" value={cashReceipt} onChange={setCashReceipt} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} />
+        </div>
+        <div className="lg:col-span-1">
+          <MoneyInput label="카드" value={card} onChange={setCard} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} />
+        </div>
         <label className="col-span-2 block sm:col-span-4 lg:col-span-4">
           <span className={LABEL}>기타 (지금처럼 약어로, 쉼표로 이어서)</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="전,습,일반(42),소합원3T" autoComplete="off" className={INPUT} />
@@ -392,18 +390,18 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <label className={`flex items-center gap-1.5 text-xs ${offTotal ? "font-bold text-red-700" : "text-stone-600"}`}>
-          <input type="checkbox" checked={offTotal} onChange={(e) => setOffTotal(e.target.checked)} />
-          합계에서 빼기 (붉은 금액)
-        </label>
-        {offTotal && (
-          <select value={payNote} onChange={(e) => setPayNote(e.target.value)} className="h-8 rounded border border-red-300 px-2 text-xs text-red-700">
-            {PAY_NOTES.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
+        {offTotal ? (
+          <span className="flex items-center gap-1.5 text-xs font-bold text-red-700">
+            붉은 금액 (합계에서 뺌)
+            <select value={payNote} onChange={(e) => setPayNote(e.target.value)} className="h-8 rounded border border-red-300 px-2 text-xs font-normal text-red-700">
+              {PAY_NOTES.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </span>
+        ) : (
+          <span className="text-[11px] text-stone-400">금액 칸 옆 ● 를 누르면 붉은 금액(계좌입금·제로페이)으로 바뀌어 합계에서 빠집니다.</span>
         )}
-        {offTotal && <span className="text-[11px] text-stone-500">접수실에 돈은 없지만 현금영수증은 끊는 줄. 오늘 합계에서 빠지고 장부엔 남습니다.</span>}
         <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="메모 (선택)" className="h-8 min-w-[160px] flex-1 rounded border border-stone-200 px-2 text-xs" />
         <span className="text-xs text-stone-500">처리자 {staff}</span>
       </div>
@@ -415,7 +413,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
 function ItemChip({ item, onFix }: { item: ParsedItem; onFix: () => void }) {
   const text = item.unknown
     ? `"${item.raw}" 모르는 말 — 눌러서 정하기`
-    : [item.name, item.qty > 1 ? item.qty : "", item.days ? `${item.days}일` : "", item.amount ? `${item.amount / 10000}만원` : "", item.split ? `${item.split}회 분할` : ""]
+    : [item.name, item.qty > 1 ? item.qty : "", item.days ? `${item.days}일` : "", item.amount ? `${item.amount / 10000}만원` : "", item.split ? `${item.split}회 분할` : "", item.free ? "무상 → 약장 사유 서비스" : ""]
         .filter(Boolean)
         .join(" ");
   if (item.unknown) {

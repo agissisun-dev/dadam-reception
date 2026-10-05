@@ -69,7 +69,7 @@ export function dayBlock(input: DayBlockInput): DayBlock {
   }
   const t = sumEntries(input.entries);
   rows.push(["합계", null, null, n(t.cash), n(t.cash_receipt), n(t.card), n(t.subtotal), null, "지출 합계", n(sumExpenses(input.expenses))]);
-  rows.push([null, null, null, null, null, null, null, null, "입금", null]);
+  rows.push([null, null, null, null, null, null, null, null, "입금", n(t.offTotal)]); // 계좌·제로페이 (붉은 금액)
   rows.push(["합계(소계−지출)", null, null, null, null, null, n(t.subtotal - sumExpenses(input.expenses)), null, "잔액", null]);
   return { rows, redRows };
 }

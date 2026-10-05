@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import MoneyInput from "@/components/MoneyInput";
 import { updateEntryMoney } from "@/lib/ledger";
 import { INSURANCE_KINDS, PAY_NOTES, chipClass, itemLabel, itemSummary, parseWon, sumEntries, won } from "@/lib/ledgerRules";
 import type { LedgerEntryWithItems } from "@/lib/types";
@@ -65,7 +66,7 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
   const [card, setCard] = useState(e.card ? String(e.card) : "");
   const [memo, setMemo] = useState(e.memo ?? "");
   const [offTotal, setOffTotal] = useState(e.off_total);
-  const [payNote, setPayNote] = useState(e.pay_note ?? PAY_NOTES[0]);
+  const [payNote, setPayNote] = useState(e.pay_note ?? "계좌입금");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -105,21 +106,20 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
             ))}
           </select>
         </div>
-        <div><input value={cash} onChange={(x) => setCash(x.target.value)} inputMode="numeric" placeholder="0" className={`${IN} text-right`} /></div>
-        <div><input value={cashReceipt} onChange={(x) => setCashReceipt(x.target.value)} inputMode="numeric" placeholder="0" className={`${IN} text-right`} /></div>
-        <div><input value={card} onChange={(x) => setCard(x.target.value)} inputMode="numeric" placeholder="0" className={`${IN} text-right`} /></div>
+        <div><MoneyInput compact value={cash} onChange={setCash} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} /></div>
+        <div><MoneyInput compact value={cashReceipt} onChange={setCashReceipt} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} /></div>
+        <div><MoneyInput compact value={card} onChange={setCard} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} /></div>
         <div className={`${NUM} font-bold`}>{won(parseWon(cash) + parseWon(cashReceipt) + parseWon(card))}</div>
         <div className="pl-3"><input value={memo} onChange={(x) => setMemo(x.target.value)} placeholder="메모" className={IN} /></div>
         <div className="flex flex-wrap items-center gap-1 text-xs">
-          <label className={`flex items-center gap-1 ${offTotal ? "font-bold text-red-700" : ""}`}>
-            <input type="checkbox" checked={offTotal} onChange={(x) => setOffTotal(x.target.checked)} /> 합계에서 빼기
-          </label>
-          {offTotal && (
-            <select value={payNote} onChange={(x) => setPayNote(x.target.value)} className="h-7 rounded border border-red-300 px-1 text-xs text-red-700">
+          {offTotal ? (
+            <select value={payNote} onChange={(x) => setPayNote(x.target.value)} className="h-7 rounded border border-red-300 px-1 text-xs font-bold text-red-700">
               {PAY_NOTES.map((p) => (
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>
+          ) : (
+            <span className="text-[10px] text-stone-400">금액 옆 ● = 붉은 금액</span>
           )}
         </div>
         <div className="flex flex-col gap-1 text-xs">

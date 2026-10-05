@@ -30,8 +30,8 @@ describe("칸 글", () => {
   it("택배 지역·분할·끝남", () => {
     expect(jobLabel(j({ delivery: "courier", region: "안양", split_no: 1, split_of: 2, status: "done" }))).toBe("김하나-보험(처방)-#1/2-택(안양) o");
   });
-  it("발효 짝은 종류 대신 발효시작/끝", () => {
-    expect(jobLabel(j({ kind: "ferment_start", title: "발효 48만원", delivery: null }))).toBe("김하나-발효시작");
+  it("발효 짝은 종류 대신 발효시작/끝. 직/택은 발효끝(나가는 날)에만", () => {
+    expect(jobLabel(j({ kind: "ferment_start", title: "발효 48만원", delivery: "pickup" }))).toBe("김하나-발효시작");
     expect(jobLabel(j({ kind: "ferment_end", title: "발효 48만원", delivery: "courier", region: "수원" }))).toBe("김하나-발효끝-택(수원)");
   });
   it("묶음·메모는 이름 없이", () => expect(jobLabel(j({ patient_name: "", title: "디스크 100팩", kind: "batch", delivery: null }))).toBe("디스크 100팩"));

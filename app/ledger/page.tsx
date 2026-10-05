@@ -137,6 +137,7 @@ function Board() {
           <Tile label="카드" value={won(total.card)} />
           <Tile label="소계" value={won(total.subtotal)} />
           <Tile label="지출" value={won(exp)} />
+          <Tile label="입금 (계좌·제로페이, 붉은 금액)" value={won(total.offTotal)} />
           <Tile label="합계 (소계 − 지출)" value={won(total.subtotal - exp)} strong />
         </div>
       </div>

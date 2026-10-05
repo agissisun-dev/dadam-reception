@@ -11,7 +11,7 @@ export const GROUP_LABEL: Record<LedgerGroup, string> = {
 export const GROUP_ORDER: LedgerGroup[] = ["decoction", "cabinet", "treatment", "extract", "other"];
 
 /** 구분(보험 종류) 후보. 사용자 지정 2026-10-02. 직접 쳐도 된다. */
-export const INSURANCE_KINDS = ["보험", "일반", "1종지정", "차상1종", "차상2종", "희귀1종", "2종장애", "초진", "재초진", "전화상담"] as const;
+export const INSURANCE_KINDS = ["보험", "일반", "1종", "2종", "1종지정", "차상1종", "차상2종", "희귀1종", "2종장애", "초진", "재초진", "전화상담"] as const;
 
 /** 합계에서 뺄 때 사유 후보: 접수실에 돈은 없지만 현금영수증은 끊는 경우 */
 export const PAY_NOTES = ["제로페이", "서울페이", "계좌입금", "기타"] as const;
@@ -28,6 +28,8 @@ export type ParsedItem = {
   split: number | null; // 분할 수령 횟수
   cabinet_item_id: number | null;
   decoction_kind: DecoctionKind | null;
+  /** (F) = free, 무상으로 드린 것. 약장 나감 사유는 서비스. 접수실 2026-10-05 */
+  free: boolean;
   unknown: boolean;
 };
 
@@ -63,15 +65,23 @@ export function parseNote(raw: string, codes: LedgerCode[]): { items: ParsedItem
     let amount: number | null = null;
     let split: number | null = null;
     let qty = 1;
+    let free = false;
+
+    // "소합원30T(F)"처럼 끝의 괄호 영문 꼬리표: F = 무상(free). 다른 글자는 떼고만 읽는다 (원문에는 남음)
+    let m = rest.match(/\(([a-z]+)\)$/);
+    if (m) {
+      free = m[1] === "f";
+      rest = rest.slice(0, -m[0].length);
+    }
 
     // "보험(처방)*2"처럼 약어 뒤 *N은 N건
-    let m = rest.match(/\*(\d+)$/);
+    m = rest.match(/\*(\d+)$/);
     if (m) {
       qty = Number(m[1]);
       rest = rest.slice(0, -m[0].length);
       const again = byCode.get(rest);
       if (again) {
-        items.push(make(token, again, { qty }));
+        items.push(make(token, again, { qty, free }));
         continue;
       }
     }
@@ -104,11 +114,11 @@ export function parseNote(raw: string, codes: LedgerCode[]): { items: ParsedItem
     if (!found) {
       items.push({
         raw: token, code: token, name: token, group: "other", qty: 1,
-        amount: null, days: null, split: null, cabinet_item_id: null, decoction_kind: null, unknown: true,
+        amount: null, days: null, split: null, cabinet_item_id: null, decoction_kind: null, free, unknown: true,
       });
       continue;
     }
-    items.push(make(token, found, { qty, amount, days, split }));
+    items.push(make(token, found, { qty, amount, days, split, free }));
   }
   return { items, review };
 }
@@ -116,7 +126,7 @@ export function parseNote(raw: string, codes: LedgerCode[]): { items: ParsedItem
 function make(
   raw: string,
   c: LedgerCode,
-  p: { qty: number; amount?: number | null; days?: number | null; split?: number | null },
+  p: { qty: number; amount?: number | null; days?: number | null; split?: number | null; free?: boolean },
 ): ParsedItem {
   return {
     raw,
@@ -129,6 +139,7 @@ function make(
     split: p.split ?? null,
     cabinet_item_id: c.cabinet_item_id,
     decoction_kind: c.decoction_kind,
+    free: p.free ?? false,
     unknown: false,
   };
 }
@@ -194,12 +205,18 @@ export function chipClass(group: LedgerGroup, unknown = false): string {
   return "border-stone-300 bg-white text-stone-700";
 }
 
-/** 줄 목록에 보여 줄 항목 글: "공진단 5" · "향사평위산 2일" · "일반 탕약 42만원 · 2회 분할" */
-export function itemLabel(i: { name: string; qty: number; amount: number | null; days: number | null; split: number | null }): string {
+/** 원문이 (F)로 끝나면 무상 */
+export function isFree(raw: string | null | undefined): boolean {
+  return /\(f\)\s*$/i.test(raw ?? "");
+}
+
+/** 줄 목록에 보여 줄 항목 글: "공진단 5" · "향사평위산 2일" · "일반 탕약 42만원 · 2회 분할" · "소합원 30 무상" */
+export function itemLabel(i: { name: string; qty: number; amount: number | null; days: number | null; split: number | null; raw?: string | null; free?: boolean }): string {
   const parts = [i.name];
   if (i.qty > 1) parts.push(String(i.qty));
   if (i.days) parts.push(`${i.days}일`);
   if (i.amount) parts.push(`${i.amount / 10000}만원`);
   if (i.split) parts.push(`${i.split}회 분할`);
+  if (i.free ?? isFree(i.raw)) parts.push("무상");
   return parts.join(" ");
 }

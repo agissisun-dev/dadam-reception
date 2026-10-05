@@ -48,9 +48,12 @@ export function jobLabel(j: Pick<BrewJob, "patient_name" | "title" | "kind" | "d
   else if (j.kind === "ferment_end") parts.push("발효끝");
   else if (j.title) parts.push(j.title);
   if (j.split_no && j.split_of) parts.push(`#${j.split_no}/${j.split_of}`);
-  if (j.delivery === "pickup") parts.push(j.region ? `직(${j.region})` : "직");
-  else if (j.delivery === "courier") parts.push(j.region ? `택(${j.region})` : "택");
-  else if (j.region) parts.push(j.region);
+  // 직/택은 나가는 날에만 (발효시작 날은 안 붙임 — 접수실 2026-10-05)
+  if (j.kind !== "ferment_start") {
+    if (j.delivery === "pickup") parts.push(j.region ? `직(${j.region})` : "직");
+    else if (j.delivery === "courier") parts.push(j.region ? `택(${j.region})` : "택");
+    else if (j.region) parts.push(j.region);
+  }
   let s = parts.join("-");
   if (j.status === "done") s += " o";
   return s;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseNote, parseWon, sumEntries, sumExpenses, nextSeq, won, itemSummary } from "./ledgerRules";
+import { parseNote, parseWon, sumEntries, sumExpenses, nextSeq, won, itemSummary, isFree, itemLabel } from "./ledgerRules";
 import type { LedgerCode } from "./types";
 
 const c = (code: string, name: string, group: LedgerCode["group"], extra: Partial<LedgerCode> = {}): LedgerCode => ({
@@ -72,6 +72,14 @@ describe("합계·번호·금액", () => {
     expect(sumEntries([{ cash: 1000, cash_receipt: 0, card: 0 }, { cash: 0, cash_receipt: 10500, card: 0, off_total: true }])).toEqual({
       cash: 1000, cash_receipt: 0, card: 0, subtotal: 1000, offTotal: 10500,
     });
+  });
+  it("(F)는 무상(free): 소합원30T(F) → 소합원 30개 무상, 다른 꼬리표는 떼기만", () => {
+    expect(parseNote("소합원30T(F)", CODES).items[0]).toMatchObject({ name: "소합원", qty: 30, free: true, unknown: false, raw: "소합원30T(F)" });
+    expect(parseNote("소합원3T", CODES).items[0]).toMatchObject({ qty: 3, free: false });
+    expect(parseNote("소합원3T(x)", CODES).items[0]).toMatchObject({ qty: 3, free: false, unknown: false });
+    expect(isFree("소합원30T(F)")).toBe(true);
+    expect(isFree("소합원30T")).toBe(false);
+    expect(itemLabel({ name: "소합원", qty: 30, amount: null, days: null, split: null, raw: "소합원30T(F)" })).toBe("소합원 30 무상");
   });
   it("약어 뒤 *N은 N건: 보험(처방)*2 → 보험 탕약 2건, mo-0.6*3 → mo 3건(용량 0.6은 글자로만)", () => {
     expect(parseNote("보험(처방)*2", CODES).items[0]).toMatchObject({ name: "보험 탕약", qty: 2 });

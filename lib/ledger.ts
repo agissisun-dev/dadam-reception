@@ -229,7 +229,7 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
         const mv = await recordOut({
           item_id: i.cabinet_item_id,
           qty: i.qty,
-          purpose: input.review ? "review" : "sale",
+          purpose: i.free ? "service" : input.review ? "review" : "sale", // (F) 무상 → 서비스
           patient_id: patientId,
           patient_name: name,
           staff_name: input.staff_name,

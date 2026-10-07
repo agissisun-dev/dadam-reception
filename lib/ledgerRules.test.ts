@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseNote, parseWon, sumEntries, sumExpenses, nextSeq, won, itemSummary, isFree, itemLabel } from "./ledgerRules";
+import { parseNote, parseWon, sumEntries, sumExpenses, nextSeq, won, itemSummary, isFree, itemLabel, daySummary } from "./ledgerRules";
 import type { LedgerCode } from "./types";
 
 const c = (code: string, name: string, group: LedgerCode["group"], extra: Partial<LedgerCode> = {}): LedgerCode => ({
@@ -61,6 +61,19 @@ describe("parseNote — 기타 칸 약어 → 항목", () => {
   it("대소문자·공백 무시, 빈 조각 무시", () => {
     expect(parseNote(" v , ,전 ", CODES).items.map((i) => i.name)).toEqual(["약침", "전침"]);
     expect(parseNote("", CODES).items).toEqual([]);
+  });
+});
+
+describe("daySummary — 아래쪽 합계·입금", () => {
+  it("입금 = 현금 + 현영 − 지출 (카드·붉은 금액 제외), 지출이 크면 마이너스", () => {
+    const s = daySummary(
+      [{ cash: 0, cash_receipt: 1900, card: 647000 }, { cash: 0, cash_receipt: 10500, card: 0, off_total: true }],
+      [{ amount: 28400 }],
+    );
+    expect(s).toMatchObject({ subtotal: 648900, offTotal: 10500, expenses: 28400, total: 620500, deposit: 1900 - 28400 });
+  });
+  it("현금이 지출보다 크면 플러스", () => {
+    expect(daySummary([{ cash: 50000, cash_receipt: 0, card: 0 }], [{ amount: 10000 }]).deposit).toBe(40000);
   });
 });
 

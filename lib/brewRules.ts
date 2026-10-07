@@ -139,6 +139,69 @@ export function fermentMidDays(jobs: BrewJob[]): { day: string; jobId: number; l
   return out;
 }
 
+/** 주 화면의 칸 하나: 실제 칸(job) · 발효중 표시(mid) · 빈칸(null) */
+export type WeekCell = { type: "job"; job: BrewJob } | { type: "mid"; jobId: number; label: string; clinic: "S" | "N" };
+export type WeekRow = (WeekCell | null)[];
+
+/**
+ * 한 주(월~토) 칸 배치. **발효시작·발효중·발효끝은 같은 줄에 나란히**(접수실 2026-10-06: 아래로 떨어지면 보기 어렵다).
+ * 줄은 오전/오후로 나뉘고, 발효 짝은 시작 칸의 오전/오후를 따른다. 다른 칸은 그날 가장 위 빈 줄에.
+ */
+export function layoutWeek(days: string[], jobs: BrewJob[]): { am: WeekRow[]; pm: WeekRow[] } {
+  const col = new Map(days.map((d, i) => [d, i]));
+  const byId = new Map(jobs.map((j) => [j.id, j]));
+  const rows = { am: [] as WeekRow[], pm: [] as WeekRow[] };
+  const handled = new Set<number>();
+
+  const place = (slot: "am" | "pm", cells: { day: string; cell: WeekCell }[]) => {
+    const cols = cells.map((c) => col.get(c.day)).filter((i): i is number => i !== undefined);
+    if (cols.length === 0) return;
+    const list = rows[slot];
+    let r = 0;
+    while (list[r] && cols.some((i) => list[r][i] !== null)) r++;
+    if (!list[r]) list[r] = days.map(() => null);
+    for (const c of cells) {
+      const i = col.get(c.day);
+      if (i !== undefined) list[r][i] = c.cell;
+    }
+  };
+  const mids = (start: BrewJob, endDay: string): { day: string; cell: WeekCell }[] => {
+    const out: { day: string; cell: WeekCell }[] = [];
+    for (let d = addDays(start.day!, 1); d < endDay; d = addDays(d, 1)) {
+      out.push({ day: d, cell: { type: "mid", jobId: start.id, label: start.patient_name || start.title, clinic: start.clinic ?? "S" } });
+    }
+    return out;
+  };
+
+  const sorted = [...jobs]
+    .filter((j) => j.day && col.has(j.day) && !handled.has(j.id))
+    .sort((a, b) => a.day!.localeCompare(b.day!) || a.slot.localeCompare(b.slot) || a.sort_order - b.sort_order || a.id - b.id);
+
+  for (const j of sorted) {
+    if (handled.has(j.id)) continue;
+    handled.add(j.id);
+    if (j.kind === "ferment_start") {
+      const end = j.pair_id ? byId.get(j.pair_id) : undefined;
+      const endDay = end?.day ?? fermentEndDay(j.day!);
+      const cells = [{ day: j.day!, cell: { type: "job", job: j } as WeekCell }, ...mids(j, endDay)];
+      if (end?.day && col.has(end.day)) {
+        cells.push({ day: end.day, cell: { type: "job", job: end } });
+        handled.add(end.id);
+      }
+      place(j.slot, cells);
+    } else if (j.kind === "ferment_end") {
+      // 시작이 지난주(이 주에 없음)인 발효끝: 이 주에 걸친 발효중 + 끝 칸
+      const start = jobs.find((s) => s.kind === "ferment_start" && (s.pair_id === j.id || j.pair_id === s.id));
+      const cells = start?.day ? mids(start, j.day!).filter((c) => col.has(c.day)) : [];
+      cells.push({ day: j.day!, cell: { type: "job", job: j } });
+      place(j.slot, cells);
+    } else {
+      place(j.slot, [{ day: j.day!, cell: { type: "job", job: j } }]);
+    }
+  }
+  return rows;
+}
+
 export function dayHeader(iso: string): string {
   return `${weekdayKo(iso)} ${Number(iso.slice(5, 7))}/${Number(iso.slice(8))}`;
 }

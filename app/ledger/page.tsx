@@ -21,7 +21,7 @@ import {
   loadDay,
 } from "@/lib/ledger";
 import { downloadDayExcel, downloadMonthExcel } from "@/lib/ledgerExport";
-import { nextSeq, parseWon, sumEntries, sumExpenses, won } from "@/lib/ledgerRules";
+import { daySummary, nextSeq, parseWon, won } from "@/lib/ledgerRules";
 import { listPatients } from "@/lib/patients";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
 import type { CabinetItem, LedgerCode, LedgerDay, LedgerEntryWithItems, LedgerExpense, Patient } from "@/lib/types";
@@ -29,11 +29,14 @@ import type { CabinetItem, LedgerCode, LedgerDay, LedgerEntryWithItems, LedgerEx
 const BTN = "rounded border border-stone-300 bg-white px-3 py-1.5 text-sm";
 const PRIMARY = "rounded bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-50";
 
-function Tile({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+/** 아래쪽 셈 칸. negative = 입금이 마이너스(지출이 현금보다 큼), red = 붉은 금액 */
+function Tile({ label, value, strong, negative, red }: { label: string; value: string; strong?: boolean; negative?: boolean; red?: boolean }) {
+  const box = negative ? "border-red-400 bg-red-50" : red ? "border-red-200 bg-white" : strong ? "border-[#16863b] bg-[#f0f7f3]" : "border-stone-200 bg-white";
+  const num = negative || red ? "text-red-700" : strong ? "text-[#0f3d23]" : "";
   return (
-    <div className={`min-w-[110px] rounded-lg border px-3 py-2 ${strong ? "border-[#16863b] bg-[#f0f7f3]" : "border-stone-200 bg-white"}`}>
+    <div className={`min-w-[110px] rounded-lg border px-3 py-2 ${box}`}>
       <p className="text-[11px] text-stone-500">{label}</p>
-      <p className={`text-lg font-bold tabular-nums ${strong ? "text-[#0f3d23]" : ""}`}>{value}</p>
+      <p className={`text-lg font-bold tabular-nums ${num}`}>{value}</p>
     </div>
   );
 }
@@ -113,8 +116,8 @@ function Board() {
   const today = todayISO();
   /** 마감했어도 그날 밤 12시까지는 고칠 수 있다. 다음 날부터 잠긴다(정정 줄만). */
   const locked = closed && day < today;
-  const total = sumEntries(entries);
-  const exp = sumExpenses(expenses);
+  const total = daySummary(entries, expenses);
+  const exp = total.expenses;
   const seq = nextSeq(entries);
 
   return (
@@ -131,15 +134,9 @@ function Board() {
             {locked ? `마감됨 · ${dayRow?.closed_by ?? ""} · 정정 줄만` : closed ? `마감됨 · ${dayRow?.closed_by ?? ""} · 오늘 안에는 고칠 수 있음` : "마감 전"}
           </span>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Tile label="현금" value={won(total.cash)} />
-          <Tile label="현영" value={won(total.cash_receipt)} />
-          <Tile label="카드" value={won(total.card)} />
-          <Tile label="소계" value={won(total.subtotal)} />
-          <Tile label="지출" value={won(exp)} />
-          <Tile label="입금 (계좌·제로페이, 붉은 금액)" value={won(total.offTotal)} />
-          <Tile label="합계 (소계 − 지출)" value={won(total.subtotal - exp)} strong />
-        </div>
+        <span className="text-sm text-stone-500">
+          소계 {won(total.subtotal)} · 합계 {won(total.total)} <span className="text-xs">(자세한 셈은 표 아래)</span>
+        </span>
       </div>
 
       {error && <p className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-700">{error}</p>}
@@ -198,6 +195,19 @@ function Board() {
           }}
           onChanged={load}
         />
+      )}
+
+      {!loading && (
+        <section className="flex flex-wrap justify-end gap-2" aria-label="하루 셈">
+          <Tile label="현금" value={won(total.cash)} />
+          <Tile label="현영" value={won(total.cash_receipt)} />
+          <Tile label="카드" value={won(total.card)} />
+          <Tile label="소계" value={won(total.subtotal)} />
+          <Tile label="지출" value={won(exp)} />
+          <Tile label="합계 (소계 − 지출)" value={won(total.total)} strong />
+          <Tile label="입금 (현금+현영 − 지출)" value={won(total.deposit)} strong negative={total.deposit < 0} />
+          {total.offTotal > 0 && <Tile label="계좌·제로페이 (붉은 금액, 입금엔 안 셈)" value={won(total.offTotal)} red />}
+        </section>
       )}
 
       {correcting && (

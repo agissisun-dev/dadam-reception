@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayCounts, defaultReceiveDay, fermentEndDay, fermentMidDays, jobLabel, planJobsFromLedger, weekDays, weekMonday } from "./brewRules";
+import { dayCounts, defaultReceiveDay, fermentEndDay, fermentMidDays, jobLabel, layoutWeek, planJobsFromLedger, weekDays, weekMonday } from "./brewRules";
 import type { BrewJob } from "./types";
 
 describe("주 계산", () => {
@@ -66,6 +66,40 @@ describe("fermentMidDays", () => {
       { ...base, id: 2, day: "2026-10-10", kind: "ferment_end", patient_name: "김하나", pair_id: 1 },
     ];
     expect(fermentMidDays(jobs)).toEqual([{ day: "2026-10-09", jobId: 1, label: "김하나", clinic: "S" }]);
+  });
+});
+
+describe("layoutWeek — 발효시작·발효중·발효끝은 같은 줄", () => {
+  const base = { slot: "am" as const, patient_id: null, title: "탕약일반", delivery: null, region: null, pouch: null, split_no: null, split_of: null, memo: null, max_jobs: null, status: "planned" as const, done_at: null, done_by: null, receive_day: null, prescription_id: null, ledger_entry_id: null, sort_order: 0, staff_name: "", created_at: "", updated_at: "", pair_id: null };
+  const days = weekDays("2026-10-05");
+  it("화 발효시작 → 수 발효중 → 목 발효끝이 한 줄, 수요일 다른 탕약은 다음 줄", () => {
+    const jobs: BrewJob[] = [
+      { ...base, id: 1, day: "2026-10-06", kind: "ferment_start", patient_name: "이명자", pair_id: 2 },
+      { ...base, id: 2, day: "2026-10-08", kind: "ferment_end", patient_name: "이명자", pair_id: 1 },
+      { ...base, id: 3, day: "2026-10-07", kind: "decoction", patient_name: "박소영" },
+      { ...base, id: 4, day: "2026-10-06", kind: "ferment_start", patient_name: "이혜정", pair_id: 5 },
+      { ...base, id: 5, day: "2026-10-08", kind: "ferment_end", patient_name: "이혜정", pair_id: 4 },
+    ];
+    const { am, pm } = layoutWeek(days, jobs);
+    expect(pm).toEqual([]);
+    expect(am).toHaveLength(3);
+    const names = (r: (typeof am)[number]) => r.map((c) => (c === null ? "" : c.type === "mid" ? `${c.label}중` : `${c.job.patient_name}${c.job.kind === "ferment_start" ? "시작" : c.job.kind === "ferment_end" ? "끝" : ""}`));
+    expect(names(am[0])).toEqual(["", "이명자시작", "이명자중", "이명자끝", "", ""]);
+    expect(names(am[1])).toEqual(["", "이혜정시작", "이혜정중", "이혜정끝", "", ""]);
+    expect(names(am[2])).toEqual(["", "", "박소영", "", "", ""]);
+  });
+  it("오후 시작 발효는 오후 줄에 짝째로, 지난주에 시작한 발효끝은 이 주의 발효중과 함께", () => {
+    const jobs: BrewJob[] = [
+      { ...base, id: 1, day: "2026-10-08", slot: "pm", kind: "ferment_start", patient_name: "김하나", pair_id: 2 },
+      { ...base, id: 2, day: "2026-10-10", kind: "ferment_end", patient_name: "김하나", pair_id: 1 },
+      { ...base, id: 3, day: "2026-10-03", kind: "ferment_start", patient_name: "최둘", pair_id: 4 }, // 지난주 토요일 시작 → 월 10/5 끝
+      { ...base, id: 4, day: "2026-10-05", kind: "ferment_end", patient_name: "최둘", pair_id: 3 },
+    ];
+    const { am, pm } = layoutWeek(days, jobs);
+    expect(pm).toHaveLength(1);
+    expect(pm[0].map((c) => c && c.type)).toEqual([null, null, null, "job", "mid", "job"]);
+    expect(am).toHaveLength(1);
+    expect(am[0][0]).toMatchObject({ type: "job", job: { id: 4 } });
   });
 });
 

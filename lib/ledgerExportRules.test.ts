@@ -27,6 +27,9 @@ describe("dayBlock — 일일장부 모양", () => {
     expect(total.slice(3, 7)).toEqual([11000, null, 24000, 35000]);
     expect(total[8]).toBe("지출 합계");
     expect(total[9]).toBe(11600);
+    const deposit = rows[rows.length - 2];
+    expect(deposit[8]).toBe("입금");
+    expect(deposit[9]).toBe(11000 - 11600); // 현금 + 현영 − 지출, 마이너스 가능
     const last = rows[rows.length - 1];
     expect(last[0]).toBe("합계(소계−지출)");
     expect(last[6]).toBe(35000 - 11600);

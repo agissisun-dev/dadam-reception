@@ -164,6 +164,18 @@ export function sumExpenses(expenses: { amount: number }[]): number {
   return expenses.reduce((s, e) => s + e.amount, 0);
 }
 
+/**
+ * 하루 마무리 셈(엑셀 아래쪽 합계·입금 줄, 접수실 2026-10-06 "맨 아래쪽에"):
+ * total = 소계 − 지출(마이너스 안 됨이 보통) ·
+ * deposit(입금) = **실제 접수실에 들어온 돈** = 현금 + 현영 − 지출. 붉은 금액(계좌·제로페이)과 카드는 손에 없으니 뺀다.
+ * 지출이 현금보다 크면 **마이너스**가 된다(사용자 2026-10-06 "현장에 들어온 돈은 마이너스일 때가 있다").
+ */
+export function daySummary(entries: Parameters<typeof sumEntries>[0], expenses: { amount: number }[]) {
+  const t = sumEntries(entries);
+  const exp = sumExpenses(expenses);
+  return { ...t, expenses: exp, total: t.subtotal - exp, deposit: t.cash + t.cash_receipt - exp };
+}
+
 /** 그날 다음 번호: 가장 큰 번호 + 1 */
 export function nextSeq(entries: { seq: number }[]): number {
   return entries.reduce((m, e) => Math.max(m, e.seq), 0) + 1;

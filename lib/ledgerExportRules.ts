@@ -1,5 +1,5 @@
 import { weekdayKo } from "./dates";
-import { sumEntries, sumExpenses } from "./ledgerRules";
+import { daySummary } from "./ledgerRules";
 
 /** 엑셀 한 칸 값 */
 export type Cell = string | number | null;
@@ -67,10 +67,11 @@ export function dayBlock(input: DayBlockInput): DayBlock {
     const x = input.expenses[i];
     rows.push([null, null, null, null, null, null, null, null, x.title, x.amount]);
   }
-  const t = sumEntries(input.entries);
-  rows.push(["합계", null, null, n(t.cash), n(t.cash_receipt), n(t.card), n(t.subtotal), null, "지출 합계", n(sumExpenses(input.expenses))]);
-  rows.push([null, null, null, null, null, null, null, null, "입금", n(t.offTotal)]); // 계좌·제로페이 (붉은 금액)
-  rows.push(["합계(소계−지출)", null, null, null, null, null, n(t.subtotal - sumExpenses(input.expenses)), null, "잔액", null]);
+  const t = daySummary(input.entries, input.expenses);
+  rows.push(["합계", null, null, n(t.cash), n(t.cash_receipt), n(t.card), n(t.subtotal), null, "지출 합계", n(t.expenses)]);
+  // 입금 = 현금 + 현영 − 지출 (실제 들어온 돈, 마이너스 가능). 붉은 금액은 그 옆에 따로.
+  rows.push([null, null, null, null, null, null, null, t.offTotal ? `계좌·제로페이 ${t.offTotal}` : null, "입금", t.deposit]);
+  rows.push(["합계(소계−지출)", null, null, null, null, null, n(t.total), null, "잔액", null]);
   return { rows, redRows };
 }
 

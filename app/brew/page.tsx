@@ -6,7 +6,7 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import StaffSelect from "@/components/StaffSelect";
 import { createJobs, deleteJob, listJobs, listUnscheduled, listWeekdayRules, markDone, saveWeekdayRule, updateJob } from "@/lib/brew";
-import { KIND_LABEL, POUCHES, dayCounts, dayHeader, fermentMidDays, jobLabel, planJobsFromLedger, weekDays, weekMonday } from "@/lib/brewRules";
+import { KIND_LABEL, POUCHES, dayCounts, dayHeader, jobLabel, layoutWeek, planJobsFromLedger, weekDays, weekMonday, type WeekRow } from "@/lib/brewRules";
 import { CLINICS, clinicInfo } from "@/lib/clinic";
 import { addDays, todayISO } from "@/lib/dates";
 import { holidayLabel, isClinicClosed } from "@/lib/holidays";
@@ -359,8 +359,6 @@ function Board() {
 
   const weeks = [weekDays(monday), weekDays(addDays(monday, 7))];
   const ruleOf = (iso: string) => rules.find((r) => r.weekday === new Date(iso + "T00:00:00").getDay());
-  /** 발효 중인 날(시작과 끝 사이)에 보여 줄 표시. 저장하지 않고 화면에서만 계산한다. */
-  const mids = fermentMidDays(jobs);
   const real = jobs.filter((j) => j.kind !== "note" && j.day && j.day <= addDays(monday, 5));
   const doneCount = real.filter((j) => j.status === "done").length;
 
@@ -430,33 +428,47 @@ function Board() {
                 );
               })}
             </div>
-            <div className="grid min-w-[900px] grid-cols-6" style={{ minHeight: wi === 0 ? 260 : 180 }}>
-              {days.map((iso) => {
-                const am = jobs.filter((j) => j.day === iso && j.slot === "am");
-                const pm = jobs.filter((j) => j.day === iso && j.slot === "pm");
-                return (
-                  <div key={iso} className={`flex flex-col gap-1 border-r border-stone-100 p-1.5 last:border-r-0 ${isClinicClosed(iso) ? "bg-stone-50" : ""}`}>
-                    {am.map((j) => (
-                      <Card key={j.id} j={j} staff={staff} onChanged={changed} />
-                    ))}
-                    {mids
-                      .filter((m) => m.day === iso)
-                      .map((m) => (
-                        <div key={`mid-${m.jobId}`} className="rounded border border-dashed px-2 py-1 text-xs" style={{ borderColor: clinicInfo(m.clinic).color, color: clinicInfo(m.clinic).text, background: clinicInfo(m.clinic).bg, opacity: 0.8 }}>
-                          {m.label}-발효중
+            {/* 줄 단위 배치: 발효시작·발효중·발효끝이 같은 줄에 나란히 (접수실 2026-10-06) */}
+            {(() => {
+              const lay = layoutWeek(days, jobs);
+              const cellBg = (iso: string) => (isClinicClosed(iso) ? "bg-stone-50" : "");
+              const renderRow = (row: WeekRow, key: string) => (
+                <div key={key} className="grid min-w-[900px] grid-cols-6">
+                  {row.map((c, i) => (
+                    <div key={days[i]} className={`border-r border-stone-100 px-1.5 py-0.5 last:border-r-0 ${cellBg(days[i])}`}>
+                      {c?.type === "job" && <Card j={c.job} staff={staff} onChanged={changed} />}
+                      {c?.type === "mid" && (
+                        <div className="rounded border border-dashed px-2 py-1 text-xs" style={{ borderColor: clinicInfo(c.clinic).color, color: clinicInfo(c.clinic).text, background: clinicInfo(c.clinic).bg, opacity: 0.8 }}>
+                          {c.label}-발효중
                         </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+              return (
+                <div className="flex flex-col py-1" style={{ minHeight: wi === 0 ? 260 : 180 }}>
+                  {lay.am.map((r, i) => renderRow(r, `am-${i}`))}
+                  {lay.pm.length > 0 && (
+                    <div className="grid min-w-[900px] grid-cols-6">
+                      {days.map((iso) => (
+                        <div key={iso} className={`border-r border-stone-100 py-0.5 text-center text-[10px] text-stone-400 last:border-r-0 ${cellBg(iso)}`}>↓(오후)↓</div>
                       ))}
-                    {pm.length > 0 && <div className="py-0.5 text-center text-[10px] text-stone-400">↓(오후)↓</div>}
-                    {pm.map((j) => (
-                      <Card key={j.id} j={j} staff={staff} onChanged={changed} />
+                    </div>
+                  )}
+                  {lay.pm.map((r, i) => renderRow(r, `pm-${i}`))}
+                  <div className="mt-auto grid min-w-[900px] grid-cols-6">
+                    {days.map((iso) => (
+                      <div key={iso} className={`border-r border-stone-100 p-1.5 last:border-r-0 ${cellBg(iso)}`}>
+                        <button type="button" onClick={() => setAdding(iso)} className="w-full rounded border border-dashed border-stone-300 py-1 text-[11px] text-stone-400 hover:bg-stone-50">
+                          + 여기에
+                        </button>
+                      </div>
                     ))}
-                    <button type="button" onClick={() => setAdding(iso)} className="mt-auto rounded border border-dashed border-stone-300 py-1 text-[11px] text-stone-400 hover:bg-stone-50">
-                      + 여기에
-                    </button>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })()}
           </section>
         ))
       )}

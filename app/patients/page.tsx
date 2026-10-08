@@ -28,7 +28,7 @@ function List() {
   return (
     <main className="mx-auto max-w-2xl space-y-4 p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">환자</h1>
+        <h1 className="text-xl font-bold">환자등록</h1>
         <Link href="/patients/new" className="rounded bg-stone-900 px-3 py-1.5 text-sm text-white">
           환자 등록
         </Link>

@@ -29,10 +29,10 @@ import type { CabinetItem, LedgerCode, LedgerDay, LedgerEntryWithItems, LedgerEx
 const BTN = "rounded border border-stone-300 bg-white px-3 py-1.5 text-sm";
 const PRIMARY = "rounded bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-50";
 
-/** 아래쪽 셈 칸. negative = 입금이 마이너스(지출이 현금보다 큼), red = 붉은 금액 */
-function Tile({ label, value, strong, negative, red }: { label: string; value: string; strong?: boolean; negative?: boolean; red?: boolean }) {
-  const box = negative ? "border-red-400 bg-red-50" : red ? "border-red-200 bg-white" : strong ? "border-[#16863b] bg-[#f0f7f3]" : "border-stone-200 bg-white";
-  const num = negative || red ? "text-red-700" : strong ? "text-[#0f3d23]" : "";
+/** 아래쪽 셈 칸. negative = 입금이 마이너스(지출이 현금보다 큼) */
+function Tile({ label, value, strong, negative }: { label: string; value: string; strong?: boolean; negative?: boolean }) {
+  const box = negative ? "border-red-400 bg-red-50" : strong ? "border-[#16863b] bg-[#f0f7f3]" : "border-stone-200 bg-white";
+  const num = negative ? "text-red-700" : strong ? "text-[#0f3d23]" : "";
   return (
     <div className={`min-w-[110px] rounded-lg border px-3 py-2 ${box}`}>
       <p className="text-[11px] text-stone-500">{label}</p>
@@ -205,8 +205,7 @@ function Board() {
           <Tile label="소계" value={won(total.subtotal)} />
           <Tile label="지출" value={won(exp)} />
           <Tile label="합계 (소계 − 지출)" value={won(total.total)} strong />
-          <Tile label="입금 (현금+현영 − 지출)" value={won(total.deposit)} strong negative={total.deposit < 0} />
-          {total.offTotal > 0 && <Tile label="계좌·제로페이 (붉은 금액, 입금엔 안 셈)" value={won(total.offTotal)} red />}
+          <Tile label="입금 (현금+현영(붉은 금액 포함) − 지출)" value={won(total.deposit)} strong negative={total.deposit < 0} />
         </section>
       )}
 

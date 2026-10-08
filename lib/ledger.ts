@@ -334,6 +334,21 @@ export async function deleteEntry(entry: LedgerEntryWithItems, staff: string): P
   await deleteJobsOfEntry(entry.id);
   const { error } = await sb.from("ledger_entries").delete().eq("id", entry.id);
   if (error) fail("장부 줄 삭제", error.message.includes("row-level") ? "마감된 날은 지울 수 없습니다." : error.message);
+  await renumberAfterDelete(entry.day, entry.seq);
+}
+
+/**
+ * 줄을 지우면 뒤 번호를 하나씩 당겨 1·2·3…이 이어지게 한다(접수실 2026-10-08: 지우고 다시 넣으면 번호가 건너뛰어 보기 불편).
+ * 작은 번호부터 차례로 고쳐야 (clinic, day, seq) 유일 조건에 안 걸린다.
+ */
+export async function renumberAfterDelete(day: string, deletedSeq: number): Promise<void> {
+  const sb = getSupabase();
+  const { data, error } = await sb.from("ledger_entries").select("id, seq").eq("day", day).gt("seq", deletedSeq).order("seq");
+  if (error) fail("번호 정리", error.message);
+  for (const r of (data ?? []) as { id: number; seq: number }[]) {
+    const { error: e } = await sb.from("ledger_entries").update({ seq: r.seq - 1 }).eq("id", r.id);
+    if (e) fail("번호 정리", e.message);
+  }
 }
 
 async function cabinetItemOfMove(moveId: number): Promise<number | null> {

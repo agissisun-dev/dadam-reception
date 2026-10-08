@@ -16,13 +16,20 @@ const MENU: { href: string; label: string }[] = [
   { href: "/brew", label: "약대장" },
   { href: "/appointments", label: "예약" },
   { href: "/happy-calls", label: "해피콜" },
-  { href: "/patients", label: "환자" },
-  { href: "/cabinet", label: "약장" },
+  { href: "/patients", label: "환자등록" },
+  { href: "/cabinet", label: "재고현황" },
   { href: "/tasks/new", label: "업무 등록" },
   { href: "/templates", label: "문구 틀" },
   { href: "/history", label: "지난 기록" },
   { href: "/stats", label: "현황" },
 ];
+
+/** 로고 글: 병원별 (접수실 2026-10-08 "다담S접수실"). 병원을 아직 모르면 공통 이름. */
+export function appTitle(clinic: ClinicCode | null): string {
+  if (clinic === "S") return "다담S 접수실";
+  if (clinic === "N") return "노원다담 접수실";
+  return "다담 접수실";
+}
 
 const MORE: { href: string; label: string }[] = [
   { href: "/weekly", label: "주간 관리" },
@@ -64,7 +71,7 @@ export default function AppHeader() {
     <>
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-44 flex-col border-r border-stone-200 bg-white md:flex">
         <Link href="/" className={`px-4 py-4 text-lg font-bold ${isActive("/") ? "text-[#16863b]" : ""}`}>
-          다담 접수실
+          {appTitle(clinic)}
           <span className="block text-[11px] font-normal text-stone-500">첫 화면 · 달력</span>
           {info && (
             <span className="mt-1 inline-block rounded px-2 py-0.5 text-[11px] font-bold" style={{ background: info.bg, color: info.text, border: `1px solid ${info.color}` }}>
@@ -100,7 +107,7 @@ export default function AppHeader() {
 
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 bg-white px-4 py-3 md:hidden">
         <Link href="/" className="text-lg font-bold">
-          다담 접수실{info ? <span className="ml-2 text-xs font-normal" style={{ color: info.text }}>{info.short}</span> : null}
+          {appTitle(clinic)}{info ? <span className="ml-2 text-xs font-normal" style={{ color: info.text }}>{info.short}</span> : null}
         </Link>
         <nav className="flex flex-wrap items-center gap-1.5 text-sm">
           {[...MENU, ...MORE].map((m) => (

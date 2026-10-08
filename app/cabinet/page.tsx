@@ -137,7 +137,7 @@ function Board() {
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-xl font-bold">약장</h1>
+        <h1 className="text-xl font-bold">재고현황 <span className="text-sm font-normal text-stone-500">(약장)</span></h1>
         <div className="flex items-baseline gap-3">
           <button className={BTN} onClick={() => setManage((v) => !v)}>
             {manage ? "품목 관리 닫기" : "품목 관리"}

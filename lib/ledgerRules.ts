@@ -146,10 +146,11 @@ function make(
 
 /** 그날 합계. 합계에서 빼기(off_total) 줄은 따로 모아 offTotal로 돌려준다. */
 export function sumEntries(entries: { cash: number; cash_receipt: number; card: number; off_total?: boolean }[]) {
-  const t = { cash: 0, cash_receipt: 0, card: 0, subtotal: 0, offTotal: 0 };
+  const t = { cash: 0, cash_receipt: 0, card: 0, subtotal: 0, offTotal: 0, offCash: 0 };
   for (const e of entries) {
     if (e.off_total) {
       t.offTotal += e.cash + e.cash_receipt + e.card;
+      t.offCash += e.cash + e.cash_receipt; // 붉은 금액 중 현금·현영 칸 (입금에 셈)
       continue;
     }
     t.cash += e.cash;
@@ -167,13 +168,14 @@ export function sumExpenses(expenses: { amount: number }[]): number {
 /**
  * 하루 마무리 셈(엑셀 아래쪽 합계·입금 줄, 접수실 2026-10-06 "맨 아래쪽에"):
  * total = 소계 − 지출(마이너스 안 됨이 보통) ·
- * deposit(입금) = **실제 접수실에 들어온 돈** = 현금 + 현영 − 지출. 붉은 금액(계좌·제로페이)과 카드는 손에 없으니 뺀다.
- * 지출이 현금보다 크면 **마이너스**가 된다(사용자 2026-10-06 "현장에 들어온 돈은 마이너스일 때가 있다").
+ * deposit(입금) = **병원에 들어온 돈** = 현금 + 현영 **(붉은 금액인 계좌입금·제로페이 포함)** − 지출. 카드는 뺀다.
+ * 지출이 크면 **마이너스**가 된다(사용자 2026-10-06 "현장에 들어온 돈은 마이너스일 때가 있다").
+ * 붉은 금액은 합계(소계)에서는 빠지지만 입금에는 들어간다(접수실 2026-10-08).
  */
 export function daySummary(entries: Parameters<typeof sumEntries>[0], expenses: { amount: number }[]) {
   const t = sumEntries(entries);
   const exp = sumExpenses(expenses);
-  return { ...t, expenses: exp, total: t.subtotal - exp, deposit: t.cash + t.cash_receipt - exp };
+  return { ...t, expenses: exp, total: t.subtotal - exp, deposit: t.cash + t.cash_receipt + t.offCash - exp };
 }
 
 /** 그날 다음 번호: 가장 큰 번호 + 1 */

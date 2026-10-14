@@ -392,7 +392,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
       <div className="mt-2 flex flex-wrap items-center gap-3">
         {offTotal ? (
           <span className="flex items-center gap-1.5 text-xs font-bold text-red-700">
-            붉은 금액 (합계에서 뺌)
+            붉은 금액 (합계에 포함)
             <select value={payNote} onChange={(e) => setPayNote(e.target.value)} className="h-8 rounded border border-red-300 px-2 text-xs font-normal text-red-700">
               {PAY_NOTES.map((p) => (
                 <option key={p} value={p}>{p}</option>
@@ -400,7 +400,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
             </select>
           </span>
         ) : (
-          <span className="text-[11px] text-stone-400">금액 칸 옆 ● 를 누르면 붉은 금액(계좌입금·제로페이)으로 바뀌어 합계에서 빠집니다.</span>
+          <span className="text-[11px] text-stone-400">금액 칸 옆 ● 를 누르면 붉은 금액(계좌입금·제로페이)으로 표시됩니다. 합계에는 그대로 들어갑니다.</span>
         )}
         <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="메모 (선택)" className="h-8 min-w-[160px] flex-1 rounded border border-stone-200 px-2 text-xs" />
         <span className="text-xs text-stone-500">처리자 {staff}</span>

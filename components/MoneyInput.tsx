@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * 금액 칸 + 오른쪽 작은 ● 단추. ●를 누르면 금액이 붉게 되고(계좌입금·제로페이처럼 접수실에 돈이 없는 줄),
- * 그 줄은 그날 합계에서 빠진다. 엑셀에서 붉은 글씨로 적던 것 (접수실 2026-10-05).
+ * 금액 칸 + 오른쪽 작은 ● 단추. ●를 누르면 금액이 붉게 된다(계좌입금·제로페이처럼 접수실에 현금이 없는 줄).
+ * 엑셀에서 붉은 글씨로 적던 것 (접수실 2026-10-05). 붉은 금액도 합계에는 들어간다 (접수실 2026-10-14).
  */
 export default function MoneyInput({
   label,
@@ -34,7 +34,7 @@ export default function MoneyInput({
         <button
           type="button"
           onClick={onToggleRed}
-          title={red ? "붉은 금액 풀기 (합계에 다시 넣기)" : "붉은 금액으로 (계좌입금·제로페이 — 합계에서 뺌)"}
+          title={red ? "붉은 금액 풀기" : "붉은 금액으로 (계좌입금·제로페이 표시, 합계에는 포함)"}
           aria-label={red ? "붉은 금액 풀기" : "붉은 금액으로"}
           className={`absolute right-1.5 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border text-[9px] leading-none ${red ? "border-red-600 bg-red-600 text-white" : "border-red-300 bg-white text-red-300 hover:border-red-500 hover:text-red-500"}`}
         >

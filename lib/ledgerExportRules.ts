@@ -56,8 +56,9 @@ export function dayBlock(input: DayBlockInput): DayBlock {
       row[3] = n(e.cash);
       row[4] = n(e.cash_receipt);
       row[5] = n(e.card);
-      row[6] = e.off_total ? e.pay_note || "합계 제외" : n(sub); // 엑셀처럼 소계 칸에 "서울페이" 식으로
-      row[7] = e.kind === "correction" ? `정정: ${e.correction_reason ?? ""}` : e.note_raw || null;
+      row[6] = n(sub); // 붉은 금액도 소계 칸에 금액 (접수실 2026-10-14). 사유는 기타 칸 앞에
+      const note = e.kind === "correction" ? `정정: ${e.correction_reason ?? ""}` : e.note_raw || null;
+      row[7] = e.off_total ? [e.pay_note || "붉은 금액", note].filter(Boolean).join(" · ") : note;
       if (e.off_total) redRows.push(rows.length);
     }
     rows.push(row);

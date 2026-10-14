@@ -57,7 +57,7 @@ function Followed({ e }: { e: LedgerEntryWithItems }) {
   return <span className="flex flex-col gap-0.5 text-xs">{out}</span>;
 }
 
-/** 마감 전 줄 고치기: 성함·구분·금액·합계에서 빼기·메모. 항목(기타)은 못 고친다 — 지우고 다시 넣는다. */
+/** 마감 전 줄 고치기: 성함·구분·금액·붉은 금액 표시·메모. 항목(기타)은 못 고친다 — 지우고 다시 넣는다. */
 function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () => void; onCancel: () => void }) {
   const [name, setName] = useState(e.patient_name);
   const [kind, setKind] = useState(e.insurance_kind ?? "");
@@ -184,7 +184,16 @@ export default function LedgerTable({ entries, closed, onDelete, onCorrect, onCh
               <div className={NUM}>{money(e.cash_receipt, { signed: correction, red })}</div>
               <div className={NUM}>{money(e.card, { signed: correction, red })}</div>
               <div className={`${NUM} font-bold`}>
-                {red ? <span className="text-xs font-bold text-red-700">{e.pay_note ?? "합계 제외"}</span> : correction ? money(sub, { signed: true }) : won(sub)}
+                {red ? (
+                  <span className="text-red-700">
+                    {money(sub, { signed: correction, red: true })}
+                    <span className="block text-[10px] font-normal">{e.pay_note ?? "붉은 금액"}</span>
+                  </span>
+                ) : correction ? (
+                  money(sub, { signed: true })
+                ) : (
+                  won(sub)
+                )}
               </div>
               <div className="flex flex-wrap gap-1 pl-3">
                 {e.items.map((i) => (
@@ -228,7 +237,7 @@ export default function LedgerTable({ entries, closed, onDelete, onCorrect, onCh
           <div className={NUM}>{won(total.card)}</div>
           <div className={`${NUM} text-[#0f3d23]`}>{won(total.subtotal)}</div>
           <div className="col-span-3 pl-3 text-xs font-normal text-stone-500">
-            {total.offTotal > 0 && <span className="mr-3 text-red-700">합계에서 뺀 금액 {won(total.offTotal)} (제로페이·계좌입금 등)</span>}
+            {total.offTotal > 0 && <span className="mr-3 text-red-700">그중 붉은 금액 {won(total.offTotal)} (계좌입금·제로페이 등, 합계에 포함)</span>}
             {summary.length > 0 ? summary.map((s) => `${s.name} ${s.qty}`).join(" · ") : "—"}
           </div>
         </div>

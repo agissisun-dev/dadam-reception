@@ -39,16 +39,17 @@ describe("dayBlock — 일일장부 모양", () => {
     expect(r.rows[3][1]).toBe("환자1 (정정)");
     expect(r.rows[3][7]).toBe("정정: 카드였음");
   });
-  it("합계에서 뺀 줄: 소계 칸에 사유, 붉은 줄 인덱스, 합계에서 빠짐", () => {
+  it("붉은 줄: 소계 칸에 금액, 기타 칸 앞에 사유, 붉은 줄 인덱스, 합계에 들어감 (2026-10-14)", () => {
     const r = dayBlock({
       day: "2026-10-02",
       entries: [entry(1), entry(2, { card: 0, cash_receipt: 10500, off_total: true, pay_note: "서울페이" })],
       expenses: [],
     });
     expect(r.rows[4][4]).toBe(10500);
-    expect(r.rows[4][6]).toBe("서울페이");
+    expect(r.rows[4][6]).toBe(10500);
+    expect(String(r.rows[4][7])).toMatch(/^서울페이/);
     expect(r.redRows).toEqual([4]);
-    expect(r.rows[3 + BLOCK_PATIENT_ROWS].slice(3, 7)).toEqual([11000, null, null, 11000]);
+    expect(r.rows[3 + BLOCK_PATIENT_ROWS].slice(3, 7)).toEqual([11000, 10500, null, 21500]);
   });
   it("51줄이면 블록이 한 줄 늘어난다", () => {
     const many = Array.from({ length: 51 }, (_, i) => entry(i + 1));

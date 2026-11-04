@@ -119,6 +119,12 @@ function Board() {
   const total = daySummary(entries, expenses);
   const exp = total.expenses;
   const seq = nextSeq(entries);
+  /** 보고 있는 날의 지난달(YYYY-MM). 11월에 10월 장부를 바로 내려받으려고(사용자 2026-11-04). */
+  const prevMonthKey = (() => {
+    const [y, m] = day.split("-").map(Number);
+    const d = new Date(y, m - 2, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  })();
 
   return (
     <main className="mx-auto max-w-6xl space-y-4 p-4">
@@ -333,6 +339,24 @@ function Board() {
               }
             >
               {Number(day.slice(5, 7))}월 전체
+            </button>
+            <button
+              type="button"
+              className={BTN}
+              disabled={exporting}
+              title={`${prevMonthKey} 한 달치`}
+              onClick={() =>
+                run(async () => {
+                  setExporting(true);
+                  try {
+                    await downloadMonthExcel(prevMonthKey);
+                  } finally {
+                    setExporting(false);
+                  }
+                })
+              }
+            >
+              지난달({Number(prevMonthKey.slice(5))}월) 전체
             </button>
             <button
               type="button"

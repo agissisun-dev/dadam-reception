@@ -65,12 +65,12 @@ describe("parseNote — 기타 칸 약어 → 항목", () => {
 });
 
 describe("daySummary — 아래쪽 합계·입금", () => {
-  it("입금 = 현금 + 현영(붉은 금액 포함) − 지출 (카드 제외), 지출이 크면 마이너스", () => {
+  it("입금 = 현금 + 현영 − 지출 (카드 제외, 붉은 금액도 포함), 지출이 크면 마이너스", () => {
     const s = daySummary(
       [{ cash: 0, cash_receipt: 1900, card: 647000 }, { cash: 0, cash_receipt: 10500, card: 0, off_total: true }],
       [{ amount: 28400 }],
     );
-    expect(s).toMatchObject({ subtotal: 648900, offTotal: 10500, offCash: 10500, expenses: 28400, total: 620500, deposit: 1900 + 10500 - 28400 });
+    expect(s).toMatchObject({ subtotal: 659400, offTotal: 10500, expenses: 28400, total: 631000, deposit: 1900 + 10500 - 28400 });
     expect(daySummary([{ cash: 0, cash_receipt: 1900, card: 0 }], [{ amount: 28400 }]).deposit).toBe(-26500);
   });
   it("현금이 지출보다 크면 플러스", () => {
@@ -79,7 +79,7 @@ describe("daySummary — 아래쪽 합계·입금", () => {
 });
 
 describe("tallyByDay — 달력 칸 요약", () => {
-  it("줄 수는 정정 줄 빼고, 소계는 붉은 금액 빼고, 마감 표시", () => {
+  it("줄 수는 정정 줄 빼고, 소계는 붉은 금액도 넣고, 마감 표시", () => {
     const m = tallyByDay(
       [
         { day: "2026-10-05", kind: "normal", cash: 1000, cash_receipt: 0, card: 0 },
@@ -89,19 +89,20 @@ describe("tallyByDay — 달력 칸 요약", () => {
       ],
       [{ day: "2026-10-05", closed_at: "2026-10-05T10:00:00Z" }, { day: "2026-10-06", closed_at: null }],
     );
-    expect(m.get("2026-10-05")).toEqual({ count: 2, subtotal: 1200, closed: true });
+    expect(m.get("2026-10-05")).toEqual({ count: 2, subtotal: 6200, closed: true });
     expect(m.get("2026-10-06")).toEqual({ count: 1, subtotal: 3000, closed: false });
     expect(m.get("2026-10-07")).toBeUndefined();
   });
 });
 
 describe("합계·번호·금액", () => {
-  it("sumEntries — 합계에서 빼기 줄은 offTotal로 따로", () => {
+  it("sumEntries — 붉은 줄도 합계에 넣고, 얼마인지는 offTotal로 따로", () => {
     expect(sumEntries([{ cash: 1000, cash_receipt: 0, card: 500 }, { cash: 0, cash_receipt: 200, card: 0 }])).toEqual({
-      cash: 1000, cash_receipt: 200, card: 500, subtotal: 1700, offTotal: 0, offCash: 0,
+      cash: 1000, cash_receipt: 200, card: 500, subtotal: 1700, offTotal: 0,
     });
+    // 붉은 금액(계좌입금·제로페이)도 합계에 그대로 들어가고, 얼마인지만 offTotal로 (접수실 2026-11-05)
     expect(sumEntries([{ cash: 1000, cash_receipt: 0, card: 0 }, { cash: 0, cash_receipt: 10500, card: 0, off_total: true }])).toEqual({
-      cash: 1000, cash_receipt: 0, card: 0, subtotal: 1000, offTotal: 10500, offCash: 10500,
+      cash: 1000, cash_receipt: 10500, card: 0, subtotal: 11500, offTotal: 10500,
     });
   });
   it("(F)는 무상(free): 소합원30T(F) → 소합원 30개 무상, 다른 꼬리표는 떼기만", () => {

@@ -222,7 +222,7 @@ function Board() {
           <Tile label="소계" value={won(total.subtotal)} />
           <Tile label="지출" value={won(exp)} />
           <Tile label="합계 (소계 − 지출)" value={won(total.total)} strong />
-          <Tile label="입금 (현금+현영(붉은 금액 포함) − 지출)" value={won(total.deposit)} strong negative={total.deposit < 0} />
+          <Tile label="입금 (현금+현영 − 지출)" value={won(total.deposit)} strong negative={total.deposit < 0} />
         </section>
       )}
 

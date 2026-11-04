@@ -13,7 +13,7 @@ export const GROUP_ORDER: LedgerGroup[] = ["decoction", "cabinet", "treatment", 
 /** 구분(보험 종류) 후보. 사용자 지정 2026-10-02. 직접 쳐도 된다. */
 export const INSURANCE_KINDS = ["보험", "일반", "1종", "2종", "1종지정", "차상1종", "차상2종", "희귀1종", "2종장애", "초진", "재초진", "전화상담"] as const;
 
-/** 합계에서 뺄 때 사유 후보: 접수실에 돈은 없지만 현금영수증은 끊는 경우 */
+/** 붉은 금액 사유 후보: 접수실 서랍에 돈은 없지만 현금영수증은 끊는 경우(금액은 합계에 그대로 들어감) */
 export const PAY_NOTES = ["제로페이", "서울페이", "계좌입금", "기타"] as const;
 
 /** 기타 칸 한 조각을 읽은 결과 */
@@ -144,15 +144,14 @@ function make(
   };
 }
 
-/** 그날 합계. 합계에서 빼기(off_total) 줄은 따로 모아 offTotal로 돌려준다. */
+/**
+ * 그날 합계. **붉은 금액(off_total) 줄도 현금·현영·카드·소계에 그대로 더한다**(접수실 2026-11-05: "빨간색 표시만 되고 합계에는 합산").
+ * 붉은 줄의 합은 참고용으로 offTotal에 따로 둔다. (2026-10-05~11-04까지는 합계에서 뺐었음 — 폐기)
+ */
 export function sumEntries(entries: { cash: number; cash_receipt: number; card: number; off_total?: boolean }[]) {
-  const t = { cash: 0, cash_receipt: 0, card: 0, subtotal: 0, offTotal: 0, offCash: 0 };
+  const t = { cash: 0, cash_receipt: 0, card: 0, subtotal: 0, offTotal: 0 };
   for (const e of entries) {
-    if (e.off_total) {
-      t.offTotal += e.cash + e.cash_receipt + e.card;
-      t.offCash += e.cash + e.cash_receipt; // 붉은 금액 중 현금·현영 칸 (입금에 셈)
-      continue;
-    }
+    if (e.off_total) t.offTotal += e.cash + e.cash_receipt + e.card;
     t.cash += e.cash;
     t.cash_receipt += e.cash_receipt;
     t.card += e.card;
@@ -168,18 +167,17 @@ export function sumExpenses(expenses: { amount: number }[]): number {
 /**
  * 하루 마무리 셈(엑셀 아래쪽 합계·입금 줄, 접수실 2026-10-06 "맨 아래쪽에"):
  * total = 소계 − 지출(마이너스 안 됨이 보통) ·
- * deposit(입금) = **병원에 들어온 돈** = 현금 + 현영 **(붉은 금액인 계좌입금·제로페이 포함)** − 지출. 카드는 뺀다.
+ * deposit(입금) = **병원에 들어온 돈** = 현금 + 현영 − 지출 (붉은 금액도 현금·현영에 들어 있음). 카드는 뺀다.
  * 지출이 크면 **마이너스**가 된다(사용자 2026-10-06 "현장에 들어온 돈은 마이너스일 때가 있다").
- * 붉은 금액은 합계(소계)에서는 빠지지만 입금에는 들어간다(접수실 2026-10-08).
  */
 export function daySummary(entries: Parameters<typeof sumEntries>[0], expenses: { amount: number }[]) {
   const t = sumEntries(entries);
   const exp = sumExpenses(expenses);
-  return { ...t, expenses: exp, total: t.subtotal - exp, deposit: t.cash + t.cash_receipt + t.offCash - exp };
+  return { ...t, expenses: exp, total: t.subtotal - exp, deposit: t.cash + t.cash_receipt - exp };
 }
 
 /**
- * 달력 칸용 날짜별 요약: 줄 수(정정 줄 제외) · 소계(붉은 금액 제외) · 마감 여부.
+ * 달력 칸용 날짜별 요약: 줄 수(정정 줄 제외) · 소계(붉은 금액 포함) · 마감 여부.
  * 장부 제목을 누르면 뜨는 달력에 쓴다(사용자 2026-11-04, 하루씩 넘기지 않고 바로 가게).
  */
 export function tallyByDay(
@@ -198,7 +196,7 @@ export function tallyByDay(
   for (const e of entries) {
     const v = get(e.day);
     if (e.kind === "normal") v.count += 1;
-    if (!e.off_total) v.subtotal += e.cash + e.cash_receipt + e.card;
+    v.subtotal += e.cash + e.cash_receipt + e.card;
   }
   for (const d of days) if (d.closed_at) get(d.day).closed = true;
   return out;

@@ -22,7 +22,7 @@ export type DayBlockInput = {
   expenses: { title: string; amount: number }[];
 };
 
-/** 블록 결과: 셀 + 붉게 칠할 줄(합계에서 뺀 줄)의 인덱스 */
+/** 블록 결과: 셀 + 붉게 칠할 줄(계좌입금·제로페이 줄, 금액은 합계에 들어감)의 인덱스 */
 export type DayBlock = { rows: Cell[][]; redRows: number[] };
 
 /** 지금 쓰는 일일장부 블록: 환자 50줄이 기본, 넘치면 늘린다 */
@@ -56,8 +56,9 @@ export function dayBlock(input: DayBlockInput): DayBlock {
       row[3] = n(e.cash);
       row[4] = n(e.cash_receipt);
       row[5] = n(e.card);
-      row[6] = e.off_total ? e.pay_note || "합계 제외" : n(sub); // 엑셀처럼 소계 칸에 "서울페이" 식으로
-      row[7] = e.kind === "correction" ? `정정: ${e.correction_reason ?? ""}` : e.note_raw || null;
+      row[6] = n(sub); // 붉은 줄도 금액 그대로(합계에 들어감), 사유는 기타 칸 끝에
+      const note = e.kind === "correction" ? `정정: ${e.correction_reason ?? ""}` : e.note_raw || "";
+      row[7] = (e.off_total ? [note, e.pay_note || "계좌입금"].filter(Boolean).join(" · ") : note) || null;
       if (e.off_total) redRows.push(rows.length);
     }
     rows.push(row);
@@ -69,7 +70,7 @@ export function dayBlock(input: DayBlockInput): DayBlock {
   }
   const t = daySummary(input.entries, input.expenses);
   rows.push(["합계", null, null, n(t.cash), n(t.cash_receipt), n(t.card), n(t.subtotal), null, "지출 합계", n(t.expenses)]);
-  // 입금 = 현금 + 현영(붉은 금액 포함) − 지출 (병원에 들어온 돈, 마이너스 가능)
+  // 입금 = 현금 + 현영 − 지출 (병원에 들어온 돈, 마이너스 가능)
   rows.push([null, null, null, null, null, null, null, null, "입금", t.deposit]);
   rows.push(["합계(소계−지출)", null, null, null, null, null, n(t.total), null, "잔액", null]);
   return { rows, redRows };

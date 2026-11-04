@@ -20,7 +20,8 @@ import {
   listCodes,
   loadDay,
 } from "@/lib/ledger";
-import { downloadDayExcel, downloadMonthExcel } from "@/lib/ledgerExport";
+import { downloadDayExcel, downloadMonthExcel, downloadRangeExcel } from "@/lib/ledgerExport";
+import LedgerCalendar from "@/components/LedgerCalendar";
 import { daySummary, nextSeq, parseWon, won } from "@/lib/ledgerRules";
 import { listPatients } from "@/lib/patients";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
@@ -73,6 +74,10 @@ function Board() {
   const [exporting, setExporting] = useState(false);
   /** 엑셀로 내려받을 달(YYYY-MM). 처음엔 보고 있는 달. */
   const [exportMonth, setExportMonth] = useState(() => todayISO().slice(0, 7));
+  /** 엑셀 기간 내려받기(몰아서 볼 때) */
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
+  const [showCal, setShowCal] = useState(false);
 
   const loadStatic = useCallback(() => {
     Promise.all([listCodes(), listPatients(), listCabinetItems()])
@@ -127,17 +132,17 @@ function Board() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setDay(addDays(day, -1))} className={BTN} aria-label="전날">◀</button>
-          <label className="relative cursor-pointer" title="누르면 달력에서 날짜를 고릅니다">
-            <h1 className="text-xl font-bold underline decoration-dotted decoration-stone-300 underline-offset-4">{dayLabel(day)} 장부</h1>
-            {/* 제목을 누르면 달력(브라우저 날짜 고르기)이 떠서 몇 년 몇 월 며칠이든 바로 간다 (사용자 2026-11-04) */}
-            <input
-              type="date"
-              value={day}
-              onChange={(e) => e.target.value && setDay(e.target.value)}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              aria-label="날짜 고르기"
-            />
-          </label>
+          <div className="relative">
+            {/* 제목을 누르면 예약 화면 같은 달력이 떠서 어느 날이든 바로 간다 (사용자 2026-11-04) */}
+            <button type="button" onClick={() => setShowCal((v) => !v)} className="text-xl font-bold underline decoration-dotted decoration-stone-300 underline-offset-4" title="누르면 달력이 뜹니다">
+              {dayLabel(day)} 장부
+            </button>
+            {showCal && (
+              <div className="absolute left-0 top-full z-30 mt-1">
+                <LedgerCalendar day={day} today={today} onPick={(iso) => { setDay(iso); setShowCal(false); }} onClose={() => setShowCal(false)} />
+              </div>
+            )}
+          </div>
           <button type="button" onClick={() => setDay(addDays(day, 1))} className={BTN} aria-label="다음 날">▶</button>
           {day !== today && (
             <button type="button" onClick={() => setDay(today)} className="text-sm text-stone-500 underline">오늘</button>
@@ -353,6 +358,27 @@ function Board() {
               }
             >
               {Number(exportMonth.slice(5, 7))}월 전체
+            </button>
+            <span className="basis-full text-[11px] text-stone-500">기간으로 (몰아서 볼 때 · 달마다 시트 한 장)</span>
+            <input type="date" value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} className="h-9 rounded border border-stone-300 px-2 text-sm" aria-label="시작일" />
+            <span className="text-stone-400">~</span>
+            <input type="date" value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} className="h-9 rounded border border-stone-300 px-2 text-sm" aria-label="끝날" />
+            <button
+              type="button"
+              className={BTN}
+              disabled={exporting || !rangeFrom || !rangeTo}
+              onClick={() =>
+                run(async () => {
+                  setExporting(true);
+                  try {
+                    await downloadRangeExcel(rangeFrom, rangeTo);
+                  } finally {
+                    setExporting(false);
+                  }
+                })
+              }
+            >
+              기간 내려받기
             </button>
             <button
               type="button"

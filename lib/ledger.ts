@@ -5,7 +5,7 @@ import { daysFromPacks } from "./packs";
 import { isValidPhone } from "./phone";
 import { createJobs, deleteJobsOfEntry } from "./brew";
 import { planJobsFromLedger } from "./brewRules";
-import type { ParsedItem } from "./ledgerRules";
+import { tallyByDay, type ParsedItem } from "./ledgerRules";
 import type {
   LedgerCode,
   LedgerCodeInput,
@@ -74,10 +74,16 @@ export async function loadDay(day: string): Promise<{ dayRow: LedgerDay | null; 
 
 /** 한 달치(엑셀·현황용). monthKey = "2026-10" */
 export async function listMonthEntries(monthKey: string): Promise<{ entries: LedgerEntryWithItems[]; expenses: LedgerExpense[]; days: LedgerDay[] }> {
-  const sb = getSupabase();
   const from = `${monthKey}-01`;
   const [y, m] = monthKey.split("-").map(Number);
   const to = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+  return listRangeEntries(from, to);
+}
+
+/** 기간(from 포함 ~ toExclusive 전날) 장부. 엑셀 기간 내려받기용. */
+export async function listRangeEntries(from: string, toExclusive: string): Promise<{ entries: LedgerEntryWithItems[]; expenses: LedgerExpense[]; days: LedgerDay[] }> {
+  const sb = getSupabase();
+  const to = toExclusive;
   const [e, x, d] = await Promise.all([
     sb.from("ledger_entries").select(ENTRY_SELECT).gte("day", from).lt("day", to).order("day").order("seq"),
     sb.from("ledger_expenses").select("*").gte("day", from).lt("day", to).order("day").order("id"),
@@ -91,6 +97,24 @@ export async function listMonthEntries(monthKey: string): Promise<{ entries: Led
     expenses: (x.data ?? []) as LedgerExpense[],
     days: (d.data ?? []) as LedgerDay[],
   };
+}
+
+/** 달력 칸용 한 달 요약(가볍게: 금액 칸과 마감만). monthKey = "2026-10" */
+export async function listMonthTally(monthKey: string): Promise<Map<string, { count: number; subtotal: number; closed: boolean }>> {
+  const sb = getSupabase();
+  const from = `${monthKey}-01`;
+  const [y, m] = monthKey.split("-").map(Number);
+  const to = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+  const [e, d] = await Promise.all([
+    sb.from("ledger_entries").select("day, kind, cash, cash_receipt, card, off_total").gte("day", from).lt("day", to),
+    sb.from("ledger_days").select("day, closed_at").gte("day", from).lt("day", to),
+  ]);
+  if (e.error) fail("장부 달력", e.error.message);
+  if (d.error) fail("장부 달력", d.error.message);
+  return tallyByDay(
+    (e.data ?? []) as { day: string; kind: "normal" | "correction"; cash: number; cash_receipt: number; card: number; off_total?: boolean }[],
+    (d.data ?? []) as { day: string; closed_at: string | null }[],
+  );
 }
 
 /** 줄이 있는데 마감 안 된 날(before 전까지), 오래된 순 */

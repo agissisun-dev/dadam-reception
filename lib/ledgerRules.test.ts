@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseNote, parseWon, sumEntries, sumExpenses, nextSeq, won, itemSummary, isFree, itemLabel, daySummary } from "./ledgerRules";
+import { parseNote, parseWon, sumEntries, sumExpenses, nextSeq, won, itemSummary, isFree, itemLabel, daySummary, tallyByDay } from "./ledgerRules";
 import type { LedgerCode } from "./types";
 
 const c = (code: string, name: string, group: LedgerCode["group"], extra: Partial<LedgerCode> = {}): LedgerCode => ({
@@ -75,6 +75,23 @@ describe("daySummary — 아래쪽 합계·입금", () => {
   });
   it("현금이 지출보다 크면 플러스", () => {
     expect(daySummary([{ cash: 50000, cash_receipt: 0, card: 0 }], [{ amount: 10000 }]).deposit).toBe(40000);
+  });
+});
+
+describe("tallyByDay — 달력 칸 요약", () => {
+  it("줄 수는 정정 줄 빼고, 소계는 붉은 금액 빼고, 마감 표시", () => {
+    const m = tallyByDay(
+      [
+        { day: "2026-10-05", kind: "normal", cash: 1000, cash_receipt: 0, card: 0 },
+        { day: "2026-10-05", kind: "normal", cash: 0, cash_receipt: 5000, card: 0, off_total: true },
+        { day: "2026-10-05", kind: "correction", cash: 200, cash_receipt: 0, card: 0 },
+        { day: "2026-10-06", kind: "normal", cash: 0, cash_receipt: 0, card: 3000 },
+      ],
+      [{ day: "2026-10-05", closed_at: "2026-10-05T10:00:00Z" }, { day: "2026-10-06", closed_at: null }],
+    );
+    expect(m.get("2026-10-05")).toEqual({ count: 2, subtotal: 1200, closed: true });
+    expect(m.get("2026-10-06")).toEqual({ count: 1, subtotal: 3000, closed: false });
+    expect(m.get("2026-10-07")).toBeUndefined();
   });
 });
 

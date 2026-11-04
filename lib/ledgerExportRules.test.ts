@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayBlock, monthRows, BLOCK_PATIENT_ROWS } from "./ledgerExportRules";
+import { dayBlock, monthRows, splitByMonth, BLOCK_PATIENT_ROWS } from "./ledgerExportRules";
 
 const entry = (seq: number, extra: Partial<Parameters<typeof dayBlock>[0]["entries"][number]> = {}) => ({
   seq, kind: "normal" as const, patient_name: `환자${seq}`, insurance_kind: seq === 1 ? "1종" : null,
@@ -53,6 +53,21 @@ describe("dayBlock — 일일장부 모양", () => {
   it("51줄이면 블록이 한 줄 늘어난다", () => {
     const many = Array.from({ length: 51 }, (_, i) => entry(i + 1));
     expect(dayBlock({ day: "2026-10-02", entries: many, expenses: [] }).rows).toHaveLength(3 + 51 + 3);
+  });
+});
+
+describe("splitByMonth — 기간을 달별 시트로", () => {
+  it("달마다 시트 하나, 달 순서, 빈 날은 빠짐", () => {
+    const r = splitByMonth([
+      { day: "2026-11-02", entries: [entry(1)], expenses: [] },
+      { day: "2026-10-30", entries: [entry(1)], expenses: [] },
+      { day: "2026-10-31", entries: [], expenses: [] },
+      { day: "2026-10-05", entries: [], expenses: [{ title: "택배", amount: 6000 }] },
+    ]);
+    expect(r.map((s) => s.sheet)).toEqual(["2026-10", "2026-11"]);
+    expect(r[0].block.rows[0][0]).toContain("10월 05일");
+    expect(r[0].block.rows.length).toBe(2 * (3 + BLOCK_PATIENT_ROWS + 3));
+    expect(r[1].block.rows.length).toBe(3 + BLOCK_PATIENT_ROWS + 3);
   });
 });
 

@@ -178,6 +178,32 @@ export function daySummary(entries: Parameters<typeof sumEntries>[0], expenses: 
   return { ...t, expenses: exp, total: t.subtotal - exp, deposit: t.cash + t.cash_receipt + t.offCash - exp };
 }
 
+/**
+ * 달력 칸용 날짜별 요약: 줄 수(정정 줄 제외) · 소계(붉은 금액 제외) · 마감 여부.
+ * 장부 제목을 누르면 뜨는 달력에 쓴다(사용자 2026-11-04, 하루씩 넘기지 않고 바로 가게).
+ */
+export function tallyByDay(
+  entries: { day: string; kind: "normal" | "correction"; cash: number; cash_receipt: number; card: number; off_total?: boolean }[],
+  days: { day: string; closed_at: string | null }[],
+): Map<string, { count: number; subtotal: number; closed: boolean }> {
+  const out = new Map<string, { count: number; subtotal: number; closed: boolean }>();
+  const get = (d: string) => {
+    let v = out.get(d);
+    if (!v) {
+      v = { count: 0, subtotal: 0, closed: false };
+      out.set(d, v);
+    }
+    return v;
+  };
+  for (const e of entries) {
+    const v = get(e.day);
+    if (e.kind === "normal") v.count += 1;
+    if (!e.off_total) v.subtotal += e.cash + e.cash_receipt + e.card;
+  }
+  for (const d of days) if (d.closed_at) get(d.day).closed = true;
+  return out;
+}
+
 /** 그날 다음 번호: 가장 큰 번호 + 1 */
 export function nextSeq(entries: { seq: number }[]): number {
   return entries.reduce((m, e) => Math.max(m, e.seq), 0) + 1;

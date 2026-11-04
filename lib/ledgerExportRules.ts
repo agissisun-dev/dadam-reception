@@ -75,6 +75,20 @@ export function dayBlock(input: DayBlockInput): DayBlock {
   return { rows, redRows };
 }
 
+/**
+ * 기간 내려받기용: 날짜 블록을 달별 시트로 나눈다(사용자 2026-11-04, 몰아서 볼 때 세무사용이면 달마다 시트).
+ * 시트 이름은 "2026-10" 식, 달 순서. 줄·지출 없는 날은 빠진다.
+ */
+export function splitByMonth(days: DayBlockInput[]): { sheet: string; block: DayBlock }[] {
+  const byMonth = new Map<string, DayBlockInput[]>();
+  for (const d of days) {
+    if (d.entries.length === 0 && d.expenses.length === 0) continue;
+    const k = d.day.slice(0, 7);
+    byMonth.set(k, [...(byMonth.get(k) ?? []), d]);
+  }
+  return [...byMonth.keys()].sort().map((k) => ({ sheet: k, block: monthRows(byMonth.get(k)!) }));
+}
+
 /** 한 달: 줄이나 지출이 있는 날만, 날짜순으로 블록을 이어 붙인다. redRows는 전체 시트 기준 인덱스. */
 export function monthRows(days: DayBlockInput[]): DayBlock {
   const out: DayBlock = { rows: [], redRows: [] };

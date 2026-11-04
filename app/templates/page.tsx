@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
+import NotifyBodyEditor from "@/components/NotifyBodyEditor";
 import { createTemplate, deleteTemplate, listTemplates, updateTemplate } from "@/lib/templates";
 import { CONDITIONS, conditionLabel } from "@/lib/conditions";
 import { weeklySlotLabel } from "@/lib/weeklyRules";
@@ -116,12 +117,13 @@ function TemplateEditor({
 }
 
 function Manager() {
-  const [kind, setKind] = useState<TemplateKind>("task");
+  const [kind, setKind] = useState<TemplateKind | "appointment">("task");
   const [rows, setRows] = useState<Template[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | "new" | null>(null);
 
   const load = useCallback(() => {
+    if (kind === "appointment") return;
     listTemplates(kind)
       .then(setRows)
       .catch((e: Error) => setError(e.message));
@@ -141,7 +143,7 @@ function Manager() {
     }
   }
 
-  const tab = (k: TemplateKind, label: string) => (
+  const tab = (k: TemplateKind | "appointment", label: string) => (
     <button
       onClick={() => {
         setKind(k);
@@ -160,15 +162,20 @@ function Manager() {
         <div className="flex gap-2">
           {tab("task", "업무 안내문")}
           {tab("weekly", "주간 관리 문구")}
+          {tab("appointment", "예약 안내 문구")}
         </div>
       </div>
       <p className="text-sm text-stone-500">
         {kind === "task"
           ? "업무 등록 때 고르면 제목과 안내문이 채워집니다. 이미 등록된 업무는 바뀌지 않습니다."
-          : "주간 관리와 해피콜 명단에 자동으로 채워집니다. 첫 발송(1회차·해피콜 1차) → 그다음(2·3회차·해피콜 2차) → 내원 안내(4회째부터). 보내기 전에 화면에서 고칠 수 있습니다."}
+          : kind === "weekly"
+            ? "주간 관리와 해피콜 명단에 자동으로 채워집니다. 첫 발송(1회차·해피콜 1차) → 그다음(2·3회차·해피콜 2차) → 내원 안내(4회째부터). 보내기 전에 화면에서 고칠 수 있습니다."
+            : "예약이 잡히면 이 글이 환자 이름·날짜·시간으로 채워져 [복사] 할 수 있게 나옵니다. 예약 화면의 [문구 고치기]에서도 같은 글을 고칩니다."}
       </p>
 
-      {editing === "new" ? (
+      {kind === "appointment" ? (
+        <NotifyBodyEditor />
+      ) : editing === "new" ? (
         <TemplateEditor
           value={kind === "task" ? emptyTask() : { ...emptyTask(), kind: "weekly", title: null, date_rule: null }}
           onSave={(v) => run(() => createTemplate(v))}
@@ -181,7 +188,7 @@ function Manager() {
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {!rows ? (
+      {kind === "appointment" ? null : !rows ? (
         <p className="text-stone-500">불러오는 중…</p>
       ) : (
         <ul className="space-y-2">

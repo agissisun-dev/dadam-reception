@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import StaffSelect from "@/components/StaffSelect";
+import NotifyBodyEditor from "@/components/NotifyBodyEditor";
 import {
   clearOverride,
   createAppointment,
@@ -145,6 +146,8 @@ function Board() {
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [showOverride, setShowOverride] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  /** 예약 안내 문구 고치기 창 (샘들이 예약 화면에서 바로 고칠 수 있게, 사용자 2026-11-04) */
+  const [editNotify, setEditNotify] = useState(false);
   const [showNaver, setShowNaver] = useState(false);
   const [naverText, setNaverText] = useState("");
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
@@ -248,6 +251,13 @@ function Board() {
 
       {error && <p className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-700">{error}</p>}
 
+      {editNotify && settings && (
+        <NotifyBodyEditor
+          initial={settings.notify_body}
+          onSaved={(body) => setSettings({ ...settings, notify_body: body })}
+          onClose={() => setEditNotify(false)}
+        />
+      )}
       {showSettings && settings && (
         <SettingsBox settings={settings} onSaved={(ns) => { setSettings(ns); setShowSettings(false); }} onClose={() => setShowSettings(false)} />
       )}
@@ -358,7 +368,7 @@ function Board() {
                   )}
                   {editing && editing.time === t && (
                     <div className="px-3 pb-2">
-                      <EditBox a={editing} staff={staff} notify={notifyText(editing)} onChanged={() => { setEditing(null); changed(); }} onClose={() => setEditing(null)} />
+                      <EditBox a={editing} staff={staff} notify={notifyText(editing)} onChanged={() => { setEditing(null); changed(); }} onClose={() => setEditing(null)} onEditNotify={() => setEditNotify(true)} />
                     </div>
                   )}
                 </div>
@@ -407,6 +417,7 @@ function Board() {
           <span className="min-w-[280px] flex-1 rounded bg-stone-50 px-3 py-1.5">{notifyText(justBooked)}</span>
           <button type="button" className={BTN} onClick={() => { navigator.clipboard?.writeText(notifyText(justBooked)).catch(() => undefined); }}>복사</button>
           <button type="button" className={PRIMARY} onClick={() => run(async () => { await markNotified(justBooked.id, "병원 휴대폰"); setJustBooked(null); })}>병원 휴대폰으로 보냈음</button>
+          <button type="button" className="text-xs underline" onClick={() => setEditNotify(true)}>문구 고치기</button>
           <button type="button" className="text-xs text-stone-500 underline" onClick={() => setJustBooked(null)}>닫기</button>
           {banner?.entryId && <Link href="/ledger" className="text-xs underline">장부로 돌아가기</Link>}
         </section>
@@ -428,7 +439,7 @@ function Chip({ a, onClick, consult }: { a: Appointment; onClick: () => void; co
   );
 }
 
-function EditBox({ a, staff, notify, onChanged, onClose }: { a: Appointment; staff: StaffName; notify: string; onChanged: () => void; onClose: () => void }) {
+function EditBox({ a, staff, notify, onChanged, onClose, onEditNotify }: { a: Appointment; staff: StaffName; notify: string; onChanged: () => void; onClose: () => void; onEditNotify: () => void }) {
   const [day, setDay] = useState(a.day);
   const [time, setTime] = useState(a.time);
   const [kind, setKind] = useState<AppointmentKind>(a.kind);
@@ -469,6 +480,7 @@ function EditBox({ a, staff, notify, onChanged, onClose }: { a: Appointment; sta
         <span className="min-w-[240px] flex-1">{notify}</span>
         <button type="button" className={BTN} onClick={() => { navigator.clipboard?.writeText(notify).catch(() => undefined); }}>복사</button>
         <button type="button" className={BTN} onClick={() => run(() => markNotified(a.id, "병원 휴대폰"))}>병원 휴대폰으로 보냈음</button>
+        <button type="button" className="underline" onClick={onEditNotify}>문구 고치기</button>
       </div>
       {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
     </div>

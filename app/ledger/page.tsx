@@ -71,6 +71,8 @@ function Board() {
   const [dCard, setDCard] = useState("");
   const [dReason, setDReason] = useState("");
   const [exporting, setExporting] = useState(false);
+  /** 엑셀로 내려받을 달(YYYY-MM). 처음엔 보고 있는 달. */
+  const [exportMonth, setExportMonth] = useState(() => todayISO().slice(0, 7));
 
   const loadStatic = useCallback(() => {
     Promise.all([listCodes(), listPatients(), listCabinetItems()])
@@ -119,19 +121,23 @@ function Board() {
   const total = daySummary(entries, expenses);
   const exp = total.expenses;
   const seq = nextSeq(entries);
-  /** 보고 있는 날의 지난달(YYYY-MM). 11월에 10월 장부를 바로 내려받으려고(사용자 2026-11-04). */
-  const prevMonthKey = (() => {
-    const [y, m] = day.split("-").map(Number);
-    const d = new Date(y, m - 2, 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  })();
 
   return (
     <main className="mx-auto max-w-6xl space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setDay(addDays(day, -1))} className={BTN} aria-label="전날">◀</button>
-          <h1 className="text-xl font-bold">{dayLabel(day)} 장부</h1>
+          <label className="relative cursor-pointer" title="누르면 달력에서 날짜를 고릅니다">
+            <h1 className="text-xl font-bold underline decoration-dotted decoration-stone-300 underline-offset-4">{dayLabel(day)} 장부</h1>
+            {/* 제목을 누르면 달력(브라우저 날짜 고르기)이 떠서 몇 년 몇 월 며칠이든 바로 간다 (사용자 2026-11-04) */}
+            <input
+              type="date"
+              value={day}
+              onChange={(e) => e.target.value && setDay(e.target.value)}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              aria-label="날짜 고르기"
+            />
+          </label>
           <button type="button" onClick={() => setDay(addDays(day, 1))} className={BTN} aria-label="다음 날">▶</button>
           {day !== today && (
             <button type="button" onClick={() => setDay(today)} className="text-sm text-stone-500 underline">오늘</button>
@@ -322,7 +328,15 @@ function Board() {
         <section className="rounded-lg border border-stone-200 bg-white p-3 text-sm">
           <h2 className="font-bold">엑셀로</h2>
           <p className="mt-1 text-xs text-stone-500">지금 쓰는 일일장부 모양 그대로 내려받습니다. 세무사에게 보낼 때, 10월 병행 기간에 대조할 때 씁니다.</p>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {/* 달을 골라 한 달치 내려받기 (11월에 10월 것도, 사용자 2026-11-04) */}
+            <input
+              type="month"
+              value={exportMonth}
+              onChange={(e) => e.target.value && setExportMonth(e.target.value)}
+              className="h-9 rounded border border-stone-300 px-2 text-sm"
+              aria-label="내려받을 달"
+            />
             <button
               type="button"
               className={BTN}
@@ -331,32 +345,14 @@ function Board() {
                 run(async () => {
                   setExporting(true);
                   try {
-                    await downloadMonthExcel(day.slice(0, 7));
+                    await downloadMonthExcel(exportMonth);
                   } finally {
                     setExporting(false);
                   }
                 })
               }
             >
-              {Number(day.slice(5, 7))}월 전체
-            </button>
-            <button
-              type="button"
-              className={BTN}
-              disabled={exporting}
-              title={`${prevMonthKey} 한 달치`}
-              onClick={() =>
-                run(async () => {
-                  setExporting(true);
-                  try {
-                    await downloadMonthExcel(prevMonthKey);
-                  } finally {
-                    setExporting(false);
-                  }
-                })
-              }
-            >
-              지난달({Number(prevMonthKey.slice(5))}월) 전체
+              {Number(exportMonth.slice(5, 7))}월 전체
             </button>
             <button
               type="button"

@@ -251,13 +251,6 @@ function Board() {
 
       {error && <p className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-700">{error}</p>}
 
-      {editNotify && settings && (
-        <NotifyBodyEditor
-          initial={settings.notify_body}
-          onSaved={(body) => setSettings({ ...settings, notify_body: body })}
-          onClose={() => setEditNotify(false)}
-        />
-      )}
       {showSettings && settings && (
         <SettingsBox settings={settings} onSaved={(ns) => { setSettings(ns); setShowSettings(false); }} onClose={() => setShowSettings(false)} />
       )}
@@ -368,7 +361,15 @@ function Board() {
                   )}
                   {editing && editing.time === t && (
                     <div className="px-3 pb-2">
-                      <EditBox a={editing} staff={staff} notify={notifyText(editing)} onChanged={() => { setEditing(null); changed(); }} onClose={() => setEditing(null)} onEditNotify={() => setEditNotify(true)} />
+                      <EditBox
+                        a={editing}
+                        staff={staff}
+                        notify={notifyText(editing)}
+                        notifyBody={settings?.notify_body ?? ""}
+                        onNotifySaved={(body) => settings && setSettings({ ...settings, notify_body: body })}
+                        onChanged={() => { setEditing(null); changed(); }}
+                        onClose={() => setEditing(null)}
+                      />
                     </div>
                   )}
                 </div>
@@ -417,9 +418,14 @@ function Board() {
           <span className="min-w-[280px] flex-1 rounded bg-stone-50 px-3 py-1.5">{notifyText(justBooked)}</span>
           <button type="button" className={BTN} onClick={() => { navigator.clipboard?.writeText(notifyText(justBooked)).catch(() => undefined); }}>복사</button>
           <button type="button" className={PRIMARY} onClick={() => run(async () => { await markNotified(justBooked.id, "병원 휴대폰"); setJustBooked(null); })}>병원 휴대폰으로 보냈음</button>
-          <button type="button" className="text-xs underline" onClick={() => setEditNotify(true)}>문구 고치기</button>
+          <button type="button" className="text-xs underline" onClick={() => setEditNotify((v) => !v)}>문구 고치기</button>
           <button type="button" className="text-xs text-stone-500 underline" onClick={() => setJustBooked(null)}>닫기</button>
           {banner?.entryId && <Link href="/ledger" className="text-xs underline">장부로 돌아가기</Link>}
+          {editNotify && settings && (
+            <div className="basis-full">
+              <NotifyBodyEditor initial={settings.notify_body} onSaved={(body) => setSettings({ ...settings, notify_body: body })} onClose={() => setEditNotify(false)} />
+            </div>
+          )}
         </section>
       )}
     </main>
@@ -439,7 +445,9 @@ function Chip({ a, onClick, consult }: { a: Appointment; onClick: () => void; co
   );
 }
 
-function EditBox({ a, staff, notify, onChanged, onClose, onEditNotify }: { a: Appointment; staff: StaffName; notify: string; onChanged: () => void; onClose: () => void; onEditNotify: () => void }) {
+function EditBox({ a, staff, notify, notifyBody, onNotifySaved, onChanged, onClose }: { a: Appointment; staff: StaffName; notify: string; notifyBody: string; onNotifySaved: (body: string) => void; onChanged: () => void; onClose: () => void }) {
+  /** 문구 고치기 창은 단추 바로 아래에 (위쪽에 뜨면 안 보여서 안 되는 줄 안다 — 2026-11-04) */
+  const [editNotify, setEditNotify] = useState(false);
   const [day, setDay] = useState(a.day);
   const [time, setTime] = useState(a.time);
   const [kind, setKind] = useState<AppointmentKind>(a.kind);
@@ -480,8 +488,13 @@ function EditBox({ a, staff, notify, onChanged, onClose, onEditNotify }: { a: Ap
         <span className="min-w-[240px] flex-1">{notify}</span>
         <button type="button" className={BTN} onClick={() => { navigator.clipboard?.writeText(notify).catch(() => undefined); }}>복사</button>
         <button type="button" className={BTN} onClick={() => run(() => markNotified(a.id, "병원 휴대폰"))}>병원 휴대폰으로 보냈음</button>
-        <button type="button" className="underline" onClick={onEditNotify}>문구 고치기</button>
+        <button type="button" className="underline" onClick={() => setEditNotify((v) => !v)}>문구 고치기</button>
       </div>
+      {editNotify && (
+        <div className="mt-2">
+          <NotifyBodyEditor initial={notifyBody} onSaved={onNotifySaved} onClose={() => setEditNotify(false)} />
+        </div>
+      )}
       {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
     </div>
   );

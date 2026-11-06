@@ -191,6 +191,21 @@ export function ledgerItemCounts(items: LedgerItemLite[], key: string): ItemCoun
   );
 }
 
+/** 달별 신규 환자의 내원 경로 수. 경로를 안 적은 사람은 "안 적음"으로. keys 달만, 오래된 달부터 */
+export function sourceCountsByMonth(
+  patients: { created_at: string; source: string | null }[],
+  keys: string[],
+): Map<string, Map<string, number>> {
+  const out = new Map<string, Map<string, number>>(keys.map((k) => [k, new Map()]));
+  for (const p of patients) {
+    const m = out.get(monthKeyOfTimestamp(p.created_at));
+    if (!m) continue;
+    const k = p.source ?? "none";
+    m.set(k, (m.get(k) ?? 0) + 1);
+  }
+  return out;
+}
+
 /** 눈금 위 끝값: 1·2·2.5·3·4·5·6·8·10 × 자릿수로 올림 (23 → 25, 7 → 8) */
 export function niceMax(max: number): number {
   if (max <= 0) return 1;

@@ -89,6 +89,10 @@
 ## 19. V4-2 마감 잠금은 다음 날부터 (2026-10-02, 실행 완료)
 - `supabase/schema-v4-2-ledger-lock-next-day.sql`: `ledger_day_locked(day)` = 마감했고 그 날짜가 한국 시간 오늘보다 앞일 때. 정책을 이 함수로 바꿈. 마감 당일은 고칠 수 있고 다음 날부터 정정 줄만.
 
-## 12. V8 예약 자동 안내 (2026-11-06 추가)
+## 20. V8 예약 자동 안내 (2026-11-06 추가)
 - [SQL Editor]에서 `supabase/schema-v8-appointment-notify.sql` 실행. `appointment_settings`에 `auto_notify`·`remind_enabled`·`remind_body`, `appointments`에 `remind_sent_at`·`remind_note` 칸이 생긴다. 기본값은 모두 꺼짐.
 - 실행 전에도 앱은 돌아가지만 예약 설정 저장이 실패한다. 켜는 법과 Vercel 환경 변수는 `docs/setup-sms.md` "예약 자동 안내 문자" 절.
+
+## 21. V9 내원 경로 (2026-11-06 추가)
+- [SQL Editor]에서 `supabase/schema-v9-patient-source.sql` 실행. `patients`에 `source`(유튜브·블로그·네이버·인스타그램·지인 소개·간판·기타)와 `source_note`(어떤 영상·글·누구 소개인지) 칸이 생긴다.
+- 실행 전에는 환자 등록·수정이 "source 칸 없음"으로 실패하니, 배포 전에 먼저 실행한다. 기존 환자는 비어 있고 환자 상세 [고치기]에서 채운다.

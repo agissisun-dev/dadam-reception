@@ -26,8 +26,10 @@ import {
   pct,
   prevMonthKey,
   recentMonthKeys,
+  sourceCountsByMonth,
   weeklyMonth,
 } from "@/lib/statsRules";
+import { SOURCES } from "@/lib/sources";
 
 const GREEN = "#16863b";
 const GRAY = "#d6d3d1";
@@ -71,6 +73,11 @@ function Board() {
   const labels = keys.map(monthShort);
   const represcPct = pct(cur.represcriptions, cur.prescriptions);
   const prevRepresc = pct(prev.represcriptions, prev.prescriptions);
+  const srcKeys = keys.slice(-3);
+  const srcByMonth = sourceCountsByMonth(data.patients, srcKeys);
+  const srcRows = [...SOURCES.map((s) => ({ key: s.value, label: s.label })), { key: "none", label: "안 적음" }]
+    .map((s) => ({ ...s, counts: srcKeys.map((k) => srcByMonth.get(k)?.get(s.key) ?? 0) }))
+    .filter((s) => s.counts.some((n) => n > 0));
 
   return (
     <main className="mx-auto max-w-2xl space-y-8 p-4">
@@ -94,6 +101,35 @@ function Board() {
           sub={`예정 ${hc.due}건 중 예정일 안에 ${hc.onTime}건`}
         />
         <Tile label="해피콜로 재처방·예약" value={`${hc.represcribed}건`} sub={`처리 ${hc.handled}건 중`} />
+      </section>
+
+      <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
+        <h2 className="mb-2 font-bold">신규 환자, 어떻게 오셨나 (최근 3개월)</h2>
+        {srcRows.length === 0 ? (
+          <p className="text-xs text-stone-500">아직 적힌 내원 경로가 없습니다. 환자 등록 때 어떻게 오셨어요?를 고르면 여기 쌓입니다.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-stone-500">
+              <tr>
+                <th className="py-1">경로</th>
+                {srcKeys.map((k) => (
+                  <th key={k} className="py-1 text-right">{monthShort(k)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="tabular-nums">
+              {srcRows.map((s) => (
+                <tr key={s.key} className="border-t border-stone-100">
+                  <td className="py-1">{s.label}</td>
+                  {s.counts.map((n, i) => (
+                    <td key={i} className="py-1 text-right">{n || ""}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="mt-2 text-xs text-stone-500">어떤 영상·글이었는지는 환자 상세에 적혀 있습니다.</p>
       </section>
 
       <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">

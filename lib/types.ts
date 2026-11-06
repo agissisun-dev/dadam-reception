@@ -20,6 +20,9 @@ export type TaskInput = {
 
 export type Condition = "digestive" | "skin" | "general";
 
+/** 내원 경로 (V9). 옛 환자는 null */
+export type PatientSource = "youtube" | "blog" | "naver" | "instagram" | "referral" | "signboard" | "other";
+
 export type Patient = {
   id: number;
   name: string;
@@ -28,6 +31,8 @@ export type Patient = {
   family_note: string | null;
   condition: Condition;
   memo: string | null;
+  source: PatientSource | null;
+  source_note: string | null; // 어떤 영상·글·누구 소개인지 대략
   excluded_at: string | null;
   excluded_reason: string | null;
   weekly_status: WeeklyStatus;
@@ -89,6 +94,8 @@ export type PatientInput = {
   family_note: string;
   condition: Condition;
   memo: string;
+  source: PatientSource | "";
+  source_note: string;
 };
 
 export type PrescriptionInput = {

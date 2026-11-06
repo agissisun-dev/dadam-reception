@@ -10,6 +10,7 @@ import { addPrescription, createPatient, findPatientByPhone } from "@/lib/patien
 import { isValidPhone, formatPhone, normalizePhone } from "@/lib/phone";
 import { DEFAULT_PER_DAY } from "@/lib/packs";
 import { CONDITIONS, conditionLabel } from "@/lib/conditions";
+import { SOURCES, sourceHint } from "@/lib/sources";
 import { addDays, todayISO } from "@/lib/dates";
 import type { Patient, PatientInput, PrescriptionInput } from "@/lib/types";
 
@@ -27,6 +28,8 @@ function NewPatient() {
     family_note: "",
     condition: "general",
     memo: "",
+    source: "",
+    source_note: "",
   });
 
   async function check(value: string = phone) {
@@ -173,6 +176,32 @@ function NewPatient() {
                 </button>
               ))}
             </div>
+          </div>
+          <div>
+            <span className="text-sm text-stone-600">어떻게 오셨어요? (선택)</span>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {SOURCES.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => setForm({ ...form, source: form.source === s.value ? "" : s.value })}
+                  className={`rounded border px-3 py-1.5 text-sm ${
+                    form.source === s.value ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {form.source && (
+              <input
+                value={form.source_note}
+                onChange={(e) => setForm({ ...form, source_note: e.target.value })}
+                placeholder={sourceHint(form.source)}
+                className={INPUT}
+              />
+            )}
+            <p className="mt-1 text-xs text-stone-500">정확하지 않아도 됩니다. 그런 내용이었다 정도면 충분합니다.</p>
           </div>
           <label className="block">
             <span className="text-sm text-stone-600">환자 메모 (선택)</span>

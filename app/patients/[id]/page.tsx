@@ -19,6 +19,7 @@ import {
   type PrescriptionWithCalls,
 } from "@/lib/patients";
 import { CONDITIONS, conditionLabel } from "@/lib/conditions";
+import { SOURCES, sourceHint, sourceLabel } from "@/lib/sources";
 import { addDays, todayISO } from "@/lib/dates";
 import { isValidPhone } from "@/lib/phone";
 import { DEFAULT_PER_DAY, describePrescription } from "@/lib/packs";
@@ -116,6 +117,8 @@ function Detail() {
       family_note: p.family_note ?? "",
       condition: p.condition,
       memo: p.memo ?? "",
+      source: p.source ?? "",
+      source_note: p.source_note ?? "",
     });
     setEditing(true);
   }
@@ -143,6 +146,16 @@ function Detail() {
               )}
             </p>
             {patient.memo && <p className="mt-1 text-sm text-stone-600">{patient.memo}</p>}
+            <p className="mt-1 text-sm text-stone-600">
+              {patient.source ? (
+                <>
+                  <span className="rounded bg-[#f0f7f3] px-1.5 py-0.5 text-xs text-[#0f3d23]">{sourceLabel(patient.source)}</span>
+                  {patient.source_note && <span className="ml-1">{patient.source_note}</span>}
+                </>
+              ) : (
+                <span className="text-xs text-stone-400">어떻게 오셨는지 아직 안 적음 · [고치기]에서 적을 수 있습니다</span>
+              )}
+            </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button className={PRIMARY} onClick={() => setAdding((v) => !v)}>
                 처방 추가
@@ -221,6 +234,26 @@ function Detail() {
                 <span className="text-sm text-stone-600">메모</span>
                 <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} className={INPUT} />
               </label>
+              <div>
+                <span className="text-sm text-stone-600">어떻게 오셨어요?</span>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {SOURCES.map((s) => (
+                    <button
+                      key={s.value}
+                      type="button"
+                      onClick={() => setForm({ ...form, source: form.source === s.value ? "" : s.value })}
+                      className={`rounded border px-3 py-1.5 text-sm ${
+                        form.source === s.value ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300"
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+                {form.source && (
+                  <input value={form.source_note} onChange={(e) => setForm({ ...form, source_note: e.target.value })} placeholder={sourceHint(form.source)} className={INPUT} />
+                )}
+              </div>
               <div className="flex gap-2">
                 <button
                   className={PRIMARY}

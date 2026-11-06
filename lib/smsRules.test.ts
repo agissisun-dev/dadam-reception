@@ -18,7 +18,8 @@ const base = { patientId: 7, staff: "이혜경샘" };
 describe("validateSmsRequest", () => {
   it("정상: 하이픈 있는 번호도 숫자만 남기고, 환자 번호·보낸 사람을 같이 받는다", () => {
     const r = validateSmsRequest({ ...base, to: "010-1234-5678", text: " 안녕하세요 " });
-    expect(r).toEqual({ ok: true, value: { to: "01012345678", text: "안녕하세요", patientId: 7, staff: "이혜경샘" } });
+    expect(r).toEqual({ ok: true, value: { to: "01012345678", text: "안녕하세요", patientId: 7, appointmentId: 0, staff: "이혜경샘" } });
+    expect(validateSmsRequest({ to: "01012345678", text: "a", appointmentId: 3, staff: "x" })).toMatchObject({ ok: true, value: { patientId: 0, appointmentId: 3 } });
   });
   it("번호 자릿수·휴대폰 여부·빈 문구·너무 긴 문구를 막는다", () => {
     expect(validateSmsRequest({ ...base, to: "0101234", text: "a" }).ok).toBe(false);

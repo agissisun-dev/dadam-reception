@@ -309,6 +309,8 @@ export type Appointment = {
   ledger_entry_id: number | null;
   notified_at: string | null;
   notify_note: string | null;
+  remind_sent_at: string | null; // 전날 리마인더 보낸 시각 (V8)
+  remind_note: string | null;
   staff_name: string;
   created_at: string;
   updated_at: string;
@@ -329,4 +331,7 @@ export type AppointmentSettings = {
   consult_per_slot: number;
   treatment_per_slot: number;
   notify_body: string;
+  auto_notify: boolean; // 잡히는 순간 확인 문자 (V8)
+  remind_enabled: boolean; // 전날 17시 리마인더 (V8)
+  remind_body: string;
 };

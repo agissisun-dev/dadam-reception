@@ -20,7 +20,8 @@ export function smsType(text: string): SmsType {
 }
 
 /** 문자 요청. 어느 환자에게(patientId) 누가(staff) 보내는지가 항상 붙는다 — 장부와 번호 대조에 쓴다. */
-export type SmsRequest = { to: string; text: string; patientId: number; staff: string };
+/** patientId(환자 줄에서) 또는 appointmentId(예약 안내) 중 하나는 있어야 한다. 없는 쪽은 0. */
+export type SmsRequest = { to: string; text: string; patientId: number; appointmentId: number; staff: string };
 
 /** 브라우저·서버가 같이 쓰는 검사. 받는 번호는 숫자 10~11자리, 문구는 비어 있지 않고 LMS 한도 안. */
 export function validateSmsRequest(
@@ -30,6 +31,7 @@ export function validateSmsRequest(
   const to = normalizePhone(typeof o.to === "string" ? o.to : "");
   const text = typeof o.text === "string" ? o.text.trim() : "";
   const patientId = typeof o.patientId === "number" && Number.isInteger(o.patientId) ? o.patientId : 0;
+  const appointmentId = typeof o.appointmentId === "number" && Number.isInteger(o.appointmentId) ? o.appointmentId : 0;
   const staff = typeof o.staff === "string" ? o.staff.trim().slice(0, 20) : "";
   if (to.length !== 10 && to.length !== 11) return { ok: false, error: "받는 번호가 올바르지 않습니다." };
   if (!to.startsWith("01")) return { ok: false, error: "휴대폰 번호(010…)로만 보낼 수 있습니다." };
@@ -38,9 +40,9 @@ export function validateSmsRequest(
   if (bytes > LMS_MAX_BYTES) {
     return { ok: false, error: `문구가 너무 깁니다. (${bytes}바이트, 최대 ${LMS_MAX_BYTES}바이트)` };
   }
-  if (patientId <= 0) return { ok: false, error: "어느 환자에게 보내는지 알 수 없습니다. 환자 줄에서 보내 주세요." };
+  if (patientId <= 0 && appointmentId <= 0) return { ok: false, error: "어느 환자에게 보내는지 알 수 없습니다. 환자 줄이나 예약에서 보내 주세요." };
   if (!staff) return { ok: false, error: "보내는 사람 이름을 골라 주세요." };
-  return { ok: true, value: { to, text, patientId, staff } };
+  return { ok: true, value: { to, text, patientId, appointmentId: patientId > 0 ? 0 : appointmentId, staff } };
 }
 
 /**

@@ -14,6 +14,7 @@ import type {
   LedgerEntryWithItems,
   LedgerExpense,
   LedgerItem,
+  PatientSource,
 } from "./types";
 
 function fail(action: string, message: string): never {
@@ -139,6 +140,8 @@ export type SaveEntryInput = {
   patient_id: number | null;
   patient_name: string;
   new_patient_phone?: string;
+  new_patient_source?: PatientSource | "";
+  new_patient_source_note?: string;
   insurance_kind: string | null;
   cash: number;
   cash_receipt: number;
@@ -174,7 +177,7 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
     const found = await findPatientByPhone(phone);
     patientId = found
       ? found.id
-      : (await createPatient({ name, phone, family_phone: "", family_note: "", condition: "general", memo: "" })).id;
+      : (await createPatient({ name, phone, family_phone: "", family_note: "", condition: "general", memo: "", source: input.new_patient_source ?? "", source_note: input.new_patient_source_note ?? "" })).id;
   }
   const makePresc = decoctionItems.length > 0 && !!patientId && !!input.decoction && input.decoction.packs > 0;
 

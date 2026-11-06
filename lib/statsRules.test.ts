@@ -10,6 +10,7 @@ import {
   prescriptionSeq,
   prevMonthKey,
   recentMonthKeys,
+  sourceCountsByMonth,
   weeklyMonth,
 } from "./statsRules";
 
@@ -39,6 +40,23 @@ const presc = [
   { id: 3, patient_id: 1, receive_date: "2026-09-05", packs: 70, days: 35, per_day: 2 },
   { id: 4, patient_id: 3, receive_date: "2026-09-12", packs: 20, days: 10, per_day: 2 },
 ];
+
+describe("sourceCountsByMonth", () => {
+  it("달별·경로별로 세고, 안 적은 사람은 none", () => {
+    const m = sourceCountsByMonth(
+      [
+        { created_at: "2026-11-02T12:00:00+09:00", source: "youtube" },
+        { created_at: "2026-11-03T12:00:00+09:00", source: "youtube" },
+        { created_at: "2026-11-04T12:00:00+09:00", source: null },
+        { created_at: "2026-10-04T12:00:00+09:00", source: "blog" },
+        { created_at: "2025-01-04T12:00:00+09:00", source: "blog" },
+      ],
+      ["2026-10", "2026-11"],
+    );
+    expect(Object.fromEntries(m.get("2026-11")!)).toEqual({ youtube: 2, none: 1 });
+    expect(Object.fromEntries(m.get("2026-10")!)).toEqual({ blog: 1 });
+  });
+});
 
 describe("monthlyRows", () => {
   it("처방 순번은 수령일 순, 재처방은 2번째부터, 포 수 없으면 일수×2", () => {

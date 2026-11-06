@@ -23,6 +23,8 @@ function toRow(input: PatientInput) {
     family_note: input.family_note.trim() || null,
     condition: input.condition,
     memo: input.memo.trim() || null,
+    source: input.source || null,
+    source_note: input.source_note.trim() || null,
   };
 }
 

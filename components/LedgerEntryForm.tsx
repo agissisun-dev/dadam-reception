@@ -6,6 +6,8 @@ import { saveEntry, upsertCode } from "@/lib/ledger";
 import { GROUP_LABEL, GROUP_ORDER, INSURANCE_KINDS, PAY_NOTES, chipClass, parseNote, parseWon, won, type ParsedItem } from "@/lib/ledgerRules";
 import { DEFAULT_PER_DAY, PACK_PRESETS, daysFromPacks } from "@/lib/packs";
 import { maskPhone } from "@/lib/phone";
+import { SOURCES, sourceHint } from "@/lib/sources";
+import type { PatientSource } from "@/lib/types";
 import { weekdayKo } from "@/lib/dates";
 import { POUCHES, defaultReceiveDay } from "@/lib/brewRules";
 import MoneyInput from "@/components/MoneyInput";
@@ -132,6 +134,8 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
   const [region, setRegion] = useState("");
   const [pouch, setPouch] = useState<string>("");
   const [newPhone, setNewPhone] = useState("");
+  const [newSource, setNewSource] = useState<PatientSource | "">("");
+  const [newSourceNote, setNewSourceNote] = useState("");
   const [memo, setMemo] = useState("");
   const [offTotal, setOffTotal] = useState(false);
   const [payNote, setPayNote] = useState<string>("계좌입금");
@@ -200,6 +204,8 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
         patient_id: linked?.id ?? null,
         patient_name: trimmed,
         new_patient_phone: linked ? undefined : newPhone,
+        new_patient_source: linked ? undefined : newSource,
+        new_patient_source_note: linked ? undefined : newSourceNote,
         insurance_kind: insuranceKind || null,
         cash: parseWon(cash),
         cash_receipt: parseWon(cashReceipt),
@@ -369,6 +375,17 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
                   <span className={LABEL}>새 환자면 연락처 (해피콜용, 11자리)</span>
                   <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} inputMode="numeric" placeholder="01012345678" className="h-8 w-40 rounded border border-stone-300 px-2 text-sm" />
                 </label>
+              )}
+              {!linked && newPhone && (
+                <div className="block w-full">
+                  <span className={LABEL}>어떻게 오셨어요? (선택)</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {SOURCES.map((s) => (
+                      <button key={s.value} type="button" onClick={() => setNewSource((v) => (v === s.value ? "" : s.value))} className={`rounded border px-2 py-0.5 text-xs ${newSource === s.value ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300"}`}>{s.label}</button>
+                    ))}
+                    {newSource && <input value={newSourceNote} onChange={(e) => setNewSourceNote(e.target.value)} placeholder={sourceHint(newSource)} className="h-7 min-w-[220px] flex-1 rounded border border-stone-300 px-2 text-xs" />}
+                  </div>
+                </div>
               )}
               <p className="w-full text-xs text-stone-600">
                 약대장 {brewDay.slice(5).replace("-", "/")}({weekdayKo(brewDay)}) {slot === "am" ? "오전" : "오후"}에 들어갑니다

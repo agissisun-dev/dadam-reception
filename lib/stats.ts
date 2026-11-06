@@ -23,7 +23,7 @@ async function fetchAll<T>(table: string, columns: string, label: string): Promi
 }
 
 export type StatsData = {
-  patients: { created_at: string }[];
+  patients: { created_at: string; source: string | null }[];
   prescriptions: PrescriptionLite[];
   calls: HappyCallLite[];
   logs: ContactLogLite[];
@@ -32,7 +32,7 @@ export type StatsData = {
 
 export async function loadStats(): Promise<StatsData> {
   const [patients, prescriptions, calls, logs, weekly] = await Promise.all([
-    fetchAll<{ created_at: string }>("patients", "id, created_at", "환자 수"),
+    fetchAll<{ created_at: string; source: string | null }>("patients", "id, created_at, source", "환자 수"),
     fetchAll<PrescriptionLite>("prescriptions", "id, patient_id, receive_date, packs, days, per_day", "처방"),
     fetchAll<HappyCallLite>("happy_calls", "id, round, due_date, status, created_at", "해피콜"),
     fetchAll<ContactLogLite>("contact_logs", "id, happy_call_id, action, created_at", "해피콜 기록"),

@@ -1,5 +1,6 @@
 import { getSupabase } from "./supabaseClient";
 import { normalizePhone } from "./phone";
+import { DEFAULT_REMIND_BODY } from "./appointmentNotifyRules";
 import type { Appointment, AppointmentKind, AppointmentSettings, ClinicDayOverride } from "./types";
 
 function fail(action: string, message: string): never {
@@ -11,13 +12,17 @@ const DEFAULT_SETTINGS: Omit<AppointmentSettings, "clinic"> = {
   consult_per_slot: 1,
   treatment_per_slot: 3,
   notify_body: "{이름}님, {병원} 예약 안내드립니다. {날짜} {시간}에 뵙겠습니다. 변경이 필요하시면 전화 주세요.",
+  auto_notify: false,
+  remind_enabled: false,
+  remind_body: DEFAULT_REMIND_BODY,
 };
 
 /** 병원 설정(칸 간격·정원·안내 문구). 없으면 기본값. */
 export async function getSettings(): Promise<AppointmentSettings> {
   const { data, error } = await getSupabase().from("appointment_settings").select("*").maybeSingle();
   if (error) fail("예약 설정", error.message);
-  return (data as AppointmentSettings | null) ?? { clinic: "S", ...DEFAULT_SETTINGS };
+  // V8 칸(자동 안내)이 아직 없는 표에서도 돌아가게 기본값 위에 덮는다
+  return data ? { ...DEFAULT_SETTINGS, ...(data as Partial<AppointmentSettings>), clinic: (data as AppointmentSettings).clinic } : { clinic: "S", ...DEFAULT_SETTINGS };
 }
 
 export async function saveSettings(patch: Partial<Omit<AppointmentSettings, "clinic">>): Promise<void> {

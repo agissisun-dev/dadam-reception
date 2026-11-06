@@ -22,6 +22,8 @@ import {
 } from "@/lib/appointments";
 import { KIND_LABEL, SOURCE_LABEL, STATUS_LABEL, countByDay, dateKo, dayHours, fillTemplate, parseNaverPaste, slotLoad, slotsOf } from "@/lib/appointmentRules";
 import { clinicInfo, fetchCurrentClinic, type ClinicCode } from "@/lib/clinic";
+import { autoNotify } from "@/lib/appointmentNotify";
+import { DEFAULT_REMIND_BODY, shouldAutoNotify } from "@/lib/appointmentNotifyRules";
 import { firstDayISO, isInMonth, lastDayISO, monthGrid, monthLabel, shiftMonth, yearMonthOf, type YearMonth } from "@/lib/calendarRules";
 import { addDays, todayISO } from "@/lib/dates";
 import { holidayLabel } from "@/lib/holidays";
@@ -40,10 +42,11 @@ type Banner = { patientId: number | null; name: string; entryId: number | null; 
 
 /** 빈 자리를 눌렀을 때 뜨는 작은 창 */
 function BookBox({
-  day, time, kind, patients, staff, preset, onDone, onCancel, full,
+  day, time, kind, patients, staff, preset, onDone, onCancel, full, settings, clinicName,
 }: {
   day: string; time: string; kind: AppointmentKind; patients: Patient[]; staff: StaffName;
-  preset: Banner; onDone: (a: Appointment) => void; onCancel: () => void; full: boolean;
+  preset: Banner; onDone: (a: Appointment, smsError: string | null) => void; onCancel: () => void; full: boolean;
+  settings: AppointmentSettings; clinicName: string;
 }) {
   const [name, setName] = useState(preset?.name ?? "");
   const [patientId, setPatientId] = useState<number | null>(preset?.patientId ?? null);
@@ -70,7 +73,17 @@ function BookBox({
         ledger_entry_id: preset?.entryId ?? null,
         staff_name: staff,
       });
-      onDone(a);
+      // 자동 안내가 켜져 있으면 잡히는 순간 확인 문자. 실패해도 예약은 그대로, 화면이 알려 준다 (V8)
+      let saved = a;
+      let smsError: string | null = null;
+      if (shouldAutoNotify(a, settings)) {
+        try {
+          saved = await autoNotify(a, settings, clinicName, staff);
+        } catch (e) {
+          smsError = (e as Error).message;
+        }
+      }
+      onDone(saved, smsError);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -143,6 +156,7 @@ function Board() {
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState<{ time: string; kind: AppointmentKind; full: boolean } | null>(null);
   const [justBooked, setJustBooked] = useState<Appointment | null>(null);
+  const [smsError, setSmsError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [showOverride, setShowOverride] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -201,7 +215,7 @@ function Board() {
     }
   }
 
-  const s = settings ?? { clinic, slot_minutes: 30, consult_per_slot: 1, treatment_per_slot: 3, notify_body: "" };
+  const s: AppointmentSettings = settings ?? { clinic, slot_minutes: 30, consult_per_slot: 1, treatment_per_slot: 3, notify_body: "", auto_notify: false, remind_enabled: false, remind_body: DEFAULT_REMIND_BODY };
   const overrideOf = (iso: string) => overrides.find((o) => o.day === iso) ?? null;
   const hours = dayHours(day, clinic, overrideOf(day));
   const slots = slotsOf(hours, s.slot_minutes);
@@ -348,9 +362,11 @@ function Board() {
                     <div className="px-3 pb-2">
                       <BookBox
                         day={day} time={t} kind={booking.kind} full={booking.full} patients={patients} staff={staff} preset={banner}
-                        onDone={(a) => {
+                        settings={s} clinicName={info.name}
+                        onDone={(a, err) => {
                           setBooking(null);
                           setJustBooked(a);
+                          setSmsError(err);
                           saveLastStaff(staff);
                           load();
                           if (banner) router.replace("/appointments");
@@ -416,8 +432,15 @@ function Board() {
         <section className="flex flex-wrap items-center gap-3 rounded-lg border border-[#16863b] bg-white p-3 text-sm">
           <b className="text-[#0f3d23]">잡혔습니다 · {justBooked.patient_name} · {dateKo(justBooked.day)} {justBooked.time} {KIND_LABEL[justBooked.kind]}</b>
           <span className="min-w-[280px] flex-1 rounded bg-stone-50 px-3 py-1.5">{notifyText(justBooked)}</span>
-          <button type="button" className={BTN} onClick={() => { navigator.clipboard?.writeText(notifyText(justBooked)).catch(() => undefined); }}>복사</button>
-          <button type="button" className={PRIMARY} onClick={() => run(async () => { await markNotified(justBooked.id, "병원 휴대폰"); setJustBooked(null); })}>병원 휴대폰으로 보냈음</button>
+          {justBooked.notify_note === "자동 문자" ? (
+            <span className="rounded bg-[#f0f7f3] px-2 py-1 text-xs font-bold text-[#0f3d23]">✓ 안내 문자를 자동으로 보냈습니다</span>
+          ) : (
+            <>
+              {smsError && <span className="basis-full text-xs text-red-700">예약은 잡혔습니다. 자동 문자는 못 보냈습니다: {smsError} → 복사해서 병원 휴대폰으로 보내 주세요.</span>}
+              <button type="button" className={BTN} onClick={() => { navigator.clipboard?.writeText(notifyText(justBooked)).catch(() => undefined); }}>복사</button>
+              <button type="button" className={PRIMARY} onClick={() => run(async () => { await markNotified(justBooked.id, "병원 휴대폰"); setJustBooked(null); })}>병원 휴대폰으로 보냈음</button>
+            </>
+          )}
           <button type="button" className="text-xs underline" onClick={() => setEditNotify((v) => !v)}>문구 고치기</button>
           <button type="button" className="text-xs text-stone-500 underline" onClick={() => setJustBooked(null)}>닫기</button>
           {banner?.entryId && <Link href="/ledger" className="text-xs underline">장부로 돌아가기</Link>}
@@ -546,6 +569,9 @@ function SettingsBox({ settings, onSaved, onClose }: { settings: AppointmentSett
   const [consult, setConsult] = useState(settings.consult_per_slot);
   const [treat, setTreat] = useState(settings.treatment_per_slot);
   const [body, setBody] = useState(settings.notify_body);
+  const [auto, setAuto] = useState(settings.auto_notify);
+  const [remind, setRemind] = useState(settings.remind_enabled);
+  const [remindBody, setRemindBody] = useState(settings.remind_body);
   const [error, setError] = useState<string | null>(null);
   return (
     <section className="rounded-lg border border-stone-300 bg-white p-3 text-sm">
@@ -557,8 +583,16 @@ function SettingsBox({ settings, onSaved, onClose }: { settings: AppointmentSett
       </div>
       <label className="mt-2 block"><span className="text-[11px] text-stone-500">예약 안내 문구 — 자리표 {"{이름} {병원} {날짜} {시간}"}</span>
         <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} className="w-full rounded border border-stone-300 px-2 py-1 text-sm" /></label>
+      <div className="mt-3 space-y-2 rounded border border-stone-200 bg-stone-50 p-2">
+        <p className="text-[11px] font-bold text-stone-600">자동 안내 문자</p>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> 예약이 잡히면 바로 확인 문자 보내기 <span className="text-[11px] text-stone-500">(접수실에서 잡은 것만, 네이버 예약은 네이버가 보냄)</span></label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={remind} onChange={(e) => setRemind(e.target.checked)} /> 전날 오후 5시에 리마인더 보내기 <span className="text-[11px] text-stone-500">(내일 예약 전원)</span></label>
+        <label className="block"><span className="text-[11px] text-stone-500">리마인더 문구 — 자리표 {"{이름} {병원} {날짜} {시간}"}</span>
+          <textarea value={remindBody} onChange={(e) => setRemindBody(e.target.value)} rows={2} className="w-full rounded border border-stone-300 px-2 py-1 text-sm" /></label>
+        <p className="text-[11px] text-stone-500">문자 업체 키와 발신번호가 등록되어 있어야 실제로 나갑니다. 보낸 것은 모두 [현황] 아래 문자 장부에 남습니다.</p>
+      </div>
       <div className="mt-2 flex gap-2">
-        <button type="button" className={PRIMARY} onClick={async () => { try { await saveSettings({ slot_minutes: slot, consult_per_slot: consult, treatment_per_slot: treat, notify_body: body }); onSaved({ ...settings, slot_minutes: slot, consult_per_slot: consult, treatment_per_slot: treat, notify_body: body }); } catch (e) { setError((e as Error).message); } }}>저장</button>
+        <button type="button" className={PRIMARY} onClick={async () => { const patch = { slot_minutes: slot, consult_per_slot: consult, treatment_per_slot: treat, notify_body: body, auto_notify: auto, remind_enabled: remind, remind_body: remindBody }; try { await saveSettings(patch); onSaved({ ...settings, ...patch }); } catch (e) { setError((e as Error).message); } }}>저장</button>
         <button type="button" className={BTN} onClick={onClose}>닫기</button>
       </div>
       {error && <p className="mt-1 text-xs text-red-700">{error}</p>}

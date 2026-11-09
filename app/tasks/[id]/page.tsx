@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import TaskForm from "@/components/TaskForm";
+import StaffSelect from "@/components/StaffSelect";
 import {
   getTask,
   updateTask,
@@ -151,20 +152,7 @@ function TaskDetail() {
         </section>
       ) : completing ? (
         <section className="rounded-lg border border-stone-200 bg-white p-4">
-          <label className="block">
-            <span className="text-sm text-stone-600">처리한 사람</span>
-            <select
-              value={staff}
-              onChange={(e) => setStaff(e.target.value as StaffName)}
-              className="mt-1 w-full rounded border border-stone-300 bg-white px-3 py-2"
-            >
-              {STAFF_NAMES.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
+          <StaffSelect value={staff} onChange={setStaff} />
           <label className="mt-3 block">
             <span className="text-sm text-stone-600">완료 메모 (무엇을 어떻게 했는지)</span>
             <textarea

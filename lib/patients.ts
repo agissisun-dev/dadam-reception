@@ -206,7 +206,8 @@ export async function setPrescriptionReceiveDate(prescriptionId: number, receive
   const { data, error } = await sb.from("prescriptions").select("*").eq("id", prescriptionId).maybeSingle();
   if (error) fail("처방 조회", error.message);
   const p = data as Prescription | null;
-  if (!p || p.receive_date === receiveDate) return;
+  if (!p) fail("처방 조회", "처방이 없거나 조회 권한이 없습니다.");
+  if (p.receive_date === receiveDate) return;
   await updatePrescription(prescriptionId, {
     receive_date: receiveDate,
     days: p.days,

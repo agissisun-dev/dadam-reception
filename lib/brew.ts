@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabaseClient";
+import { fetchCurrentClinic } from "./clinic";
 import { addDays, daysBetween } from "./dates";
 import { setPrescriptionReceiveDate } from "./patients";
 import type { NewJob } from "./brewRules";
@@ -64,34 +65,57 @@ export async function createJobs(jobs: NewJob[]): Promise<BrewJob[]> {
 
 export type JobPatch = Partial<Pick<BrewJob, "day" | "slot" | "title" | "patient_name" | "delivery" | "region" | "pouch" | "memo" | "max_jobs" | "receive_day" | "kind">>;
 
+/** 날짜·상세 수정과 삭제는 최신 행 및 짝의 소유 병원을 확인한 뒤 진행한다. */
+async function getOwnedJobAndPair(id: number, action: string): Promise<{ job: BrewJob; pair: BrewJob | null }> {
+  const sb = getSupabase();
+  const clinic = await fetchCurrentClinic();
+  const { data, error } = await sb.from("brew_jobs").select("*").eq("id", id).single();
+  if (error) fail(action, error.message);
+  const job = data as BrewJob;
+  if (job.clinic !== clinic) {
+    fail(action, "두 병원은 약대장 조회와 완료 표시를 함께 사용할 수 있지만, 날짜·상세 수정과 삭제는 해당 약을 등록한 병원에서 진행해 주세요.");
+  }
+  let pair: BrewJob | null = null;
+  if (job.pair_id) {
+    const { data: pairData, error: pairError } = await sb.from("brew_jobs").select("*").eq("id", job.pair_id).single();
+    if (pairError) fail(action, pairError.message);
+    pair = pairData as BrewJob;
+    if (pair.clinic !== job.clinic) fail(action, "짝 칸의 등록 병원이 달라 변경할 수 없습니다. 등록 병원을 확인해 주세요.");
+  }
+  return { job, pair };
+}
+
 /**
  * 칸 고치기. 날짜가 바뀌면: 발효 짝도 같은 만큼 옮기고, 받는 날도 같이 옮기고, 처방 수령일·해피콜을 갱신한다.
  */
 export async function updateJob(job: BrewJob, patch: JobPatch): Promise<void> {
+  const current = await getOwnedJobAndPair(job.id, "약대장 칸 고치기");
+  job = current.job;
   const sb = getSupabase();
   const next = { ...patch, updated_at: new Date().toISOString() };
   const dayChanged = patch.day !== undefined && patch.day !== job.day;
   if (dayChanged && job.day && patch.day) {
     const delta = daysBetween(job.day, patch.day);
     if (patch.receive_day === undefined && job.receive_day) next.receive_day = addDays(job.receive_day, delta);
-    if (job.pair_id) {
-      const { data: pair } = await sb.from("brew_jobs").select("*").eq("id", job.pair_id).maybeSingle();
-      const p = pair as BrewJob | null;
-      if (p?.day) {
-        const pd = addDays(p.day, delta);
-        await sb.from("brew_jobs").update({ day: pd, receive_day: p.receive_day ? addDays(p.receive_day, delta) : null, updated_at: next.updated_at }).eq("id", p.id);
-        if (p.prescription_id && p.receive_day) await setPrescriptionReceiveDate(p.prescription_id, addDays(p.receive_day, delta));
-      }
+    const p = current.pair;
+    if (p?.day) {
+      const pd = addDays(p.day, delta);
+      const { error: pairError } = await sb.from("brew_jobs").update({ day: pd, receive_day: p.receive_day ? addDays(p.receive_day, delta) : null, updated_at: next.updated_at }).eq("id", p.id).select("id").single();
+      if (pairError) fail("약대장 짝 칸 고치기", pairError.message);
+      if (p.prescription_id && p.receive_day) await setPrescriptionReceiveDate(p.prescription_id, addDays(p.receive_day, delta));
     }
   } else if (dayChanged && patch.day && !job.day) {
     // 날짜 미정 → 날짜 넣기
     if (patch.receive_day === undefined) next.receive_day = patch.day;
   }
-  const { error } = await sb.from("brew_jobs").update(next).eq("id", job.id);
+  const { error } = await sb.from("brew_jobs").update(next).eq("id", job.id).select("id").single();
   if (error) fail("약대장 칸 고치기", error.message);
   const newReceive = next.receive_day ?? (patch.receive_day !== undefined ? patch.receive_day : undefined);
   if (job.prescription_id && newReceive) await setPrescriptionReceiveDate(job.prescription_id, newReceive);
-  if (job.prescription_id && patch.day !== undefined) await sb.from("prescriptions").update({ brew_day: patch.day }).eq("id", job.prescription_id);
+  if (job.prescription_id && patch.day !== undefined) {
+    const { error: prescriptionError } = await sb.from("prescriptions").update({ brew_day: patch.day }).eq("id", job.prescription_id).select("id").single();
+    if (prescriptionError) fail("처방 탕전일 변경", prescriptionError.message);
+  }
 }
 
 export async function markDone(job: BrewJob, done: boolean, staff: string): Promise<void> {
@@ -103,9 +127,14 @@ export async function markDone(job: BrewJob, done: boolean, staff: string): Prom
 }
 
 export async function deleteJob(job: BrewJob): Promise<void> {
+  const current = await getOwnedJobAndPair(job.id, "약대장 칸 지우기");
+  job = current.job;
   const sb = getSupabase();
-  if (job.pair_id) await sb.from("brew_jobs").delete().eq("id", job.pair_id);
-  const { error } = await sb.from("brew_jobs").delete().eq("id", job.id);
+  if (current.pair) {
+    const { error: pairError } = await sb.from("brew_jobs").delete().eq("id", current.pair.id).select("id").single();
+    if (pairError) fail("약대장 짝 칸 지우기", pairError.message);
+  }
+  const { error } = await sb.from("brew_jobs").delete().eq("id", job.id).select("id").single();
   if (error) fail("약대장 칸 지우기", error.message);
 }
 

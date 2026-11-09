@@ -51,7 +51,10 @@ export default function AppHeader() {
   useEffect(() => {
     let active = true;
     fetchCurrentClinic().then((c) => {
-      if (active) setClinic(c);
+      if (active) {
+        setClinic(c);
+        document.title = appTitle(c);
+      }
     });
     return () => {
       active = false;
@@ -59,7 +62,7 @@ export default function AppHeader() {
   }, []);
 
   async function logout() {
-    await getSupabase().auth.signOut();
+    await getSupabase().auth.signOut({ scope: "local" });
     forgetClinic();
     router.replace("/login");
   }

@@ -3,6 +3,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabaseClient";
+import { clinicInfo, type ClinicCode } from "@/lib/clinic";
+import { CLINIC_TITLES, clinicFromHostname } from "@/lib/clinicHosts";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,9 +14,12 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [expectedClinic, setExpectedClinic] = useState<ClinicCode | null>(null);
 
   useEffect(() => {
     let active = true;
+    const expected = clinicFromHostname(window.location.hostname);
+    document.title = expected ? CLINIC_TITLES[expected] : "다담 접수실";
 
     async function checkSession() {
       try {
@@ -27,7 +32,10 @@ export default function LoginPage() {
       } catch {
         // 세션 확인에 실패해도 로그인 화면을 사용할 수 있게 한다.
       }
-      if (active) setCheckingSession(false);
+      if (active) {
+        setExpectedClinic(expected);
+        setCheckingSession(false);
+      }
     }
 
     void checkSession();
@@ -94,9 +102,21 @@ export default function LoginPage() {
     );
   }
 
+  const info = expectedClinic ? clinicInfo(expectedClinic) : null;
+
   return (
     <main className="mx-auto mt-16 max-w-sm p-6">
-      <h1 className="mb-6 text-2xl font-bold">다담 접수실</h1>
+      <h1 className="mb-2 text-2xl font-bold">{expectedClinic ? CLINIC_TITLES[expectedClinic] : "다담 접수실"}</h1>
+      {info && (
+        <span className="mb-3 inline-block rounded px-2 py-1 text-xs font-bold" style={{ background: info.bg, color: info.text, border: `1px solid ${info.color}` }}>
+          {info.short}
+        </span>
+      )}
+      <p className="mb-6 text-sm text-stone-600">
+        {expectedClinic
+          ? `${CLINIC_TITLES[expectedClinic]} 계정으로 로그인해 주세요. 다른 병원 주소와 로그인 상태가 따로 유지됩니다.`
+          : "병원 계정으로 로그인해 주세요. 이 주소에는 병원이 고정되어 있지 않습니다."}
+      </p>
       <form onSubmit={onSubmit} className="space-y-4">
         <label className="block">
           <span className="text-sm text-stone-600">이메일</span>

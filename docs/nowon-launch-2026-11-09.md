@@ -59,3 +59,15 @@
 - 로그인 유지/OTP 모의 분기 14개와 S/N/미연결 계정 DB 권한 점검 5개 통과.
 - 노원 인증 상태 및 첫 로그인 완료 확인. 노원 화면 자체의 최종 시각 검증은 다른 브라우저/프로필 접근 제약으로 미실시.
 - 자동문자 OFF 유지.
+
+## 병원별 고정 주소 분리 (2026-11-09 추가)
+- S 전용: https://dadam-reception.vercel.app/
+- N 전용: https://nowon-dadam-reception.vercel.app/
+- 동일 Vercel 프로젝트의 두 Production 도메인. Redirect가 아니라 같은 최신 운영 배포에 연결되어 이후 배포가 양쪽에 반영된다.
+- 프로젝트/DB를 복제하지 않으므로 약대장·재고 공유와 기존 병원별 RLS는 그대로 유지. 중복 cron 프로젝트를 만들지 않음.
+- 브라우저 origin이 달라 같은 브라우저에서 각 계정 세션을 독립적으로 유지할 수 있음. 토큰을 서로 복사·이동하지 않는다.
+- N 이메일 로그인 복귀 허용 주소 https://nowon-dadam-reception.vercel.app/ 추가. 기본 Site URL은 기존 S 주소 유지.
+- 새 N origin에서는 최초 한 번 이메일 로그인 필요. 예전 S 주소에서 인증한 세션이 새 origin으로 자동 이전되지는 않음.
+- 주소에 맞는 병원명 표시 및 잘못된 병원 계정의 private 화면 진입 차단. 로그아웃은 해당 origin의 local 세션만 종료.
+
+- 주소 구분 신규 22개와 기존 날짜/해피콜/약대장 47개, 총 69개를 Node native TypeScript + strict assertion adapter로 실행해 통과(Vitest 정식 실행 아님). 로그인 자동 갱신/동일 계정 재알림 시 작성 중인 화면을 유지하도록 검증한다.

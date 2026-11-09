@@ -19,7 +19,6 @@ export default function LoginPage() {
   useEffect(() => {
     let active = true;
     const expected = clinicFromHostname(window.location.hostname);
-    document.title = expected ? CLINIC_TITLES[expected] : "다담 접수실";
 
     async function checkSession() {
       try {
@@ -44,8 +43,18 @@ export default function LoginPage() {
     };
   }, [router]);
 
+  useEffect(() => {
+    if (!checkingSession) {
+      document.title = expectedClinic ? CLINIC_TITLES[expectedClinic] : "다담 접수실";
+    }
+  }, [checkingSession, expectedClinic]);
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (expectedClinic === "N") {
+      await onEmailLink();
+      return;
+    }
     setError(null);
     setMessage(null);
     setBusy(true);
@@ -103,6 +112,7 @@ export default function LoginPage() {
   }
 
   const info = expectedClinic ? clinicInfo(expectedClinic) : null;
+  const emailLinkOnly = expectedClinic === "N";
 
   return (
     <main className="mx-auto mt-16 max-w-sm p-6">
@@ -114,7 +124,9 @@ export default function LoginPage() {
       )}
       <p className="mb-6 text-sm text-stone-600">
         {expectedClinic
-          ? `${CLINIC_TITLES[expectedClinic]} 계정으로 로그인해 주세요. 다른 병원 주소와 로그인 상태가 따로 유지됩니다.`
+          ? emailLinkOnly
+            ? "이메일로 받은 로그인 링크로 접속합니다. 네이버 등 메일 계정의 비밀번호를 입력하는 곳이 아닙니다."
+            : `${CLINIC_TITLES[expectedClinic]} 계정으로 로그인해 주세요. 다른 병원 주소와 로그인 상태가 따로 유지됩니다.`
           : "병원 계정으로 로그인해 주세요. 이 주소에는 병원이 고정되어 있지 않습니다."}
       </p>
       <form onSubmit={onSubmit} className="space-y-4">
@@ -123,41 +135,47 @@ export default function LoginPage() {
           <input
             type="email"
             name="email"
-            autoComplete="username"
+            autoComplete={emailLinkOnly ? "email" : "username"}
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="mt-1 w-full rounded border border-stone-300 px-3 py-2"
           />
         </label>
-        <label className="block">
-          <span className="text-sm text-stone-600">비밀번호</span>
-          <input
-            type="password"
-            name="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded border border-stone-300 px-3 py-2"
-          />
-        </label>
+        {!emailLinkOnly && (
+          <label className="block">
+            <span className="text-sm text-stone-600">비밀번호</span>
+            <input
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1 w-full rounded border border-stone-300 px-3 py-2"
+            />
+          </label>
+        )}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         {message && <p role="status" className="text-sm text-stone-600">{message}</p>}
+        {!emailLinkOnly && (
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded bg-stone-900 py-2 text-white disabled:opacity-50"
+          >
+            {busy ? "확인 중…" : "로그인"}
+          </button>
+        )}
         <button
-          type="submit"
+          type={emailLinkOnly ? "submit" : "button"}
+          onClick={emailLinkOnly ? undefined : onEmailLink}
           disabled={busy}
-          className="w-full rounded bg-stone-900 py-2 text-white disabled:opacity-50"
+          className={emailLinkOnly
+            ? "w-full rounded bg-stone-900 py-2 text-white disabled:opacity-50"
+            : "w-full rounded border border-stone-300 py-2 text-stone-900 disabled:opacity-50"}
         >
-          {busy ? "확인 중…" : "로그인"}
-        </button>
-        <button
-          type="button"
-          onClick={onEmailLink}
-          disabled={busy}
-          className="w-full rounded border border-stone-300 py-2 text-stone-900 disabled:opacity-50"
-        >
-          이메일로 로그인 링크 받기
+          {emailLinkOnly && busy ? "로그인 링크 보내는 중…" : "이메일로 로그인 링크 받기"}
         </button>
       </form>
       <p className="mt-6 text-xs text-stone-500">

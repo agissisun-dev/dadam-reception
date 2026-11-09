@@ -97,7 +97,7 @@ export default function PasswordPage() {
         // 캐시나 기본 병원을 사용하지 않고 현재 세션의 실제 병원을 조회한다.
         const { data, error: lookupError } = await supabase.rpc("current_clinic").abortSignal(controller.signal);
         if (!current(version)) return;
-        const actualClinic = data === "S" || data === "N" ? data : null;
+        const actualClinic: ClinicCode | null = data === "S" || data === "N" ? data : null;
         if (lookupError) {
           fail("계정의 병원을 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 확인해 주세요.");
         } else if (!actualClinic) {

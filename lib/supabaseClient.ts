@@ -15,6 +15,12 @@ export function getSupabase(): SupabaseClient {
       "NEXT_PUBLIC_SUPABASE_URL 또는 NEXT_PUBLIC_SUPABASE_ANON_KEY 가 없습니다. .env.local 을 확인하세요.",
     );
   }
-  client = createClient(url, key);
+  client = createClient(url, key, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
   return client;
 }

@@ -1,0 +1,16 @@
+begin;
+select set_config('dadam.expected_brew',(select count(*)::text from public.brew_jobs),true),set_config('dadam.expected_stock',(select count(*)::text from public.cabinet_items),true);
+select set_config('request.jwt.claim.sub',(select user_id::text from public.clinic_accounts where clinic='S' limit 1),true);
+set local role authenticated;
+do $$ begin assert public.current_clinic()='S','S mapping'; assert not exists(select 1 from public.patients where clinic<>'S'),'S privacy'; end $$;
+reset role;
+select set_config('request.jwt.claim.sub',(select user_id::text from public.clinic_accounts where clinic='N' limit 1),true);
+set local role authenticated;
+do $$ begin assert public.current_clinic()='N','N mapping'; assert not exists(select 1 from public.patients where clinic<>'N'),'N privacy'; assert (select count(*) from public.brew_jobs)=current_setting('dadam.expected_brew')::int,'N shared brew'; assert (select count(*) from public.cabinet_items)=current_setting('dadam.expected_stock')::int,'N shared stock'; assert (select count(*) from public.templates)=7,'N templates'; end $$;
+reset role;
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000099',true);
+set local role authenticated;
+do $$ begin assert public.current_clinic() is null,'unmapped default S'; assert not exists(select 1 from public.patients),'unmapped patients'; assert not exists(select 1 from public.brew_jobs),'unmapped shared brew'; assert not exists(select 1 from public.cabinet_items),'unmapped stock'; end $$;
+reset role;
+rollback;
+select test,'PASS' as result from (values('S account mapping / private records'),('N account mapping / private records'),('N shared brew and inventory access'),('N independent templates'),('Unmapped account cannot read clinical/shared records')) t(test);

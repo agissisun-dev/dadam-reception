@@ -6,8 +6,8 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import StaffSelect from "@/components/StaffSelect";
 import { createJobs, deleteJob, listJobs, listUnscheduled, listWeekdayRules, markDone, saveWeekdayRule, updateJob } from "@/lib/brew";
-import { KIND_LABEL, POUCHES, dayCounts, dayHeader, jobLabel, layoutWeek, planJobsFromLedger, weekDays, weekMonday, type WeekRow } from "@/lib/brewRules";
-import { CLINICS, clinicInfo } from "@/lib/clinic";
+import { KIND_LABEL, POUCHES, dayCounts, dayHeader, jobLabel, planJobsFromLedger, weekDays, weekMonday, type WeekRow } from "@/lib/brewRules";
+import { brewCardColors, clinicMark, layoutBrewSections } from "@/lib/brewDisplay";
 import { addDays, todayISO } from "@/lib/dates";
 import { holidayLabel, isClinicClosed } from "@/lib/holidays";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
@@ -18,15 +18,9 @@ const PRIMARY = "rounded bg-stone-900 px-3 py-1.5 text-sm text-white disabled:op
 const IN = "h-8 rounded border border-stone-300 px-2 text-sm";
 const WEEKDAY_KO = ["", "월", "화", "수", "목", "금", "토"];
 
-/**
- * 칸 색은 "어느 병원 약인지"가 먼저 보이게(접수실 2026-10-02): 다담에스 초록, 노원다담 남색.
- * 발효·지정처방은 글자 표시로, 메모는 노랑, 끝난 것은 회색.
- */
+/** 병원은 S/D, 종류는 테두리로 구분. 발효는 두 병원 모두 붉은 계열. */
 function cardStyle(j: BrewJob): { className: string; style?: React.CSSProperties } {
-  if (j.status === "done") return { className: "border-stone-400 bg-stone-200 text-stone-500" };
-  if (j.kind === "note") return { className: "border-yellow-600 bg-yellow-50" };
-  const c = clinicInfo(j.clinic);
-  return { className: "", style: { borderColor: c.color, background: c.bg, color: c.text } };
+  return { className: "", style: brewCardColors(j) };
 }
 
 const POUCH_COLOR: Record<string, string> = { 다담: "#16863b", 애장금: "#bfa37a", 자연과사람: "#06478f", 공룡: "#b91c1c" };
@@ -63,11 +57,13 @@ function Card({ j, staff, onChanged }: { j: BrewJob; staff: StaffName; onChanged
     <div className={`rounded border px-2 py-1.5 text-xs ${cs.className}`} style={cs.style}>
       <div className="flex items-center gap-1">
         {j.pouch && <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: POUCH_COLOR[j.pouch] ?? "#a8a29e" }} title={`파우치 ${j.pouch}`} />}
-        <button type="button" onClick={() => setOpen((v) => !v)} className="min-w-0 flex-1 truncate text-left" title={label}>
-          {tag && <span className="mr-1 rounded bg-white/70 px-1 text-[10px] font-bold">{tag}</span>}
+        <button type="button" onClick={() => setOpen((v) => !v)} className="min-w-0 flex-1 truncate text-left" title={j.kind === "note" ? label : `${clinicMark(j.clinic)} ${label}`}>
+          {j.kind !== "note" && <span className="mr-1.5 text-sm font-extrabold text-stone-900" title={j.clinic === "N" ? "노원다담" : "다담에스"}>{clinicMark(j.clinic)}</span>}
           {label}
           {j.memo && <span className={`ml-1 ${j.memo === "포 수 없음" ? "text-red-700" : "opacity-70"}`}>· {j.memo}</span>}
         </button>
+        {tag === "지정" && <span className="text-[10px] font-bold">지정</span>}
+        {j.kind !== "note" && <span className="shrink-0 text-[10px] opacity-70">{j.slot === "pm" ? "오후" : "오전"}</span>}
         {j.kind !== "note" && (
           <button
             type="button"
@@ -392,13 +388,13 @@ function Board() {
       {adding && <AddJob defaultDay={adding} staff={staff} onDone={() => { setAdding(null); changed(); }} onCancel={() => setAdding(null)} />}
       {editingRules && <RulesEditor rules={rules} onSaved={() => { setEditingRules(false); changed(); }} onClose={() => setEditingRules(false)} />}
 
-      <p className="flex flex-wrap gap-3 text-[11px] text-stone-500">
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border align-middle" style={{ borderColor: CLINICS.S.color, background: CLINICS.S.bg }} />{CLINICS.S.short} 약</span>
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border align-middle" style={{ borderColor: CLINICS.N.color, background: CLINICS.N.bg }} />{CLINICS.N.short} 약</span>
-        <span><b className="rounded bg-white px-1 text-[10px]">발효</b> <b className="rounded bg-white px-1 text-[10px]">지정</b> 표시로 종류 구분</span>
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border border-yellow-600 bg-yellow-50 align-middle" />메모</span>
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded border border-stone-400 bg-stone-200 align-middle" />끝남 o</span>
-        <span>· 색 점 = 파우치 · &ldquo;3/12개&rdquo; = 잡힌 수(짜는 것 포함)/그 요일 한도 (넘으면 붉게, 막지는 않음)</span>
+      <p className="flex flex-wrap gap-3 text-[11px] text-stone-600">
+        <span><b className="mr-1 text-sm text-stone-900">S</b><span className="mr-1 inline-block h-3 w-3 rounded border-2 border-green-600 bg-green-50 align-middle" />다담에스 일반약</span>
+        <span><b className="mr-1 text-sm text-stone-900">D</b><span className="mr-1 inline-block h-3 w-3 rounded border-2 border-blue-600 bg-blue-50 align-middle" />노원다담 일반약</span>
+        <span><span className="mr-1 inline-block h-3 w-3 rounded border-2 border-red-600 bg-rose-50 align-middle" />발효약은 모두 빨강 · 병원은 S/D로 구분</span>
+        <span>일반약 ↓ · 발효약 ↑</span>
+        <span>메모 노랑 · 완료는 회색 글씨와 o · 색 점 = 파우치</span>
+        <span>“3/12개” = 잡힌 수(짜는 것 포함)/그 요일 한도 (넘으면 붉게, 막지는 않음)</span>
       </p>
 
       {loadedFor !== monday ? (
@@ -428,9 +424,9 @@ function Board() {
                 );
               })}
             </div>
-            {/* 줄 단위 배치: 발효시작·발효중·발효끝이 같은 줄에 나란히 (접수실 2026-10-06) */}
+            {/* 일반약은 위에서 아래로, 발효 짝은 같은 줄을 유지하며 아래에서 위로. */}
             {(() => {
-              const lay = layoutWeek(days, jobs);
+              const lay = layoutBrewSections(days, jobs);
               const cellBg = (iso: string) => (isClinicClosed(iso) ? "bg-stone-50" : "");
               const renderRow = (row: WeekRow, key: string) => (
                 <div key={key} className="grid min-w-[900px] grid-cols-6">
@@ -438,8 +434,8 @@ function Board() {
                     <div key={days[i]} className={`border-r border-stone-100 px-1.5 py-0.5 last:border-r-0 ${cellBg(days[i])}`}>
                       {c?.type === "job" && <Card j={c.job} staff={staff} onChanged={changed} />}
                       {c?.type === "mid" && (
-                        <div className="rounded border border-dashed px-2 py-1 text-xs" style={{ borderColor: clinicInfo(c.clinic).color, color: clinicInfo(c.clinic).text, background: clinicInfo(c.clinic).bg, opacity: 0.8 }}>
-                          {c.label}-발효중
+                        <div className="rounded border-2 border-dashed border-red-600 bg-rose-50 px-2 py-1.5 text-xs text-stone-900" style={{ borderLeftWidth: 4 }}>
+                          <b className="mr-1.5 text-sm font-extrabold">{clinicMark(c.clinic)}</b>{c.label}-발효중
                         </div>
                       )}
                     </div>
@@ -448,16 +444,22 @@ function Board() {
               );
               return (
                 <div className="flex flex-col py-1" style={{ minHeight: wi === 0 ? 260 : 180 }}>
-                  {lay.am.map((r, i) => renderRow(r, `am-${i}`))}
-                  {lay.pm.length > 0 && (
+                  <div className="px-2 py-1 text-[11px] font-semibold text-stone-500">일반약 ↓ 위에서 아래로</div>
+                  {lay.general.am.map((r, i) => renderRow(r, `am-${i}`))}
+                  {lay.general.pm.length > 0 && (
                     <div className="grid min-w-[900px] grid-cols-6">
                       {days.map((iso) => (
                         <div key={iso} className={`border-r border-stone-100 py-0.5 text-center text-[10px] text-stone-400 last:border-r-0 ${cellBg(iso)}`}>↓(오후)↓</div>
                       ))}
                     </div>
                   )}
-                  {lay.pm.map((r, i) => renderRow(r, `pm-${i}`))}
-                  <div className="mt-auto grid min-w-[900px] grid-cols-6">
+                  {lay.general.pm.map((r, i) => renderRow(r, `pm-${i}`))}
+                  <div className="min-h-10 flex-1" />
+                  <div className="mt-2 border-t border-dashed border-stone-200 px-2 py-1 text-[11px] font-semibold text-stone-500">발효약 ↑ 아래에서 위로 · 시작·발효중·짜기는 같은 줄</div>
+                  <div className="flex flex-col-reverse gap-0.5" data-brew-section="fermented">
+                    {lay.fermented.map((r, i) => renderRow(r, `ferment-${i}`))}
+                  </div>
+                  <div className="mt-1 grid min-w-[900px] grid-cols-6">
                     {days.map((iso) => (
                       <div key={iso} className={`border-r border-stone-100 p-1.5 last:border-r-0 ${cellBg(iso)}`}>
                         <button type="button" onClick={() => setAdding(iso)} className="w-full rounded border border-dashed border-stone-300 py-1 text-[11px] text-stone-400 hover:bg-stone-50">

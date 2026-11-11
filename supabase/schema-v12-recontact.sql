@@ -40,7 +40,7 @@ create table if not exists public.recontact_settings (
   clinic text primary key default public.current_clinic() check (clinic in ('S','N')),
   daily_cap integer not null default 25 check (daily_cap between 1 and 100),   -- 하루에 보내는 수
   body_a text not null default '{이름}님, 노원다담한의원입니다. {월}에 지어 가신 {약} 드시고 어떠신지 원장님이 궁금해하셔서 연락드려요. {원장한줄} 한 줄만 답 주시면 원장님께 전해 드릴게요.',
-  body_b text not null default '{이름}님, 노원다담한의원입니다. {원장한줄} {월}에 드신 {약} 이후로 어떠신지 여쭤보려고요. 편하실 때 답 주세요.',
+  body_b text not null default '{이름}님, 노원다담한의원입니다. {월}에 지어 가신 {약} 드신 뒤 어떠신지 원장님이 궁금해하세요. {원장한줄} 번호만 답 주셔도 됩니다. 1 많이 좋아졌어요 / 2 비슷해요 / 3 다시 불편해요',
   body_reply text not null default '답 주셔서 고맙습니다, {이름}님. 원장님께 전해 드렸더니 {원장답} 내원해서 보시는 게 편하세요, 전화 상담 뒤 받으시는 게 편하세요? 편하신 쪽 말씀 주시면 바로 잡아 드릴게요.',
   body_missed text not null default '{이름}님, 노원다담한의원입니다. 조금 전 전화 드렸는데 통화가 안 되어 문자 남겨요. 지난번 약 드시고 어떠신지 여쭤보려던 거였어요. 편하실 때 전화나 답 주세요.'
 );

@@ -8,6 +8,7 @@ import { todayISO } from "@/lib/dates";
 import { maskPhone } from "@/lib/phone";
 import {
   EMPTY_CONTEXT,
+  QUICK_REPLIES,
   RECONTACT_NAME,
   SEGMENT_LABEL,
   SEGMENT_ORDER,
@@ -219,6 +220,14 @@ function WaitingRow({ r, settings, today, run }: { r: RecontactRow; settings: Re
           </div>
           {mode === "reply" && (
             <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] text-stone-500">번호로 답하셨으면</span>
+                {QUICK_REPLIES.map((q) => (
+                  <button key={q} type="button" className={BTN} onClick={() => setReply(q)}>
+                    {q}
+                  </button>
+                ))}
+              </div>
               <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={2} placeholder="환자가 보낸 답을 그대로 붙여 넣으세요" className="w-full rounded border border-stone-300 px-2 py-1 text-sm" />
               <button type="button" className={PRIMARY} disabled={!reply.trim()} onClick={() => run(() => markReplied(r.id, reply))}>
                 답 저장

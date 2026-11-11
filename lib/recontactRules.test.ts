@@ -43,7 +43,7 @@ describe("문구 채우기", () => {
   it("첫 문자: 샘이 고친 글이 먼저, 없으면 A·B 틀", () => {
     expect(firstText({ ...base, draft_text: "직접 쓴 글", variant: "A" }, S, TODAY)).toBe("직접 쓴 글");
     expect(firstText({ ...base, draft_text: null, variant: "A" }, S, TODAY)).toContain("9월에 지어 가신 보험 한약");
-    expect(firstText({ ...base, draft_text: " ", variant: "B" }, S, TODAY)).toContain("편하실 때 답 주세요.");
+    expect(firstText({ ...base, draft_text: " ", variant: "B" }, S, TODAY)).toContain("번호만 답 주셔도 됩니다. 1 많이 좋아졌어요 / 2 비슷해요 / 3 다시 불편해요");
   });
   it("첫 문자에는 택배·재주문 이야기가 없고, 두 번째 문자에만 있다", () => {
     for (const v of ["A", "B"] as const) {

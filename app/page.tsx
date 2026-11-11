@@ -19,6 +19,8 @@ import { expiryStatus } from "@/lib/cabinetRules";
 import { listLedgerDaysOpen, loadDay } from "@/lib/ledger";
 import { sumEntries, won } from "@/lib/ledgerRules";
 import { countToday } from "@/lib/appointments";
+import { countRecontactToday } from "@/lib/recontacts";
+import { RECONTACT_NAME } from "@/lib/recontactRules";
 import { weekEndISO } from "@/lib/weeklyRules";
 import { addDays, todayISO, weekdayKo } from "@/lib/dates";
 import { dayLabel, sameMonth, shiftMonth, yearMonthOf, type YearMonth } from "@/lib/calendarRules";
@@ -128,6 +130,7 @@ function CalendarBoard() {
   const [month, setMonth] = useState<YearMonth>(() => yearMonthOf(todayISO()));
   const [selected, setSelected] = useState<string>(() => todayISO());
   const [celebrate, setCelebrate] = useState(false);
+  const [recontactToday, setRecontactToday] = useState(0);
 
   const load = useCallback(() => {
     const now = todayISO();
@@ -154,6 +157,8 @@ function CalendarBoard() {
   useEffect(() => {
     load();
     listTemplates("weekly").then(setTemplates).catch(() => setTemplates([]));
+    // 재진콜 오늘 보낼 사람 수 (표가 아직 없으면 0)
+    countRecontactToday(todayISO()).then(setRecontactToday);
   }, [load]);
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
@@ -208,6 +213,11 @@ function CalendarBoard() {
           <Link href="/happy-calls" className="underline">
             해피콜 오늘 {hcToday}명
           </Link>
+          {recontactToday > 0 && (
+            <Link href="/happy-calls?tab=recontact" className="underline">
+              {RECONTACT_NAME} 오늘 {recontactToday}명
+            </Link>
+          )}
           <Link href="/weekly" className="underline">
             주간 관리 이번 주 {wkThisWeek}명
           </Link>

@@ -1,0 +1,275 @@
+import { addDays, daysBetween } from "./dates";
+import { isClinicClosed } from "./holidays";
+import { normalizePhone } from "./phone";
+import type { Recontact, RecontactSegment, RecontactSettings } from "./types";
+
+/**
+ * 재진콜 (V12, 2026-11-11, 처음 이름 "다시 연락") — 한약 드신 분께 경과를 묻고, 답 온 분부터 예약·재주문으로 잇는다.
+ * 화면은 해피콜 메뉴 안의 [재진콜] 탭. 설계: docs/superpowers/specs/2026-11-11-다시연락-v12-design.md
+ *
+ * 사용자 결정
+ * - 첫 문자는 경과만 묻는다. 재주문 이야기는 답 온 분께 드리는 두 번째 문자·전화에서만.
+ * - 하루 20~30통으로 제한(기본 25). 한꺼번에 보내지 않는다.
+ * - 답이 필요한 문자라 병원 휴대폰 번호로 보낸다(솔라피 대표번호는 답장을 못 받음).
+ */
+/** 화면에 보이는 이름. 바꾸려면 여기 한 군데만 (사용자 2026-11-11: 안부가 아니라 재진으로 다시 모실 분이라는 뜻이 드러나게) */
+export const RECONTACT_NAME = "재진콜";
+
+export const SEGMENT_LABEL: Record<RecontactSegment, string> = {
+  due_now: "지금",
+  due_soon: "곧",
+  vip: "VIP",
+  once_p1: "1회 1순위",
+  once_p2: "1회 2순위",
+  lapsed: "오래됨",
+  tonic: "공진단",
+};
+/** 먼저 연락하는 순서 */
+export const SEGMENT_ORDER: RecontactSegment[] = ["due_now", "due_soon", "vip", "once_p1", "once_p2", "tonic", "lapsed"];
+/** 답이 없으면 전화까지 하는 묶음 */
+export const CALL_SEGMENTS: RecontactSegment[] = ["due_now", "due_soon", "vip", "once_p1"];
+
+export const DEFAULT_DAILY_CAP = 25;
+export const DEFAULT_BODY_A = "{이름}님, 노원다담한의원입니다. {월}에 지어 가신 {약} 드시고 어떠신지 원장님이 궁금해하셔서 연락드려요. {원장한줄} 한 줄만 답 주시면 원장님께 전해 드릴게요.";
+export const DEFAULT_BODY_B = "{이름}님, 노원다담한의원입니다. {원장한줄} {월}에 드신 {약} 이후로 어떠신지 여쭤보려고요. 편하실 때 답 주세요.";
+export const DEFAULT_BODY_REPLY = "답 주셔서 고맙습니다, {이름}님. 원장님께 전해 드렸더니 {원장답} 내원해서 보시는 게 편하세요, 전화 상담 뒤 받으시는 게 편하세요? 편하신 쪽 말씀 주시면 바로 잡아 드릴게요.";
+export const DEFAULT_BODY_MISSED = "{이름}님, 노원다담한의원입니다. 조금 전 전화 드렸는데 통화가 안 되어 문자 남겨요. 지난번 약 드시고 어떠신지 여쭤보려던 거였어요. 편하실 때 전화나 답 주세요.";
+
+export const DEFAULT_RECONTACT_SETTINGS: Omit<RecontactSettings, "clinic"> = {
+  daily_cap: DEFAULT_DAILY_CAP,
+  body_a: DEFAULT_BODY_A,
+  body_b: DEFAULT_BODY_B,
+  body_reply: DEFAULT_BODY_REPLY,
+  body_missed: DEFAULT_BODY_MISSED,
+};
+
+/** 장부의 종류 글자 → 문자에 쓰는 말 */
+export function herbWord(kind: string | null | undefined): string {
+  const k = kind ?? "";
+  if (k.includes("공진단") || k.includes("경옥")) return "공진단";
+  if (k.includes("보험")) return "보험 한약";
+  if (k.includes("발효")) return "발효 한약";
+  return "한약";
+}
+
+/** 원장님 칸이 비었을 때 들어가는 기본 질문 */
+export function defaultQuestion(): string {
+  return "요즘 몸은 좀 어떠세요?";
+}
+
+/** 마지막 한약 받은 달: 올해면 "10월", 작년이면 "작년 10월", 더 전이면 "2024년 10월" */
+export function monthWord(lastHerbDate: string | null | undefined, today: string): string {
+  if (!lastHerbDate) return "지난번";
+  const [y, m] = lastHerbDate.split("-").map(Number);
+  const ty = Number(today.slice(0, 4));
+  if (y === ty) return `${m}월`;
+  if (y === ty - 1) return `작년 ${m}월`;
+  return `${y}년 ${m}월`;
+}
+
+type FillRow = Pick<Recontact, "patient_name" | "last_herb_date" | "herb_kind" | "doctor_note" | "doctor_reply">;
+
+/** 자리표 채우기: {이름} {월} {약} {원장한줄} {원장답} */
+export function fillRecontact(body: string, r: FillRow, today: string): string {
+  const v: Record<string, string> = {
+    이름: r.patient_name,
+    월: monthWord(r.last_herb_date, today),
+    약: herbWord(r.herb_kind),
+    원장한줄: (r.doctor_note ?? "").trim() || defaultQuestion(),
+    원장답: (r.doctor_reply ?? "").trim() || "한 번 더 봐 드리면 좋겠다고 하세요.",
+  };
+  return body.replace(/\{(이름|월|약|원장한줄|원장답)\}/g, (_, k: string) => v[k]).replace(/ {2,}/g, " ").trim();
+}
+
+type Bodies = Pick<RecontactSettings, "body_a" | "body_b" | "body_reply" | "body_missed">;
+
+/** 첫 문자(경과 확인). 샘이 고쳐 둔 글이 있으면 그것, 없으면 A·B 틀에서 채운다. */
+export function firstText(r: FillRow & Pick<Recontact, "draft_text" | "variant">, s: Bodies, today: string): string {
+  if (r.draft_text && r.draft_text.trim()) return r.draft_text;
+  return fillRecontact(r.variant === "B" ? s.body_b || DEFAULT_BODY_B : s.body_a || DEFAULT_BODY_A, r, today);
+}
+/** 답 온 분께 드리는 두 번째 문자 (재주문 안내는 여기서만) */
+export function replyText(r: FillRow, s: Bodies, today: string): string {
+  return fillRecontact(s.body_reply || DEFAULT_BODY_REPLY, r, today);
+}
+/** 전화했는데 안 받으셨을 때 */
+export function missedText(r: FillRow, s: Bodies, today: string): string {
+  return fillRecontact(s.body_missed || DEFAULT_BODY_MISSED, r, today);
+}
+
+/** 그 환자가 지금 연락 대상에서 빠지는 이유들 (화면에서 미리 모아서 넘긴다) */
+export type RecontactContext = {
+  /** 연락 제외 환자 */
+  excluded: Set<number>;
+  /** 앞으로 예약이 잡혀 있는 환자 */
+  booked: Set<number>;
+  /** 최근 14일 안에 내원(장부 줄)한 환자 */
+  visited: Set<number>;
+  /** 대기 중인 해피콜이 있는 환자 */
+  happyCall: Set<number>;
+};
+export const EMPTY_CONTEXT: RecontactContext = { excluded: new Set(), booked: new Set(), visited: new Set(), happyCall: new Set() };
+
+/** 오늘 보낼 수 없는 이유. 보낼 수 있으면 null. */
+export function blockReason(r: Pick<Recontact, "patient_id" | "status">, ctx: RecontactContext): string | null {
+  if (r.status !== "todo") return "이미 보냈거나 끝난 분입니다.";
+  if (!r.patient_id) return "연락처가 아직 없습니다.";
+  if (ctx.excluded.has(r.patient_id)) return "연락 제외 환자입니다.";
+  if (ctx.booked.has(r.patient_id)) return "예약이 잡혀 있습니다.";
+  if (ctx.visited.has(r.patient_id)) return "최근 2주 안에 내원하셨습니다.";
+  if (ctx.happyCall.has(r.patient_id)) return "해피콜이 예정되어 있습니다.";
+  return null;
+}
+
+function bySegmentThenRecent(a: Pick<Recontact, "segment" | "last_herb_date" | "id">, b: Pick<Recontact, "segment" | "last_herb_date" | "id">): number {
+  const d = SEGMENT_ORDER.indexOf(a.segment) - SEGMENT_ORDER.indexOf(b.segment);
+  if (d !== 0) return d;
+  const r = (b.last_herb_date ?? "").localeCompare(a.last_herb_date ?? "");
+  return r !== 0 ? r : a.id - b.id;
+}
+
+/** 한국 시간 날짜 (YYYY-MM-DD) */
+export function kstDay(iso: string | Date): string {
+  const t = typeof iso === "string" ? new Date(iso) : iso;
+  return new Date(t.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** 오늘 이미 보낸 수 */
+export function sentToday(rows: Pick<Recontact, "sent_at">[], today: string): number {
+  return rows.filter((r) => r.sent_at && kstDay(r.sent_at) === today).length;
+}
+
+/**
+ * 오늘 보낼 사람: 보낼 수 있는 분을 묶음 순(지금 → 곧 → VIP …)·최근 구매 순으로 세워 하루 상한에서 오늘 보낸 수를 뺀 만큼.
+ * waiting = 상한 때문에 내일로 넘어가는 수.
+ */
+export function todaysBatch<T extends Pick<Recontact, "id" | "patient_id" | "status" | "segment" | "last_herb_date" | "sent_at">>(
+  rows: T[],
+  ctx: RecontactContext,
+  cap: number,
+  today: string,
+): { batch: T[]; waiting: number; left: number } {
+  const ready = rows.filter((r) => blockReason(r, ctx) === null).sort(bySegmentThenRecent);
+  const left = Math.max(0, cap - sentToday(rows, today));
+  return { batch: ready.slice(0, left), waiting: Math.max(0, ready.length - left), left };
+}
+
+/** 보낸 지 사흘이 지났는데 답이 없고, 전화 대상 묶음이며, 아직 전화를 안 한 분 */
+export function needsCall(r: Pick<Recontact, "status" | "sent_at" | "call_target" | "called_at">, today: string): boolean {
+  if (r.status !== "sent" || !r.sent_at || !r.call_target || r.called_at) return false;
+  return daysBetween(kstDay(r.sent_at), today) >= 3;
+}
+
+/** 두 번 연락(문자 + 전화 또는 문자 두 번)해도 답이 없어 쉬게 할 분 */
+export function shouldRest(r: Pick<Recontact, "status" | "sent_at" | "attempts" | "called_at" | "call_target">, today: string): boolean {
+  if (r.status !== "sent" || !r.sent_at) return false;
+  const days = daysBetween(kstDay(r.sent_at), today);
+  if (r.call_target) return !!r.called_at && days >= 7;
+  return days >= 14;
+}
+
+/** 지금 문자를 보내도 되는 시간인지: 아침 9시~밤 9시, 일요일·공휴일 아님. 안 되면 이유. */
+export function sendWindow(now: Date): { ok: true } | { ok: false; reason: string } {
+  const k = new Date(now.getTime() + 9 * 3600 * 1000);
+  const day = k.toISOString().slice(0, 10);
+  const hour = k.getUTCHours();
+  if (isClinicClosed(day)) return { ok: false, reason: "일요일·공휴일에는 보내지 않습니다." };
+  if (hour < 9 || hour >= 21) return { ok: false, reason: "아침 9시 전·밤 9시 뒤에는 보내지 않습니다." };
+  return { ok: true };
+}
+
+/** 엑셀에서 읽은 한 사람 */
+export type ImportRow = {
+  patient_name: string;
+  phone: string | null;
+  birth_hint: string | null;
+  segment: RecontactSegment;
+  call_target: boolean;
+  herb_count: number | null;
+  last_herb_date: string | null;
+  avg_interval_days: number | null;
+  herb_kind: string | null;
+  doctor_note: string | null;
+  memo: string | null;
+  variant: "A" | "B";
+};
+
+function num(s: string | undefined): number | null {
+  const n = Number((s ?? "").replace(/[^\d.-]/g, ""));
+  return s && s.trim() && Number.isFinite(n) ? Math.round(n) : null;
+}
+function isoDate(s: string | undefined): string | null {
+  const m = (s ?? "").match(/(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : null;
+}
+
+/**
+ * 엑셀 표(첫 줄이 머리글)를 명단으로. 머리글 글자로 칸을 찾으니 칸 순서가 달라도 된다.
+ * 「1차 연락 51명」 파일과 원래 명단 파일의 시트 모두 읽는다.
+ * - "묶음" 칸이 "지금"·"곧"이면 그 묶음, 없으면 화면에서 고른 묶음(fallback)
+ * - 메모에 "빼기"가 있으면 건너뜀(최근에 다녀가신 분)
+ */
+export function parseImportTable(table: string[][], fallback: RecontactSegment): { rows: ImportRow[]; skipped: number; problem: string | null } {
+  const head = (table[0] ?? []).map((h) => (h ?? "").replace(/\s+/g, " ").trim());
+  const col = (...keys: string[]) => head.findIndex((h) => keys.some((k) => h.includes(k)));
+  const c = {
+    name: col("이름", "성함"),
+    phone: col("연락처"),
+    birth: col("생년"),
+    count: col("횟수"),
+    last: col("마지막 한약", "마지막 구매", "한약 구매일"),
+    gap: col("간격"),
+    kind: col("종류"),
+    seg: head.findIndex((h) => h === "묶음" || h === "순위"),
+    note: col("원장님"),
+    memo: head.findIndex((h) => h === "메모"),
+  };
+  if (c.name < 0) return { rows: [], skipped: 0, problem: "첫 줄에서 '이름' 칸을 찾지 못했습니다. 머리글이 첫 줄에 있는 시트인지 확인해 주세요." };
+  const at = (r: string[], i: number) => (i >= 0 ? (r[i] ?? "").trim() : "");
+  const rows: ImportRow[] = [];
+  let skipped = 0;
+  for (const r of table.slice(1)) {
+    const name = at(r, c.name);
+    if (!name) continue;
+    const memo = at(r, c.memo);
+    if (memo.includes("빼기")) {
+      skipped += 1;
+      continue;
+    }
+    const segText = at(r, c.seg);
+    const segment: RecontactSegment = segText.includes("지금") ? "due_now" : segText.includes("곧") ? "due_soon" : segText.includes("1순위") ? "once_p1" : segText.includes("2순위") ? "once_p2" : fallback;
+    // 엑셀이 숫자로 읽어 앞의 0이 떨어진 번호(1012345678)는 0을 다시 붙인다
+    const raw = normalizePhone(at(r, c.phone));
+    const digits = /^1[016789]\d{7,8}$/.test(raw) ? `0${raw}` : raw;
+    rows.push({
+      patient_name: name,
+      phone: digits.length === 10 || digits.length === 11 ? digits : null,
+      birth_hint: at(r, c.birth) || null,
+      segment,
+      call_target: CALL_SEGMENTS.includes(segment),
+      herb_count: num(at(r, c.count)),
+      last_herb_date: isoDate(at(r, c.last)),
+      avg_interval_days: num(at(r, c.gap)),
+      herb_kind: at(r, c.kind) || null,
+      doctor_note: at(r, c.note) || null,
+      memo: memo || null,
+      variant: rows.length % 2 === 0 ? "A" : "B",
+    });
+  }
+  return { rows, skipped, problem: rows.length === 0 ? "읽을 수 있는 줄이 없습니다." : null };
+}
+
+/** 최근 내원 판정 기준일: 오늘에서 14일 전 */
+export function visitedSince(today: string): string {
+  return addDays(today, -14);
+}
+
+/** 그 사람 요약 한 줄: "한약 5회 · 마지막 2026-09-18(54일 전) · 평균 간격 33일 · 보험 탕약" */
+export function factLine(r: Pick<Recontact, "herb_count" | "last_herb_date" | "avg_interval_days" | "herb_kind">, today: string): string {
+  const parts: string[] = [];
+  if (r.herb_count) parts.push(`한약 ${r.herb_count}회`);
+  if (r.last_herb_date) parts.push(`마지막 ${r.last_herb_date}(${daysBetween(r.last_herb_date, today)}일 전)`);
+  if (r.avg_interval_days) parts.push(`평균 간격 ${r.avg_interval_days}일`);
+  if (r.herb_kind) parts.push(r.herb_kind);
+  return parts.join(" · ");
+}

@@ -342,3 +342,47 @@ export type AppointmentSettings = {
   remind_enabled: boolean; // 전날 17시 리마인더 (V8)
   remind_body: string;
 };
+
+/** 재진콜(다시 연락, V12). 한약 드신 분께 경과를 묻는 연락 한 묶음. */
+export type RecontactSegment = "due_now" | "due_soon" | "vip" | "once_p1" | "once_p2" | "lapsed" | "tonic";
+export type RecontactStatus = "todo" | "sent" | "replied" | "booked" | "declined" | "rest";
+export type Recontact = {
+  id: number;
+  clinic: "S" | "N";
+  patient_id: number | null;
+  patient_name: string;
+  birth_hint: string | null;
+  segment: RecontactSegment;
+  call_target: boolean;
+  herb_count: number | null;
+  last_herb_date: string | null;
+  avg_interval_days: number | null;
+  herb_kind: string | null;
+  doctor_note: string | null;
+  draft_text: string | null;
+  variant: "A" | "B";
+  status: RecontactStatus;
+  sent_at: string | null;
+  sent_by: string | null;
+  sent_text: string | null;
+  reply_text: string | null;
+  replied_at: string | null;
+  doctor_reply: string | null;
+  called_at: string | null;
+  call_result: string | null;
+  attempts: number;
+  memo: string | null;
+  staff_name: string;
+  created_at: string;
+  updated_at: string;
+};
+/** 명단 한 줄 + 연결된 환자의 연락처 */
+export type RecontactRow = Recontact & { patient: { id: number; name: string; phone: string; excluded_at: string | null } | null };
+export type RecontactSettings = {
+  clinic: "S" | "N";
+  daily_cap: number;
+  body_a: string;
+  body_b: string;
+  body_reply: string;
+  body_missed: string;
+};

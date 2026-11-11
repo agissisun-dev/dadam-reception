@@ -21,6 +21,7 @@ import { excludePatient } from "@/lib/patients";
 import PhoneText from "./PhoneText";
 import StaffSelect from "./StaffSelect";
 import SmsSendBox, { type SmsRecipient } from "./SmsSendBox";
+import SmsAppLink from "./SmsAppLink";
 import { sendSms } from "@/lib/sms";
 
 type Mode = null | "contacted" | "represc" | "exclude" | "reschedule" | "sms";
@@ -157,6 +158,7 @@ export default function HappyCallRow({
                 <span className="text-sm text-stone-600">보낼 문구 ({tpl.name})</span>
                 <span className="flex items-center gap-2">
                   {copied && <span className="text-sm text-green-700">복사됨</span>}
+                  <SmsAppLink phone={pt.phone} text={messageText} />
                   <button className={BTN} onClick={copy}>
                     문구 복사
                   </button>

@@ -12,6 +12,7 @@ import { excludePatient } from "@/lib/patients";
 import PhoneText from "./PhoneText";
 import StaffSelect from "./StaffSelect";
 import SmsSendBox, { type SmsRecipient } from "./SmsSendBox";
+import SmsAppLink from "./SmsAppLink";
 import { sendSms } from "@/lib/sms";
 
 const BTN = "rounded border border-stone-300 px-3 py-1.5 text-sm";
@@ -159,6 +160,7 @@ export default function WeeklyRow({
               </span>
               <span className="flex items-center gap-2">
                 {copied && <span className="text-sm text-green-700">복사됨</span>}
+                <SmsAppLink phone={row.phone} text={message} />
                 <button className={BTN} onClick={copy}>
                   문구 복사
                 </button>

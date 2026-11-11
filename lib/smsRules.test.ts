@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { recipientLabelFor, smsByteLength, smsType, validateSmsRequest } from "./smsRules";
+import { recipientLabelFor, smsAppHref, smsByteLength, smsType, validateSmsRequest } from "./smsRules";
 
 describe("smsByteLength / smsType", () => {
   it("한글은 2바이트, 영문·숫자·줄바꿈은 1바이트", () => {
@@ -48,5 +48,16 @@ describe("recipientLabelFor — 받는 번호가 그 환자의 것인지", () =>
   it("둘 다 아니면 null — 등록 안 된 번호로는 못 보낸다", () => {
     expect(recipientLabelFor(p, "01099998888")).toBeNull();
     expect(recipientLabelFor({ phone: "01011112222", family_phone: null, family_note: null }, "01033334444")).toBeNull();
+  });
+});
+
+describe("smsAppHref — 휴대폰 문자 앱 열기 주소", () => {
+  it("갤럭시는 ?body=, 아이폰은 &body=, 문구는 주소에 맞게 바꾼다", () => {
+    expect(smsAppHref("010-1234-5678", "홍길동님, 안녕하세요")).toBe(`sms:01012345678?body=${encodeURIComponent("홍길동님, 안녕하세요")}`);
+    expect(smsAppHref("01012345678", "a b", true)).toBe("sms:01012345678&body=a%20b");
+  });
+  it("휴대폰 번호가 아니면 null", () => {
+    expect(smsAppHref("02-949-3900", "x")).toBeNull();
+    expect(smsAppHref("", "x")).toBeNull();
   });
 });

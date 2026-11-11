@@ -60,3 +60,15 @@ export function recipientLabelFor(
   }
   return null;
 }
+
+/**
+ * 휴대폰의 문자 앱을 받는 번호·문구가 채워진 채로 여는 주소 (2026-11-11).
+ * 이 주소로 보내면 **그 휴대폰의 번호**로 나간다(솔라피를 거치지 않음) — 그래서 답장도 그 휴대폰으로 온다.
+ * 병원 휴대폰(갤럭시)에서 앱을 열어 쓰는 용도. 아이폰은 구분 글자가 달라 `&body=`.
+ * 번호가 휴대폰(01…)이 아니면 null.
+ */
+export function smsAppHref(phone: string, text: string, ios = false): string | null {
+  const to = normalizePhone(phone);
+  if (!to.startsWith("01") || (to.length !== 10 && to.length !== 11)) return null;
+  return `sms:${to}${ios ? "&" : "?"}body=${encodeURIComponent(text)}`;
+}

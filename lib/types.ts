@@ -383,6 +383,10 @@ export type RecontactSettings = {
   daily_cap: number;
   body_a: string;
   body_b: string;
+  /** 오래 못 뵌 단골(VIP·오래됨·공진단)께 드리는 첫 문자 */
+  body_vip: string;
+  /** 한 번 드신 분께 드리는 첫 문자 */
+  body_once: string;
   body_reply: string;
   body_missed: string;
 };

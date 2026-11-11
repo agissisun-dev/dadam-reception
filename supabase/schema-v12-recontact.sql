@@ -41,9 +41,16 @@ create table if not exists public.recontact_settings (
   daily_cap integer not null default 25 check (daily_cap between 1 and 100),   -- 하루에 보내는 수
   body_a text not null default '{이름}님, 노원다담한의원입니다. {월}에 지어 가신 {약} 드시고 어떠신지 원장님이 궁금해하셔서 연락드려요. {원장한줄} 한 줄만 답 주시면 원장님께 전해 드릴게요.',
   body_b text not null default '{이름}님, 노원다담한의원입니다. {월}에 지어 가신 {약} 드신 뒤 어떠신지 원장님이 궁금해하세요. {원장한줄} 번호만 답 주셔도 됩니다. 1 많이 좋아졌어요 / 2 비슷해요 / 3 다시 불편해요',
+  body_vip text not null default '{이름}님, 노원다담한의원입니다. 오래 믿고 찾아 주셨는데 {월} 이후로 뵙지 못해 원장님이 안부를 궁금해하세요. {원장한줄} 한 줄만 답 주시면 원장님께 전해 드릴게요.',
+  body_once text not null default '{이름}님, 노원다담한의원입니다. {월}에 {약} 드신 뒤 경과를 여쭙지 못해 연락드려요. {원장한줄} 번호만 답 주셔도 됩니다. 1 좋아져서 괜찮아요 / 2 나아지다 말았어요 / 3 별 차이를 못 느꼈어요',
   body_reply text not null default '답 주셔서 고맙습니다, {이름}님. 원장님께 전해 드렸더니 {원장답} 내원해서 보시는 게 편하세요, 전화 상담 뒤 받으시는 게 편하세요? 편하신 쪽 말씀 주시면 바로 잡아 드릴게요.',
   body_missed text not null default '{이름}님, 노원다담한의원입니다. 조금 전 전화 드렸는데 통화가 안 되어 문자 남겨요. 지난번 약 드시고 어떠신지 여쭤보려던 거였어요. 편하실 때 전화나 답 주세요.'
 );
+
+-- 이 파일을 예전 판으로 이미 실행했더라도 다시 실행하면 빠진 문구 칸이 더해진다
+alter table public.recontact_settings
+  add column if not exists body_vip text not null default '{이름}님, 노원다담한의원입니다. 오래 믿고 찾아 주셨는데 {월} 이후로 뵙지 못해 원장님이 안부를 궁금해하세요. {원장한줄} 한 줄만 답 주시면 원장님께 전해 드릴게요.',
+  add column if not exists body_once text not null default '{이름}님, 노원다담한의원입니다. {월}에 {약} 드신 뒤 경과를 여쭙지 못해 연락드려요. {원장한줄} 번호만 답 주셔도 됩니다. 1 좋아져서 괜찮아요 / 2 나아지다 말았어요 / 3 별 차이를 못 느꼈어요';
 
 alter table public.recontacts enable row level security;
 alter table public.recontact_settings enable row level security;

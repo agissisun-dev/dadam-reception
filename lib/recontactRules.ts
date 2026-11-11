@@ -33,8 +33,26 @@ export const DEFAULT_DAILY_CAP = 25;
 export const DEFAULT_BODY_A = "{이름}님, 노원다담한의원입니다. {월}에 지어 가신 {약} 드시고 어떠신지 원장님이 궁금해하셔서 연락드려요. {원장한줄} 한 줄만 답 주시면 원장님께 전해 드릴게요.";
 /** B는 번호로 답하는 글 — 답하는 수고를 줄여 답장률을 비교한다(2026-11-11). 1·2·3이 그대로 다음 할 일(감사 / 원장 상담 권유 / 당일 전화)을 가른다. */
 export const DEFAULT_BODY_B = "{이름}님, 노원다담한의원입니다. {월}에 지어 가신 {약} 드신 뒤 어떠신지 원장님이 궁금해하세요. {원장한줄} 번호만 답 주셔도 됩니다. 1 많이 좋아졌어요 / 2 비슷해요 / 3 다시 불편해요";
-/** 번호 답(1·2·3)을 화면에서 한 번에 적는 단추 */
-export const QUICK_REPLIES = ["1 많이 좋아졌어요", "2 비슷해요", "3 다시 불편해요"] as const;
+/**
+ * 묶음마다 목표가 달라 첫 문자도 다르다 (2026-11-11, docs/recontact-playbook.md).
+ * - 지금·곧: 약이 떨어질 때 → 이어 드실지. 위의 A·B를 반씩 보내 비교한다.
+ * - 오래 못 뵌 단골(VIP·오래됨·공진단): "약 다 드셨을 때"가 맞지 않다. 오래 찾아 주신 것을 먼저 말하고 안부를 묻는다.
+ * - 한 번 드신 분: 왜 한 번으로 끝났는지를 알아야 한다. 번호 답이 그 이유(좋아짐 / 하다 말았음 / 차이 없음)를 가른다.
+ */
+export const DEFAULT_BODY_VIP = "{이름}님, 노원다담한의원입니다. 오래 믿고 찾아 주셨는데 {월} 이후로 뵙지 못해 원장님이 안부를 궁금해하세요. {원장한줄} 한 줄만 답 주시면 원장님께 전해 드릴게요.";
+export const DEFAULT_BODY_ONCE = "{이름}님, 노원다담한의원입니다. {월}에 {약} 드신 뒤 경과를 여쭙지 못해 연락드려요. {원장한줄} 번호만 답 주셔도 됩니다. 1 좋아져서 괜찮아요 / 2 나아지다 말았어요 / 3 별 차이를 못 느꼈어요";
+
+/** 그 묶음에 쓰는 첫 문자 틀 종류 */
+export function bodyKindFor(segment: RecontactSegment): "ab" | "vip" | "once" {
+  if (segment === "once_p1" || segment === "once_p2") return "once";
+  if (segment === "due_now" || segment === "due_soon") return "ab";
+  return "vip";
+}
+
+/** 번호로 답하셨을 때 화면에서 한 번에 적는 단추 (보낸 글의 번호와 같게) */
+export function quickRepliesFor(segment: RecontactSegment): string[] {
+  return bodyKindFor(segment) === "once" ? ["1 좋아져서 괜찮아요", "2 나아지다 말았어요", "3 별 차이를 못 느꼈어요"] : ["1 많이 좋아졌어요", "2 비슷해요", "3 다시 불편해요"];
+}
 export const DEFAULT_BODY_REPLY = "답 주셔서 고맙습니다, {이름}님. 원장님께 전해 드렸더니 {원장답} 내원해서 보시는 게 편하세요, 전화 상담 뒤 받으시는 게 편하세요? 편하신 쪽 말씀 주시면 바로 잡아 드릴게요.";
 export const DEFAULT_BODY_MISSED = "{이름}님, 노원다담한의원입니다. 조금 전 전화 드렸는데 통화가 안 되어 문자 남겨요. 지난번 약 드시고 어떠신지 여쭤보려던 거였어요. 편하실 때 전화나 답 주세요.";
 
@@ -42,6 +60,8 @@ export const DEFAULT_RECONTACT_SETTINGS: Omit<RecontactSettings, "clinic"> = {
   daily_cap: DEFAULT_DAILY_CAP,
   body_a: DEFAULT_BODY_A,
   body_b: DEFAULT_BODY_B,
+  body_vip: DEFAULT_BODY_VIP,
+  body_once: DEFAULT_BODY_ONCE,
   body_reply: DEFAULT_BODY_REPLY,
   body_missed: DEFAULT_BODY_MISSED,
 };
@@ -84,12 +104,14 @@ export function fillRecontact(body: string, r: FillRow, today: string): string {
   return body.replace(/\{(이름|월|약|원장한줄|원장답)\}/g, (_, k: string) => v[k]).replace(/ {2,}/g, " ").trim();
 }
 
-type Bodies = Pick<RecontactSettings, "body_a" | "body_b" | "body_reply" | "body_missed">;
+type Bodies = Pick<RecontactSettings, "body_a" | "body_b" | "body_vip" | "body_once" | "body_reply" | "body_missed">;
 
-/** 첫 문자(경과 확인). 샘이 고쳐 둔 글이 있으면 그것, 없으면 A·B 틀에서 채운다. */
-export function firstText(r: FillRow & Pick<Recontact, "draft_text" | "variant">, s: Bodies, today: string): string {
+/** 첫 문자(경과 확인). 샘이 고쳐 둔 글이 있으면 그것, 없으면 묶음에 맞는 틀(지금·곧은 A·B, 단골은 VIP, 한 번 드신 분은 따로)에서 채운다. */
+export function firstText(r: FillRow & Pick<Recontact, "draft_text" | "variant" | "segment">, s: Bodies, today: string): string {
   if (r.draft_text && r.draft_text.trim()) return r.draft_text;
-  return fillRecontact(r.variant === "B" ? s.body_b || DEFAULT_BODY_B : s.body_a || DEFAULT_BODY_A, r, today);
+  const kind = bodyKindFor(r.segment);
+  const body = kind === "once" ? s.body_once || DEFAULT_BODY_ONCE : kind === "vip" ? s.body_vip || DEFAULT_BODY_VIP : r.variant === "B" ? s.body_b || DEFAULT_BODY_B : s.body_a || DEFAULT_BODY_A;
+  return fillRecontact(body, r, today);
 }
 /** 답 온 분께 드리는 두 번째 문자 (재주문 안내는 여기서만) */
 export function replyText(r: FillRow, s: Bodies, today: string): string {

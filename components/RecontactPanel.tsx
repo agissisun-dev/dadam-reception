@@ -8,17 +8,18 @@ import { todayISO } from "@/lib/dates";
 import { maskPhone } from "@/lib/phone";
 import {
   EMPTY_CONTEXT,
-  QUICK_REPLIES,
   RECONTACT_NAME,
   SEGMENT_LABEL,
   SEGMENT_ORDER,
   blockReason,
+  bodyKindFor,
   factLine,
   firstText,
   kstDay,
   missedText,
   needsCall,
   parseImportTable,
+  quickRepliesFor,
   replyText,
   sendWindow,
   sentToday,
@@ -129,7 +130,7 @@ function TodayRow({ r, settings, today, staff, run }: { r: RecontactRow; setting
         <button type="button" className={PRIMARY} disabled={!text.trim()} onClick={() => run(() => markSent(r, staff, text))}>
           보냈음
         </button>
-        <span className="text-[11px] text-stone-500">문구 {r.variant}</span>
+        {bodyKindFor(r.segment) === "ab" && <span className="text-[11px] text-stone-500">문구 {r.variant}</span>}
         <button type="button" className="ml-auto text-xs text-stone-500 underline" onClick={() => run(() => setRecontactStatus(r.id, "rest"))}>
           이번엔 쉬게 하기
         </button>
@@ -222,7 +223,7 @@ function WaitingRow({ r, settings, today, run }: { r: RecontactRow; settings: Re
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] text-stone-500">번호로 답하셨으면</span>
-                {QUICK_REPLIES.map((q) => (
+                {quickRepliesFor(r.segment).map((q) => (
                   <button key={q} type="button" className={BTN} onClick={() => setReply(q)}>
                     {q}
                   </button>
@@ -385,6 +386,8 @@ function SettingsBox({ settings, onSaved, onClose }: { settings: RecontactSettin
   const [cap, setCap] = useState(settings.daily_cap);
   const [a, setA] = useState(settings.body_a);
   const [b, setB] = useState(settings.body_b);
+  const [vip, setVip] = useState(settings.body_vip);
+  const [once, setOnce] = useState(settings.body_once);
   const [reply, setReply] = useState(settings.body_reply);
   const [missed, setMissed] = useState(settings.body_missed);
   const [error, setError] = useState<string | null>(null);
@@ -404,8 +407,10 @@ function SettingsBox({ settings, onSaved, onClose }: { settings: RecontactSettin
       <p className="mt-2 text-[11px] text-stone-500">
         자리표 {"{이름} {월} {약} {원장한줄} {원장답}"} 은 그 사람 것으로 채워집니다. 첫 문자에는 재주문·택배·할인 이야기를 넣지 않습니다(답 온 분께 드리는 글에서만).
       </p>
-      {area("첫 문자 A (경과 확인)", a, setA)}
-      {area("첫 문자 B (비교용)", b, setB)}
+      {area("첫 문자 A — 지금·곧 (열린 질문)", a, setA)}
+      {area("첫 문자 B — 지금·곧 (번호로 답, A와 반씩 보내 비교)", b, setB)}
+      {area("첫 문자 — 오래 못 뵌 단골 (VIP·오래됨·공진단)", vip, setVip)}
+      {area("첫 문자 — 한 번 드신 분", once, setOnce)}
       {area("답 온 분께 (두 번째 문자)", reply, setReply)}
       {area("전화 안 받으셨을 때", missed, setMissed)}
       <div className="mt-2 flex gap-2">
@@ -414,7 +419,7 @@ function SettingsBox({ settings, onSaved, onClose }: { settings: RecontactSettin
           className={PRIMARY}
           onClick={async () => {
             try {
-              onSaved(await saveRecontactSettings({ daily_cap: Math.min(100, Math.max(1, cap || 25)), body_a: a, body_b: b, body_reply: reply, body_missed: missed }));
+              onSaved(await saveRecontactSettings({ daily_cap: Math.min(100, Math.max(1, cap || 25)), body_a: a, body_b: b, body_vip: vip, body_once: once, body_reply: reply, body_missed: missed }));
             } catch (e) {
               setError((e as Error).message);
             }

@@ -3,6 +3,7 @@ import {
   DEFAULT_RECONTACT_SETTINGS,
   EMPTY_CONTEXT,
   blockReason,
+  bodyKindFor,
   factLine,
   fillRecontact,
   firstText,
@@ -10,6 +11,7 @@ import {
   monthWord,
   needsCall,
   parseImportTable,
+  quickRepliesFor,
   replyText,
   sendWindow,
   sentToday,
@@ -41,16 +43,30 @@ describe("문구 채우기", () => {
     expect(fillRecontact("{원장한줄}", base, TODAY)).toBe("요즘 몸은 좀 어떠세요?");
   });
   it("첫 문자: 샘이 고친 글이 먼저, 없으면 A·B 틀", () => {
-    expect(firstText({ ...base, draft_text: "직접 쓴 글", variant: "A" }, S, TODAY)).toBe("직접 쓴 글");
-    expect(firstText({ ...base, draft_text: null, variant: "A" }, S, TODAY)).toContain("9월에 지어 가신 보험 한약");
-    expect(firstText({ ...base, draft_text: " ", variant: "B" }, S, TODAY)).toContain("번호만 답 주셔도 됩니다. 1 많이 좋아졌어요 / 2 비슷해요 / 3 다시 불편해요");
+    expect(firstText({ ...base, draft_text: "직접 쓴 글", variant: "A", segment: "due_now" }, S, TODAY)).toBe("직접 쓴 글");
+    expect(firstText({ ...base, draft_text: null, variant: "A", segment: "due_now" }, S, TODAY)).toContain("9월에 지어 가신 보험 한약");
+    expect(firstText({ ...base, draft_text: " ", variant: "B", segment: "due_soon" }, S, TODAY)).toContain("번호만 답 주셔도 됩니다. 1 많이 좋아졌어요 / 2 비슷해요 / 3 다시 불편해요");
   });
   it("첫 문자에는 택배·재주문 이야기가 없고, 두 번째 문자에만 있다", () => {
     for (const v of ["A", "B"] as const) {
-      const t = firstText({ ...base, draft_text: null, variant: v }, S, TODAY);
-      expect(t).not.toMatch(/택배|재주문|할인|이벤트/);
+      for (const segment of ["due_now", "vip", "once_p1"] as const) {
+        const t = firstText({ ...base, draft_text: null, variant: v, segment }, S, TODAY);
+        expect(t).not.toMatch(/택배|재주문|할인|이벤트/);
+      }
     }
     expect(replyText({ ...base, doctor_reply: "한 달 더 드시면 좋겠다고 하세요." }, S, TODAY)).toContain("한 달 더 드시면 좋겠다고 하세요. 내원해서");
+  });
+});
+
+describe("묶음마다 다른 첫 문자", () => {
+  it("지금·곧은 A·B, 단골은 오래 찾아 주신 것부터, 한 번 드신 분은 이유를 묻는 번호 답", () => {
+    expect(bodyKindFor("due_soon")).toBe("ab");
+    expect(bodyKindFor("lapsed")).toBe("vip");
+    expect(bodyKindFor("once_p2")).toBe("once");
+    expect(firstText({ ...base, draft_text: null, variant: "B", segment: "vip" }, S, TODAY)).toContain("오래 믿고 찾아 주셨는데 9월 이후로");
+    expect(firstText({ ...base, draft_text: null, variant: "A", segment: "once_p1" }, S, TODAY)).toContain("3 별 차이를 못 느꼈어요");
+    expect(quickRepliesFor("once_p1")[1]).toBe("2 나아지다 말았어요");
+    expect(quickRepliesFor("due_now")[2]).toBe("3 다시 불편해요");
   });
 });
 

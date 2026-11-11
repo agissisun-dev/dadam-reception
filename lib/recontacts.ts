@@ -16,7 +16,8 @@ function fail(action: string, message: string): never {
 export async function getRecontactSettings(): Promise<RecontactSettings> {
   const { data, error } = await getSupabase().from("recontact_settings").select("*").maybeSingle();
   if (error) fail("설정 불러오기", error.message);
-  if (data) return data as RecontactSettings;
+  // 표에 아직 없는 칸(나중에 더한 문구)은 기본값으로 채운다
+  if (data) return { ...DEFAULT_RECONTACT_SETTINGS, ...Object.fromEntries(Object.entries(data).filter(([, v]) => v !== null && v !== undefined)) } as RecontactSettings;
   return { clinic: await fetchCurrentClinic(), ...DEFAULT_RECONTACT_SETTINGS };
 }
 

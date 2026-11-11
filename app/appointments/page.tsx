@@ -23,6 +23,7 @@ import {
 import { KIND_LABEL, SOURCE_LABEL, STATUS_LABEL, countByDay, dateKo, dayHours, fillTemplate, parseNaverPaste, slotLoad, slotsOf } from "@/lib/appointmentRules";
 import { clinicInfo, fetchCurrentClinic, type ClinicCode } from "@/lib/clinic";
 import { autoNotify } from "@/lib/appointmentNotify";
+import SmsAppLink from "@/components/SmsAppLink";
 import { DEFAULT_REMIND_BODY, shouldAutoNotify } from "@/lib/appointmentNotifyRules";
 import { firstDayISO, isInMonth, lastDayISO, monthGrid, monthLabel, shiftMonth, yearMonthOf, type YearMonth } from "@/lib/calendarRules";
 import { addDays, todayISO } from "@/lib/dates";
@@ -437,6 +438,7 @@ function Board() {
           ) : (
             <>
               {smsError && <span className="basis-full text-xs text-red-700">예약은 잡혔습니다. 자동 문자는 못 보냈습니다: {smsError} → 복사해서 병원 휴대폰으로 보내 주세요.</span>}
+              <SmsAppLink phone={justBooked.phone} text={notifyText(justBooked)} />
               <button type="button" className={BTN} onClick={() => { navigator.clipboard?.writeText(notifyText(justBooked)).catch(() => undefined); }}>복사</button>
               <button type="button" className={PRIMARY} onClick={() => run(async () => { await markNotified(justBooked.id, "병원 휴대폰"); setJustBooked(null); })}>병원 휴대폰으로 보냈음</button>
             </>
@@ -509,6 +511,7 @@ function EditBox({ a, staff, notify, notifyBody, onNotifySaved, onChanged, onClo
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 rounded bg-stone-50 p-2 text-xs">
         <span className="min-w-[240px] flex-1">{notify}</span>
+        <SmsAppLink phone={a.phone} text={notify} />
         <button type="button" className={BTN} onClick={() => { navigator.clipboard?.writeText(notify).catch(() => undefined); }}>복사</button>
         <button type="button" className={BTN} onClick={() => run(() => markNotified(a.id, "병원 휴대폰"))}>병원 휴대폰으로 보냈음</button>
         <button type="button" className="underline" onClick={() => setEditNotify((v) => !v)}>문구 고치기</button>

@@ -139,7 +139,7 @@ export type RecontactContext = {
   excluded: Set<number>;
   /** 앞으로 예약이 잡혀 있는 환자 */
   booked: Set<number>;
-  /** 최근 14일 안에 내원(장부 줄)한 환자 */
+  /** 최근 14일 안에 실제 한약 처방 기록이 있는 환자. 침 치료 재내원·장부 줄은 해당하지 않음. */
   visited: Set<number>;
   /** 대기 중인 해피콜이 있는 환자 */
   happyCall: Set<number>;
@@ -169,7 +169,7 @@ export function blockReason(r: ContactRow, ctx: RecontactContext | null): string
   // contactBlockReason이 연결 및 context를 확인한 뒤에만 아래 조건을 검사한다.
   const id = r.patient_id!;
   if (ctx!.booked.has(id)) return "예약이 잡혀 있습니다.";
-  if (ctx!.visited.has(id)) return "최근 2주 안에 내원하셨습니다.";
+  if (ctx!.visited.has(id)) return "최근 2주 안에 한약 처방 기록이 있습니다.";
   if (ctx!.happyCall.has(id)) return "해피콜이 예정되어 있습니다.";
   return null;
 }
@@ -316,7 +316,7 @@ export function parseImportTable(table: string[][], fallback: RecontactSegment):
   return { rows, skipped, problem: rows.length === 0 ? "읽을 수 있는 줄이 없습니다." : null };
 }
 
-/** 최근 내원 판정 기준일: 오늘에서 14일 전 */
+/** 실제 한약 처방(receive_date) 판정 기준일: 오늘에서 14일 전. 침 치료 내원일이 아님. */
 export function visitedSince(today: string): string {
   return addDays(today, -14);
 }

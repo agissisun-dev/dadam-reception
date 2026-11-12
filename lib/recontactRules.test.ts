@@ -78,11 +78,11 @@ describe("오늘 보낼 사람", () => {
   });
   const ctx = (p: Partial<RecontactContext>): RecontactContext => ({ ...EMPTY_CONTEXT, ...p });
 
-  it("빠지는 이유: 연락처 없음·연락 제외·예약 있음·최근 내원·해피콜 예정", () => {
+  it("빠지는 이유: 연락처 없음·연락 제외·예약 있음·최근 한약 처방·해피콜 예정", () => {
     expect(blockReason(row(1, { patient_id: null }), EMPTY_CONTEXT)).toBe("연락처가 아직 없습니다.");
     expect(blockReason(row(1), ctx({ excluded: new Set([1]) }))).toBe("연락 제외 환자입니다.");
     expect(blockReason(row(1), ctx({ booked: new Set([1]) }))).toBe("예약이 잡혀 있습니다.");
-    expect(blockReason(row(1), ctx({ visited: new Set([1]) }))).toBe("최근 2주 안에 내원하셨습니다.");
+    expect(blockReason(row(1), ctx({ visited: new Set([1]) }))).toBe("최근 2주 안에 한약 처방 기록이 있습니다.");
     expect(blockReason(row(1), ctx({ happyCall: new Set([1]) }))).toBe("해피콜이 예정되어 있습니다.");
     expect(blockReason(row(1), EMPTY_CONTEXT)).toBeNull();
     expect(blockReason(row(1, { status: "sent" }), EMPTY_CONTEXT)).not.toBeNull();

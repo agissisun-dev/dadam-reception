@@ -135,16 +135,41 @@ describe("strict clinic and atomic client contracts", () => {
 });
 
 describe("fail-closed eligibility context", () => {
-  for (const failed of ["patients", "appointments", "ledger_entries", "happy_calls"]) {
+  for (const failed of ["patients", "appointments", "prescriptions", "happy_calls"]) {
     it(`rejects errors from ${failed}`, async () => {
-      for (const table of ["patients", "appointments", "ledger_entries", "happy_calls"]) queue(table, table === failed ? error(`${table} unavailable`) : ok([]));
+      for (const table of ["patients", "appointments", "prescriptions", "happy_calls"]) queue(table, table === failed ? error(`${table} unavailable`) : ok([]));
       await expect(recontactContext([{ ...candidate, patient_id: 8 } as RecontactRow], "2026-11-12")).rejects.toThrow(`${failed} unavailable`);
     });
   }
   it("excludes a linked patient missing from fresh same-clinic results", async () => {
-    for (const table of ["patients", "appointments", "ledger_entries", "happy_calls"]) queue(table, ok([]));
+    for (const table of ["patients", "appointments", "prescriptions", "happy_calls"]) queue(table, ok([]));
     const ctx = await recontactContext([{ ...candidate, patient_id: 8 } as RecontactRow], "2026-11-12");
     expect(ctx.excluded.has(8)).toBe(true);
+  });
+  it("does not suppress an acupuncture-only return: recent herbs come only from prescription receive_date", async () => {
+    queue("patients", ok([patient]));
+    queue("appointments", ok([]));
+    queue("prescriptions", ok([]));
+    queue("happy_calls", ok([]));
+    // Acupuncture ledger rows must not be read or interpreted as herb repurchases.
+    queue("ledger_entries", ok([{ patient_id: 8, day: "2026-11-11", memo: "침 치료" }]));
+    const ctx = await recontactContext([{ ...candidate, patient_id: 8 } as RecontactRow], "2026-11-12");
+    expect(ctx.visited.has(8)).toBe(false);
+    expect(ctx.excluded.has(8)).toBe(false);
+    expect(queries.some((q) => q.table === "ledger_entries")).toBe(false);
+    const herbs = queries.find((q) => q.table === "prescriptions");
+    expect(herbs?.steps).toContainEqual({ method: "select", args: ["patient_id"] });
+    expect(herbs?.steps).toContainEqual({ method: "eq", args: ["clinic", "N"] });
+    expect(herbs?.steps).toContainEqual({ method: "gte", args: ["receive_date", "2026-10-29"] });
+    expect(herbs?.steps).toContainEqual({ method: "in", args: ["patient_id", [8]] });
+  });
+  it("suppresses a recent actual herb prescription through the compatibility visited set", async () => {
+    queue("patients", ok([patient]));
+    queue("appointments", ok([]));
+    queue("prescriptions", ok([{ patient_id: 8 }]));
+    queue("happy_calls", ok([]));
+    const ctx = await recontactContext([{ ...candidate, patient_id: 8 } as RecontactRow], "2026-11-12");
+    expect(ctx.visited.has(8)).toBe(true);
   });
 });
 

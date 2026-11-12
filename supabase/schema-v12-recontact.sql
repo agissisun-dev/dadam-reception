@@ -27,8 +27,7 @@ begin
     ('clinic_accounts', array['user_id','clinic']),
     ('patients', array['id','clinic','name','phone','condition','memo','excluded_at','excluded_reason']),
     ('appointments', array['clinic','patient_id','day','status']),
-    ('ledger_entries', array['clinic','patient_id','day']),
-    ('prescriptions', array['id','clinic','patient_id']),
+    ('prescriptions', array['id','clinic','patient_id','receive_date']),
     ('happy_calls', array['clinic','prescription_id','status'])
   ) as deps(table_name, columns) loop
     if to_regclass('public.' || dep.table_name) is null then
@@ -403,9 +402,11 @@ begin
         and a.patient_id = v_patient.id and a.status = 'booked' and a.day >= v_today) then
       raise exception 'APPOINTMENT_BOOKED' using errcode = '23514';
     end if;
-    if exists (select 1 from public.ledger_entries e where e.clinic = v_clinic
-        and e.patient_id = v_patient.id and e.day >= v_today - 14 and e.day <= v_today) then
-      raise exception 'RECENT_VISIT' using errcode = '23514';
+    -- Ordinary/acupuncture ledger visits are not evidence of another herbal prescription.
+    -- Only the actual prescription receive_date suppresses an initial recontact.
+    if exists (select 1 from public.prescriptions p where p.clinic = v_clinic
+        and p.patient_id = v_patient.id and p.receive_date >= v_today - 14) then
+      raise exception 'RECENT_HERB_PRESCRIPTION' using errcode = '23514';
     end if;
     if exists (select 1 from public.happy_calls h
         join public.prescriptions p on p.id = h.prescription_id and p.clinic = h.clinic

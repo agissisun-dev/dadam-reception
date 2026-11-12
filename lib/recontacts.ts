@@ -66,14 +66,15 @@ export async function recontactContext(rows: RecontactRow[], today: string): Pro
   const excluded = new Set<number>();
   if (!ids.length) return { excluded, booked: new Set(), visited: new Set(), happyCall: new Set() };
   const sb = getSupabase();
-  const [patients, appts, visits, calls] = await Promise.all([
+  // Only actual recent herb prescriptions suppress recontact, never acupuncture/ledger visits.
+  const [patients, appts, recentHerbs, calls] = await Promise.all([
     sb.from("patients").select("id,clinic,phone,excluded_at").eq("clinic", clinic).in("id", ids),
     sb.from("appointments").select("patient_id").eq("clinic", clinic).gte("day", today).eq("status", "booked").in("patient_id", ids),
-    sb.from("ledger_entries").select("patient_id").eq("clinic", clinic).gte("day", visitedSince(today)).in("patient_id", ids),
+    sb.from("prescriptions").select("patient_id").eq("clinic", clinic).gte("receive_date", visitedSince(today)).in("patient_id", ids),
     sb.from("happy_calls").select("prescription:prescriptions!inner(patient_id,clinic)").eq("clinic", clinic)
       .eq("prescription.clinic", clinic).in("prescription.patient_id", ids).eq("status", "pending"),
   ]);
-  for (const result of [patients, appts, visits, calls]) if (result.error) fail("연락 대기 사유 확인", result.error.message);
+  for (const result of [patients, appts, recentHerbs, calls]) if (result.error) fail("연락 대기 사유 확인", result.error.message);
   const fresh = new Map((patients.data ?? []).map((p) => [p.id as number, p]));
   for (const id of ids) {
     const p = fresh.get(id);
@@ -89,7 +90,8 @@ export async function recontactContext(rows: RecontactRow[], today: string): Pro
       if (ids.includes(p.patient_id)) happyCall.add(p.patient_id);
     }
   }
-  return { excluded, booked: set(appts.data), visited: set(visits.data), happyCall };
+  // Keep the legacy visited key for compatibility: it means recent actual herb prescriptions only.
+  return { excluded, booked: set(appts.data), visited: set(recentHerbs.data), happyCall };
 }
 
 export class NameMismatch extends Error {

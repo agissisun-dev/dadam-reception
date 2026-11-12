@@ -362,7 +362,7 @@ function UploadBox({ staff, onDone, onClose }: { staff: StaffName; onDone: (msg:
   return (
     <section className="rounded-lg border border-[#16863b] bg-white p-3 text-sm">
       <p className="text-xs text-stone-600">
-        엑셀 파일(.xlsx)을 고르면 이 PC에서 바로 읽습니다. 첫 줄이 머리글(이름 · 연락처 · 한약 횟수 · 마지막 한약 · 원장님 칸 …)인 시트를 읽고, 최근 내원 메모가 있어도 명단은 보존하고 연락 대기 이유를 따로 표시합니다. 작성안내 시트는 읽지 않습니다.
+        엑셀 파일(.xlsx)을 고르면 이 PC에서 바로 읽습니다. 첫 줄이 머리글(이름 · 연락처 · 한약 횟수 · 마지막 한약 · 원장님 칸 …)인 시트를 읽고, 최근 내원 메모도 명단에 보존합니다. 침치료 재내원만으로 한약 재구매 연락에서 제외하지 않으며, 최근 14일 한약 처방에 따른 연락 대기 이유는 따로 표시합니다. 작성안내 시트는 읽지 않습니다.
       </p>
       <div className="mt-2 flex flex-wrap items-end gap-2">
         <input type="file" accept=".xlsx" onChange={(e) => pick(e.target.files?.[0])} className="text-sm" />

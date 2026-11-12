@@ -18,7 +18,18 @@ async function requireClinic(): Promise<Clinic> {
   const { data, error } = await getSupabase().rpc("current_clinic");
   if (error) fail("병원 확인", error.message);
   if (data !== "S" && data !== "N") throw new Error("병원에 연결된 계정으로 다시 로그인해 주세요.");
+  if (data !== "S") throw new Error(`${RECONTACT_NAME}은 현재 다담에스한의원에서만 사용할 수 있습니다.`);
   return data;
+}
+
+/** UI visibility uses the same fresh, fail-closed check as all data operations. */
+export async function canUseRecontacts(): Promise<boolean> {
+  try {
+    await requireClinic();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function settingsFor(clinic: Clinic): Promise<RecontactSettings> {

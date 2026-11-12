@@ -21,6 +21,12 @@ describe("dayBlock — 일일장부 모양", () => {
     expect(rows[5][0]).toBe(3);
     expect(rows[5][1]).toBeNull();
   });
+  it("keeps new categories and historical free-text values unchanged in exports", () => {
+    for (const insurance_kind of ["자보", "산정특례", "옛 사용자 지정 구분", "1종"]) {
+      const result = dayBlock({ day: "2026-10-02", entries: [entry(1, { insurance_kind })], expenses: [] });
+      expect(result.rows[3][2]).toBe(insurance_kind);
+    }
+  });
   it("합계 줄", () => {
     const total = rows[3 + BLOCK_PATIENT_ROWS];
     expect(total[0]).toBe("합계");

@@ -4,7 +4,7 @@ import type { RecontactRow } from "./types";
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn() }));
 vi.mock("./supabaseClient", () => ({ getSupabase: () => mocks }));
-import { assertRecontactContact, deleteRecontact, importRecontacts, linkPhone, listRecontacts, markCalled, markSent, MissingPatient, NameMismatch, optOutRecontact, recontactContext, setRecontactStatus } from "./recontacts";
+import { canUseRecontacts, countRecontactToday, getRecontactSettings, saveRecontactSettings, updateRecontact, markReplied, assertRecontactContact, deleteRecontact, importRecontacts, linkPhone, listRecontacts, markCalled, markSent, MissingPatient, NameMismatch, optOutRecontact, recontactContext, setRecontactStatus } from "./recontacts";
 
 type Reply = { data: unknown; error: { message: string; code?: string; details?: string } | null };
 type Step = { method: string; args: unknown[] };
@@ -51,8 +51,8 @@ function query(table: string) {
   };
   return q;
 }
-const candidate = { id: 1, clinic: "N", patient_id: null, patient_name: "김동명", birth_hint: null };
-const patient = { id: 8, clinic: "N", name: "김동명", phone: "01012345678", excluded_at: null };
+const candidate = { id: 1, clinic: "S", patient_id: null, patient_name: "김동명", birth_hint: null };
+const patient = { id: 8, clinic: "S", name: "김동명", phone: "01012345678", excluded_at: null };
 const row: ImportRow = { patient_name: "김동명", phone: null, birth_hint: null, segment: "vip", call_target: true, herb_count: 2, last_herb_date: null, avg_interval_days: null, herb_kind: null, doctor_note: null, memo: null, variant: "A" };
 
 beforeEach(() => {
@@ -60,7 +60,7 @@ beforeEach(() => {
   replies.clear();
   queries.length = 0;
   mocks.from.mockImplementation(query);
-  mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("N") : error(`Unexpected RPC ${name}`));
+  mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("S") : error(`Unexpected RPC ${name}`));
 });
 
 describe("strict clinic and atomic client contracts", () => {
@@ -71,10 +71,11 @@ describe("strict clinic and atomic client contracts", () => {
   });
   it("freshly resolves the clinic for every operation", async () => {
     mocks.rpc.mockResolvedValueOnce(ok("S")).mockResolvedValueOnce(ok("N"));
-    queue("recontacts", ok([]), ok([]));
-    await listRecontacts(); await listRecontacts();
+    queue("recontacts", ok([]));
+    await listRecontacts();
+    await expect(listRecontacts()).rejects.toThrow("다담에스한의원에서만");
+    expect(queries).toHaveLength(1);
     expect(queries[0].steps).toContainEqual({ method: "eq", args: ["clinic", "S"] });
-    expect(queries[1].steps).toContainEqual({ method: "eq", args: ["clinic", "N"] });
     expect(queries[0].steps[0].args[0]).toContain("id,clinic,name,phone,excluded_at");
   });
   it("does not silently accept a differently named phone match", async () => {
@@ -84,32 +85,32 @@ describe("strict clinic and atomic client contracts", () => {
   });
   it("maps the authoritative missing-patient error without creating in the client", async () => {
     queue("patients", ok(null));
-    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("N") : error("PATIENT_MISSING", "P0002"));
+    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("S") : error("PATIENT_MISSING", "P0002"));
     await expect(linkPhone(candidate, patient.phone)).rejects.toBeInstanceOf(MissingPatient);
     expect(mocks.rpc).toHaveBeenLastCalledWith("recontact_link_phone", expect.objectContaining({ p_allow_create: false, p_accept_different_name: false }));
     expect(queries.every((q) => q.steps.every((s) => s.method !== "insert"))).toBe(true);
   });
   it("only forwards explicit creation approval and validates the returned link", async () => {
     queue("patients", ok(null));
-    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("N") : ok({ patient, recontact: { ...candidate, patient_id: patient.id } }));
+    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("S") : ok({ patient, recontact: { ...candidate, patient_id: patient.id } }));
     await expect(linkPhone(candidate, "010-1234-5678", false, true)).resolves.toEqual(patient);
     expect(mocks.rpc).toHaveBeenLastCalledWith("recontact_link_phone", expect.objectContaining({ p_phone: patient.phone, p_allow_create: true }));
   });
   it("maps an RPC name race from same-clinic error details", async () => {
     queue("patients", ok(null));
-    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("N") : ({ data: null, error: { message: "NAME_MISMATCH", details: JSON.stringify({ ...patient, name: "다른분" }) } }));
+    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("S") : ({ data: null, error: { message: "NAME_MISMATCH", details: JSON.stringify({ ...patient, name: "다른분" }) } }));
     await expect(linkPhone(candidate, patient.phone)).rejects.toBeInstanceOf(NameMismatch);
   });
   it("retains all send/call audit fields when resetting status", async () => {
-    queue("recontacts", ok({ id: 1, clinic: "N" }));
+    queue("recontacts", ok({ id: 1, clinic: "S" }));
     await setRecontactStatus(1, "todo");
     const values = queries[0].steps.find((s) => s.method === "update")?.args[0];
     expect(values).toEqual({ status: "todo", updated_at: expect.any(String) });
-    expect(queries[0].steps).toContainEqual({ method: "eq", args: ["clinic", "N"] });
+    expect(queries[0].steps).toContainEqual({ method: "eq", args: ["clinic", "S"] });
     expect(queries[0].steps.at(-1)?.method).toBe("single");
   });
   it("archives instead of deleting and retains source/audit fields", async () => {
-    queue("recontacts", ok({ id: 1, clinic: "N" }));
+    queue("recontacts", ok({ id: 1, clinic: "S" }));
     await deleteRecontact(1);
     expect(queries[0].steps.find((s) => s.method === "update")?.args[0]).toEqual({ status: "rest", updated_at: expect.any(String) });
     expect(queries[0].steps.some((s) => s.method === "delete")).toBe(false);
@@ -119,7 +120,7 @@ describe("strict clinic and atomic client contracts", () => {
     await expect(setRecontactStatus(1, "todo")).rejects.toThrow("zero rows");
   });
   it("records manual facts through expected-attempt RPCs, not eligibility or sending", async () => {
-    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("N") : ok({ id: 1, clinic: "N" }));
+    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("S") : ok({ id: 1, clinic: "S" }));
     await markSent({ id: 1, attempts: 2 }, "담당", "보낸 글");
     await markCalled({ id: 1, attempts: 3 }, "안 받음");
     expect(mocks.rpc).toHaveBeenCalledWith("recontact_record_sent", { p_id: 1, p_expected_attempts: 2, p_staff: "담당", p_text: "보낸 글" });
@@ -127,7 +128,7 @@ describe("strict clinic and atomic client contracts", () => {
     expect(mocks.from).not.toHaveBeenCalled();
   });
   it("uses the server eligibility and opt-out transactions", async () => {
-    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("N") : ok(null));
+    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("S") : ok(null));
     await assertRecontactContact(1, "followup"); await optOutRecontact(1, "수신거부");
     expect(mocks.rpc).toHaveBeenCalledWith("recontact_assert_contact", { p_id: 1, p_purpose: "followup" });
     expect(mocks.rpc).toHaveBeenCalledWith("recontact_opt_out", { p_id: 1, p_reason: "수신거부" });
@@ -159,7 +160,7 @@ describe("fail-closed eligibility context", () => {
     expect(queries.some((q) => q.table === "ledger_entries")).toBe(false);
     const herbs = queries.find((q) => q.table === "prescriptions");
     expect(herbs?.steps).toContainEqual({ method: "select", args: ["patient_id"] });
-    expect(herbs?.steps).toContainEqual({ method: "eq", args: ["clinic", "N"] });
+    expect(herbs?.steps).toContainEqual({ method: "eq", args: ["clinic", "S"] });
     expect(herbs?.steps).toContainEqual({ method: "gte", args: ["receive_date", "2026-10-29"] });
     expect(herbs?.steps).toContainEqual({ method: "in", args: ["patient_id", [8]] });
   });
@@ -183,7 +184,7 @@ describe("candidate-only idempotent import", () => {
     expect(inserts[0].source_key).not.toEqual(inserts[1].source_key);
     expect(inserts[0]).not.toHaveProperty("patient_id");
     expect(inserts[0]).not.toHaveProperty("status");
-    expect(inserts[0].clinic).toBe("N");
+    expect(inserts[0].clinic).toBe("S");
     expect(mocks.rpc.mock.calls.every(([name]) => name === "current_clinic")).toBe(true);
   });
   it("same source reimport preserves reviewed candidate fields and reports changed names", async () => {
@@ -199,10 +200,58 @@ describe("candidate-only idempotent import", () => {
   });
   it("a missing phone match stays an unlinked candidate and never auto-registers", async () => {
     queue("recontacts", ok(null), ok(candidate)); queue("patients", ok(null));
-    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("N") : error("PATIENT_MISSING", "P0002"));
+    mocks.rpc.mockImplementation(async (name: string) => name === "current_clinic" ? ok("S") : error("PATIENT_MISSING", "P0002"));
     const result = await importRecontacts([{ ...row, phone: patient.phone }], "담당", "file.xlsx/sheet1");
     expect(result.added).toBe(1); expect(result.linked).toBe(0); expect(result.problems).toHaveLength(1);
     expect(mocks.rpc).toHaveBeenCalledWith("recontact_link_phone", expect.objectContaining({ p_allow_create: false }));
     expect(queries.filter((q) => q.table === "patients").flatMap((q) => q.steps).some((s) => s.method === "insert")).toBe(false);
+  });
+});
+
+
+describe("S-only recontact access", () => {
+  const operations: [string, () => Promise<unknown>][] = [
+    ["settings read", () => getRecontactSettings()],
+    ["settings write", () => saveRecontactSettings({ daily_cap: 20 })],
+    ["list", () => listRecontacts()],
+    ["context", () => recontactContext([], "2026-11-12")],
+    ["link", () => linkPhone(candidate, patient.phone)],
+    ["eligibility", () => assertRecontactContact(1, "initial")],
+    ["opt-out", () => optOutRecontact(1, "수신거부")],
+    ["import", () => importRecontacts([row], "담당")],
+    ["edit", () => updateRecontact(1, { memo: "메모" })],
+    ["sent", () => markSent({ id: 1, attempts: 0 }, "담당", "문구")],
+    ["reply", () => markReplied(1, "답장")],
+    ["call", () => markCalled({ id: 1, attempts: 0 }, "안 받음")],
+    ["status", () => setRecontactStatus(1, "todo")],
+    ["archive", () => deleteRecontact(1)],
+  ];
+  for (const [label, result] of [["N", ok("N")], ["unmapped", ok(null)], ["invalid", ok("unexpected")], ["lookup error", error("offline")]] as const) {
+    for (const [operation, run] of operations) {
+      it(`blocks ${label} ${operation} before any table or contact RPC`, async () => {
+        mocks.rpc.mockResolvedValue(result);
+        await expect(run()).rejects.toThrow();
+        expect(mocks.from).not.toHaveBeenCalled();
+        expect(mocks.rpc.mock.calls.every(([name]) => name === "current_clinic")).toBe(true);
+      });
+    }
+    it(`hides availability and badge count for ${label}`, async () => {
+      mocks.rpc.mockResolvedValue(result);
+      await expect(canUseRecontacts()).resolves.toBe(false);
+      await expect(countRecontactToday("2026-11-12")).resolves.toBe(0);
+      expect(mocks.from).not.toHaveBeenCalled();
+    });
+  }
+  it("enables verified S only without caching access", async () => {
+    mocks.rpc.mockResolvedValueOnce(ok("S")).mockResolvedValueOnce(ok("N"));
+    await expect(canUseRecontacts()).resolves.toBe(true);
+    await expect(canUseRecontacts()).resolves.toBe(false);
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
+  });
+  it("fails closed when clinic lookup throws", async () => {
+    mocks.rpc.mockRejectedValue(new Error("offline"));
+    await expect(canUseRecontacts()).resolves.toBe(false);
+    await expect(listRecontacts()).rejects.toThrow("offline");
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 });

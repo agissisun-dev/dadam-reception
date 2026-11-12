@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import HappyCallRow from "@/components/HappyCallRow";
 import RecontactPanel from "@/components/RecontactPanel";
 import { RECONTACT_NAME } from "@/lib/recontactRules";
+import { canUseRecontacts } from "@/lib/recontacts";
 import { listOpenHappyCalls } from "@/lib/happyCalls";
 import { bucketHappyCalls } from "@/lib/happyCallRules";
 import { listTemplates } from "@/lib/templates";
@@ -85,6 +86,12 @@ function Board() {
  * - 재진콜: 한약 드신 뒤 시간이 지난 분을 재진으로 다시 모시는 연락 (/happy-calls?tab=recontact 로 바로 열림)
  */
 function Screen() {
+  const [recontactEnabled, setRecontactEnabled] = useState<boolean | null>(null);
+  useEffect(() => {
+    let active = true;
+    canUseRecontacts().then((enabled) => { if (active) setRecontactEnabled(enabled); });
+    return () => { active = false; };
+  }, []);
   const [tab, setTab] = useState<"happy" | "recontact">(() =>
     typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "recontact" ? "recontact" : "happy",
   );
@@ -97,9 +104,11 @@ function Screen() {
           <button type="button" className={tabClass(tab === "happy")} onClick={() => setTab("happy")}>
             해피콜
           </button>
-          <button type="button" className={tabClass(tab === "recontact")} onClick={() => setTab("recontact")}>
-            {RECONTACT_NAME}
-          </button>
+          {recontactEnabled === true && (
+            <button type="button" className={tabClass(tab === "recontact")} onClick={() => setTab("recontact")}>
+              {RECONTACT_NAME}
+            </button>
+          )}
         </h1>
         <div className="flex items-baseline gap-3">
           <Link href="/patients/new" className="rounded bg-stone-900 px-3 py-1.5 text-sm text-white">
@@ -108,7 +117,11 @@ function Screen() {
           <p className="text-sm text-stone-500">{today}</p>
         </div>
       </div>
-      {tab === "happy" ? <Board /> : <RecontactPanel />}
+      {tab === "happy" ? <Board /> : recontactEnabled === true ? <RecontactPanel /> : (
+        <p role={recontactEnabled === null ? "status" : "alert"} className="text-stone-600">
+          {recontactEnabled === null ? "병원 확인 중…" : `${RECONTACT_NAME}은 현재 다담에스한의원에서만 사용할 수 있습니다. 해피콜 탭을 이용해 주세요.`}
+        </p>
+      )}
     </main>
   );
 }

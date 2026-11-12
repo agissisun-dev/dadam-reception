@@ -8,7 +8,8 @@ export type DayHours = { open: boolean; start: string; end: string; lunchStart: 
 /**
  * 병원별 기본 진료 시간. 요일 0=일 … 6=토.
  * 다담에스(사용자 2026-10-02): 월·화·목 9:30~18:00 점심 13~14, 토 9:30~15:00 점심 없음, 수·금·일 휴진.
- * 노원다담은 시작할 때 적는다(지금은 S와 같게).
+ * 노원다담: 화·목 21시, 수·금 19시까지 진료.
+ * 시작·점심·월·토 시간은 기존 임시값을 보존한다. 노원 실운영 시간 확인 필요.
  */
 const CLOSED: DayHours = { open: false, start: "09:30", end: "18:00", lunchStart: null, lunchEnd: null, note: null };
 const WEEKDAY: DayHours = { open: true, start: "09:30", end: "18:00", lunchStart: "13:00", lunchEnd: "14:00", note: null };
@@ -16,7 +17,7 @@ const SATURDAY: DayHours = { open: true, start: "09:30", end: "15:00", lunchStar
 
 export const CLINIC_HOURS: Record<"S" | "N", DayHours[]> = {
   S: [CLOSED, WEEKDAY, WEEKDAY, CLOSED, WEEKDAY, CLOSED, SATURDAY],
-  N: [CLOSED, WEEKDAY, WEEKDAY, CLOSED, WEEKDAY, CLOSED, SATURDAY],
+  N: [CLOSED, WEEKDAY, { ...WEEKDAY, end: "21:00" }, { ...WEEKDAY, end: "19:00" }, { ...WEEKDAY, end: "21:00" }, { ...WEEKDAY, end: "19:00" }, SATURDAY],
 };
 
 function dow(iso: string): number {
@@ -92,9 +93,43 @@ export function dateKo(iso: string): string {
   return `${m}월 ${d}일(${weekdayKo(iso)})`;
 }
 
-/** 안내 문구 채우기: {이름} {병원} {날짜} {시간} */
-export function fillTemplate(body: string, v: { 이름: string; 병원: string; 날짜: string; 시간: string }): string {
-  return body.replace(/\{(이름|병원|날짜|시간)\}/g, (_, k: keyof typeof v) => v[k]);
+/** 기존 사용자 문구와 호환되는 자리표 치환. 모르는 자리표는 그대로 둔다. */
+export function fillTemplate(body: string, v: { 이름: string; 병원: string; 날짜: string; 시간: string; 월?: string; 일?: string; 요일?: string; 전화번호?: string }): string {
+  return body.replace(/{(이름|병원|날짜|시간|월|일|요일|전화번호)}/g, (token, k: keyof typeof v) => v[k] ?? token);
+}
+
+export const LEGACY_NOTIFY_BODY = "{이름}님, {병원} 예약 안내드립니다. {날짜} {시간}에 뵙겠습니다. 변경이 필요하시면 전화 주세요.";
+export const DEFAULT_NOTIFY_BODY = "안녕하세요. {병원}입니다. {이름}님 {날짜} {시간}에 뵙겠습니다. 변동사항 있으면 전화 부탁드립니다.";
+
+/** 병원별 대표번호. S는 하이닥·KMCRIC 교차 확인, N은 사용자 제공. */
+export const APPOINTMENT_CLINICS = {
+  S: { name: "다담에스한의원", phone: "02-949-3980" },
+  N: { name: "노원다담한의원", phone: "02-949-3900" },
+} as const;
+
+export function defaultNotifyBody(clinic: "S" | "N"): string {
+  return DEFAULT_NOTIFY_BODY + (APPOINTMENT_CLINICS[clinic].phone ? " {전화번호}." : "");
+}
+
+/** 예약 HH:MM → 한국어 12시간제. 정각에는 0분을 붙이지 않는다. */
+export function appointmentTimeKo(time: string): string {
+  const match = time.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) return time;
+  const hour = Number(match[1]) % 12 || 12;
+  const minute = Number(match[2]);
+  return String(hour) + "시" + (minute ? " " + minute + "분" : "");
+}
+
+/** 미리 보기·예약 완료·발송에서 같은 자리표를 쓴다. */
+export function renderAppointmentTemplate(body: string, a: Pick<Appointment, "patient_name" | "day" | "time">, clinic: "S" | "N"): string {
+  const [, month, day] = a.day.split("-").map(Number);
+  const weekday = weekdayKo(a.day);
+  return fillTemplate(body, {
+    이름: a.patient_name, 병원: APPOINTMENT_CLINICS[clinic].name,
+    전화번호: APPOINTMENT_CLINICS[clinic].phone,
+    날짜: month + "월 " + day + "일 " + weekday + "요일",
+    시간: appointmentTimeKo(a.time), 월: String(month), 일: String(day), 요일: weekday + "요일",
+  });
 }
 
 /** 날짜별 예약 수(취소 제외) */
@@ -109,11 +144,7 @@ export function countByDay(appts: Pick<Appointment, "day" | "status">[]): Map<st
 
 export type NaverPasteRow = { day: string; time: string; name: string; phone: string | null; key: string | null; raw: string; ok: boolean };
 
-/**
- * 스마트플레이스 예약 목록을 붙여 넣은 글에서 날짜·시간·이름·연락처·예약번호를 읽는다.
- * 줄마다 "2026-10-19 10:30 홍길동 010-1234-5678 예약번호 123456" 같은 모양을 기대하고,
- * 날짜·시간·이름 셋을 못 찾으면 ok=false로 돌려준다(화면에서 손으로 고침).
- */
+/** 네이버 붙여넣기에서 날짜·시간·이름·연락처·예약번호를 읽는다. */
 export function parseNaverPaste(text: string): NaverPasteRow[] {
   const out: NaverPasteRow[] = [];
   for (const raw of text.split(/\r?\n/)) {
@@ -130,11 +161,11 @@ export function parseNaverPaste(text: string): NaverPasteRow[] {
       name = cand[0] ?? null;
     }
     let day = "", hhmm = "";
-    if (date) day = `${date[1]}-${String(Number(date[2])).padStart(2, "0")}-${String(Number(date[3])).padStart(2, "0")}`;
+    if (date) day = date[1] + "-" + String(Number(date[2])).padStart(2, "0") + "-" + String(Number(date[3])).padStart(2, "0");
     if (time) {
       let h = Number(time[1]);
       if (/오후/.test(line) && h < 12) h += 12;
-      hhmm = `${String(h).padStart(2, "0")}:${time[2]}`;
+      hhmm = String(h).padStart(2, "0") + ":" + time[2];
     }
     out.push({ day, time: hhmm, name: name ?? "", phone: phone ? phone[0].replace(/-/g, "") : null, key: key ? key[1] : null, raw: line, ok: !!(day && hhmm && name) });
   }

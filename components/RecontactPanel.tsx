@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import SmsAppLink from "./SmsAppLink";
+import SmsSendBox from "./SmsSendBox";
+import { recordAcceptedSms, sendSms, SmsOutcomeUnknown } from "@/lib/sms";
 import StaffSelect from "./StaffSelect";
 import { todayISO } from "@/lib/dates";
 import { maskPhone } from "@/lib/phone";
@@ -126,6 +127,39 @@ function DoctorNote({ r, run }: { r: RecontactRow; run: (fn: () => Promise<unkno
 
 type ContactGuard = { disabled: boolean; reason: string | null; beforeOpen: () => Promise<void> };
 
+/** Both client and API repeat latest contact guards. Only accepted initial sends create an audit. */
+function RecontactSmsSend({ r, text, staff, contact, purpose, onSent }: {
+  r: RecontactRow; text: string; staff: string; contact: ContactGuard;
+  purpose: "initial" | "followup"; onSent: () => void;
+}) {
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  async function send(to: string) {
+    if (busy || locked || contact.disabled || !r.patient_id) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await recordAcceptedSms(
+        () => sendSms(to, text, { patientId: r.patient_id!, staff, recontactId: r.id, purpose }),
+        async () => { if (purpose === "initial") await markSent(r, staff, text); onSent(); },
+      );
+      setLocked(true);
+      setConfirm(false);
+      setNotice(result.warning ?? "문자 업체가 발송 요청을 접수했습니다.");
+    } catch (e) {
+      if (e instanceof SmsOutcomeUnknown) setLocked(true);
+      setNotice(e instanceof Error ? e.message : "발송 요청을 확인하지 못했습니다.");
+    } finally { setBusy(false); }
+  }
+  return <div className="space-y-2">
+    {!locked && !confirm && <button type="button" className={PRIMARY} disabled={contact.disabled || !r.patient?.phone || !text.trim()} onClick={() => setConfirm(true)}>문자 보내기</button>}
+    {confirm && !locked && <SmsSendBox recipients={r.patient ? [{ label: r.patient_name, phone: r.patient.phone }] : []} text={text} busy={busy || contact.disabled} beforeSend={contact.beforeOpen} onSend={send} onCancel={() => setConfirm(false)} />}
+    {notice && <p role="status" className="text-xs text-amber-800">{notice}</p>}
+  </div>;
+}
+
 function TodayRow({ r, settings, today, staff, run, contact }: { contact: ContactGuard; r: RecontactRow; settings: RecontactSettings; today: string; staff: StaffName; run: (fn: () => Promise<unknown>) => void }) {
   const [text, setText] = useState(() => firstText(r, settings, today));
   return (
@@ -135,11 +169,8 @@ function TodayRow({ r, settings, today, staff, run, contact }: { contact: Contac
       <DoctorNote r={r} run={run} />
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} className="mt-2 w-full rounded border border-stone-300 px-2 py-1 text-sm" />
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <SmsAppLink phone={r.patient?.phone} text={text} disabled={contact.disabled} beforeOpen={contact.beforeOpen} />
+        <RecontactSmsSend r={r} text={text} staff={staff} contact={contact} purpose="initial" onSent={() => run(async () => {})} />
         <CopyButton text={text} disabled={contact.disabled} />
-        <button type="button" className={PRIMARY} disabled={!text.trim()} onClick={() => run(() => markSent(r, staff, text))}>
-          보냈음
-        </button>
         {bodyKindFor(r.segment) === "ab" && <span className="text-[11px] text-stone-500">문구 {r.variant}</span>}
         <button type="button" className="ml-auto text-xs text-stone-500 underline" onClick={() => run(() => setRecontactStatus(r.id, "rest"))}>
           이번엔 쉬게 하기
@@ -149,7 +180,7 @@ function TodayRow({ r, settings, today, staff, run, contact }: { contact: Contac
   );
 }
 
-function WaitingRow({ r, settings, today, run, contact }: { contact: ContactGuard; r: RecontactRow; settings: RecontactSettings; today: string; run: (fn: () => Promise<unknown>) => void }) {
+function WaitingRow({ r, settings, today, staff, run, contact }: { contact: ContactGuard; r: RecontactRow; settings: RecontactSettings; today: string; staff: StaffName; run: (fn: () => Promise<unknown>) => void }) {
   const [mode, setMode] = useState<"reply" | "call" | null>(null);
   const [reply, setReply] = useState("");
   const [callResult, setCallResult] = useState("");
@@ -193,7 +224,7 @@ function WaitingRow({ r, settings, today, run, contact }: { contact: ContactGuar
           </div>
           <p className="whitespace-pre-wrap rounded bg-stone-50 p-2 text-sm">{second}</p>
           <div className="flex flex-wrap items-center gap-2">
-            <SmsAppLink phone={r.patient?.phone} text={second} disabled={contact.disabled} beforeOpen={contact.beforeOpen} />
+            <RecontactSmsSend r={r} text={second} staff={staff} contact={contact} purpose="followup" onSent={() => run(async () => {})} />
             <CopyButton text={second} disabled={contact.disabled} />
             {r.patient_id && (
               <Link href={`/appointments?for=${r.patient_id}&name=${encodeURIComponent(r.patient_name)}`} className={BTN}>
@@ -257,7 +288,7 @@ function WaitingRow({ r, settings, today, run, contact }: { contact: ContactGuar
               <p className="text-[11px] text-stone-500">안 받으셨을 때 남기는 문자</p>
               <p className="whitespace-pre-wrap rounded bg-stone-50 p-2 text-sm">{missed}</p>
               <div className="flex flex-wrap items-center gap-2">
-                <SmsAppLink phone={r.patient?.phone} text={missed} disabled={contact.disabled} beforeOpen={contact.beforeOpen} />
+                <RecontactSmsSend r={r} text={missed} staff={staff} contact={contact} purpose="followup" onSent={() => run(async () => {})} />
                 <CopyButton text={missed} disabled={contact.disabled} />
               </div>
             </div>
@@ -611,7 +642,7 @@ export default function RecontactPanel() {
         <section className="space-y-2">
           {!win.ok && <p className="rounded bg-red-50 p-2 text-sm font-bold text-red-700">지금은 보내는 시간이 아닙니다. {win.reason}</p>}
           <p className="text-xs text-stone-500">
-            문구를 읽고 고친 뒤 병원 휴대폰으로 보내고 [보냈음]을 누르세요. 답은 병원 휴대폰으로 옵니다.
+            문구를 읽고 고친 뒤 [문자 보내기]에서 받는 사람과 문구를 확인하세요. 이 병원에 설정된 발신번호로 직접 발송 요청합니다. 답장 수신 가능 여부는 발신번호 서비스에 따라 다릅니다.
             {left === 0 ? " 오늘 보낼 수를 다 채웠습니다." : ""}
             {tomorrow > 0 ? ` 하루 수 때문에 ${tomorrow}명은 다음 날로 넘어갑니다.` : ""}
           </p>
@@ -642,7 +673,7 @@ export default function RecontactPanel() {
           {waiting.length === 0 && <p className="rounded-lg border border-stone-200 bg-white p-6 text-center text-stone-600">답을 기다리는 분이 없습니다</p>}
           <ul className="space-y-2">
             {waiting.map((r) => (
-              <WaitingRow key={`${r.id}-${r.updated_at}`} r={r} settings={settings} today={today} run={run} contact={contactFor(r, "followup")} />
+              <WaitingRow key={`${r.id}-${r.updated_at}`} r={r} settings={settings} today={today} staff={staff} run={run} contact={contactFor(r, "followup")} />
             ))}
           </ul>
         </section>

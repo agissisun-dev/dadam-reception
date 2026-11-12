@@ -19,7 +19,7 @@ import { expiryStatus } from "@/lib/cabinetRules";
 import { listLedgerDaysOpen, loadDay } from "@/lib/ledger";
 import { sumEntries, won } from "@/lib/ledgerRules";
 import { countToday } from "@/lib/appointments";
-import { countRecontactToday } from "@/lib/recontacts";
+import { canUseRecontacts, countRecontactToday } from "@/lib/recontacts";
 import { RECONTACT_NAME } from "@/lib/recontactRules";
 import { weekEndISO } from "@/lib/weeklyRules";
 import { addDays, todayISO, weekdayKo } from "@/lib/dates";
@@ -131,6 +131,7 @@ function CalendarBoard() {
   const [selected, setSelected] = useState<string>(() => todayISO());
   const [celebrate, setCelebrate] = useState(false);
   const [recontactToday, setRecontactToday] = useState(0);
+  const [recontactEnabled, setRecontactEnabled] = useState(false);
 
   const load = useCallback(() => {
     const now = todayISO();
@@ -157,8 +158,17 @@ function CalendarBoard() {
   useEffect(() => {
     load();
     listTemplates("weekly").then(setTemplates).catch(() => setTemplates([]));
-    // 재진콜 오늘 보낼 사람 수 (표가 아직 없으면 0)
-    countRecontactToday(todayISO()).then(setRecontactToday);
+    // 확인된 S 계정에만 재진콜 수와 바로가기를 보여 준다.
+    let active = true;
+    void canUseRecontacts().then(async (enabled) => {
+      if (!active) return;
+      setRecontactEnabled(enabled);
+      if (enabled) {
+        const count = await countRecontactToday(todayISO());
+        if (active) setRecontactToday(count);
+      }
+    });
+    return () => { active = false; };
   }, [load]);
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
@@ -213,7 +223,7 @@ function CalendarBoard() {
           <Link href="/happy-calls" className="underline">
             해피콜 오늘 {hcToday}명
           </Link>
-          {recontactToday > 0 && (
+          {recontactEnabled && recontactToday > 0 && (
             <Link href="/happy-calls?tab=recontact" className="underline">
               {RECONTACT_NAME} 오늘 {recontactToday}명
             </Link>

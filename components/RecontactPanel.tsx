@@ -497,7 +497,11 @@ export default function RecontactPanel() {
       .catch((e: Error) => setError(e.message));
   }, []);
   useEffect(() => {
-    load();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) load();
+    });
+    return () => { cancelled = true; };
   }, [load]);
 
   const run = (fn: () => Promise<unknown>) => {

@@ -1,11 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { smsAppHref } from "@/lib/smsRules";
 
 const LINK = "rounded border border-[#16863b] bg-white px-3 py-1.5 text-sm font-bold text-[#0f3d23]";
 const BTN = "rounded border border-stone-300 bg-white px-3 py-1.5 text-sm disabled:opacity-50";
+
+type Device = "android" | "ios" | "windows" | "other" | null;
+const subscribeDevice = () => () => {};
+const serverDevice = (): Device => null;
+function readDevice(): Device {
+  if (typeof navigator === "undefined") return null;
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
+  if (/Android/i.test(ua)) return "android";
+  if (/Windows/i.test(ua)) return "windows";
+  return "other";
+}
 
 /** 문자 발송 API가 아니라 병원폰의 문자 작성창만 연다. 실제 발송은 직원이 확인한다. */
 export default function SmsAppLink({ phone, text, beforeOpen, disabled = false }: {
@@ -14,14 +26,7 @@ export default function SmsAppLink({ phone, text, beforeOpen, disabled = false }
   beforeOpen?: () => Promise<void>;
   disabled?: boolean;
 }) {
-  const [device] = useState<"android" | "ios" | "windows" | "other" | null>(() => {
-    if (typeof navigator === "undefined") return null;
-    const ua = navigator.userAgent;
-    if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
-    if (/Android/i.test(ua)) return "android";
-    if (/Windows/i.test(ua)) return "windows";
-    return "other";
-  });
+  const device = useSyncExternalStore(subscribeDevice, readDevice, serverDevice);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

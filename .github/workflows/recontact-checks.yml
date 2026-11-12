@@ -5,6 +5,9 @@ on:
     branches: ["aside/recontact-safety-*"]
 permissions:
   contents: read
+concurrency:
+  group: recontact-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   checks:
     runs-on: ubuntu-latest
@@ -15,5 +18,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
-      - run: npm run lint
+      - name: Unit tests
+        run: npm test
+      - name: Recontact changed-file lint
+        run: npx eslint components/RecontactPanel.tsx components/SmsAppLink.tsx lib/recontacts.ts lib/recontactRules.ts lib/types.ts lib/recontactRules.test.ts lib/recontacts.test.ts
+      - name: Isolated PostgreSQL permissions and RPC checks
+        run: |
+          npm install --prefix "$RUNNER_TEMP/recontact-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.16
+          PGLITE_MODULE="file://$RUNNER_TEMP/recontact-db/node_modules/@electric-sql/pglite/dist/index.js" node scripts/test-recontact-db.mjs

@@ -34,7 +34,7 @@ export const NOT_CONFIGURED = "이 병원의 문자 설정이 아직 안 되어 
 export async function solapiSend(
   cfg: SmsConfig,
   msg: { to: string; text: string; type: SmsType },
-): Promise<{ ok: true; messageId: string | null } | { ok: false; error: string; unknown?: boolean }> {
+): Promise<{ ok: true; messageId: string } | { ok: false; error: string; unknown?: boolean }> {
   const date = new Date().toISOString();
   const salt = randomBytes(16).toString("hex");
   const signature = createHmac("sha256", cfg.apiSecret).update(date + salt).digest("hex");
@@ -55,13 +55,13 @@ export async function solapiSend(
   if (!parsed || typeof parsed !== "object") return { ok: false, unknown: true, error: "문자 업체 응답을 확인하지 못했습니다. 중복 발송하지 말고 업체 내역을 확인해 주세요." };
   const result = parsed as Record<string, unknown>;
   const statusCode = typeof result.statusCode === "string" ? result.statusCode : "";
-  if (!res.ok || (statusCode && !statusCode.startsWith("2"))) {
+  if (!res.ok || (/^\d{4}$/.test(statusCode) && !statusCode.startsWith("2"))) {
     if (res.status >= 500) return { ok: false, unknown: true, error: "문자 업체의 접수 결과를 확인하지 못했습니다. 중복 발송하지 말고 업체 내역을 확인해 주세요." };
     const why = result.errorMessage ?? result.statusMessage ?? result.errorCode ?? `응답 ${res.status}`;
     return { ok: false, error: `문자 업체가 거절했습니다. ${String(why)}` };
   }
-  if (!statusCode.startsWith("2") && typeof result.messageId !== "string") return { ok: false, unknown: true, error: "문자 업체의 접수 증빙이 없습니다. 중복 발송하지 말고 업체 내역을 확인해 주세요." };
-  return { ok: true, messageId: typeof result.messageId === "string" ? result.messageId : null };
+  if (!/^2\d{3}$/.test(statusCode) || typeof result.messageId !== "string" || !result.messageId.trim()) return { ok: false, unknown: true, error: "문자 업체의 접수 증빙이 없습니다. 중복 발송하지 말고 업체 내역을 확인해 주세요." };
+  return { ok: true, messageId: result.messageId.trim() };
 }
 
 export type SmsLogRow = {

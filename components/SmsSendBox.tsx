@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getSupabase } from "@/lib/supabaseClient";
 import { formatPhone } from "@/lib/phone";
 import { smsByteLength, smsType } from "@/lib/smsRules";
 
@@ -28,6 +29,24 @@ export default function SmsSendBox({
   onCancel: () => void;
   beforeSend?: () => Promise<void>;
 }) {
+  const [service, setService] = useState<{ configured: boolean; label: string } | null>(null);
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(async () => {
+      if (!active) return;
+      try {
+        const { data } = await getSupabase().auth.getSession();
+        if (!data.session) throw new Error("로그인 상태를 확인해 주세요.");
+        const res = await fetch("/api/sms", { headers: { Authorization: `Bearer ${data.session.access_token}` }, cache: "no-store" });
+        const body = await res.json() as { configured?: boolean; sender?: string | null; error?: string };
+        const configured = res.ok && body.configured === true;
+        if (active) setService({ configured, label: configured ? `발신 병원번호: ${body.sender ? formatPhone(body.sender) : "등록된 번호"} · 승인·잔액·도착 여부는 문자서비스에서 확인합니다.` : body.error ?? "병원 발신번호 연동이 아직 설정되지 않았습니다. 번호 인증·연동 후 이 확인창을 다시 열어 주세요." });
+      } catch {
+        if (active) setService({ configured: false, label: "문자서비스 설정을 확인하지 못했습니다. 로그인·연결 상태를 확인한 뒤 이 확인창을 다시 열어 주세요." });
+      }
+    });
+    return () => { active = false; };
+  }, []);
   const [idx, setIdx] = useState(0);
   const guard = useRef(false);
   const [checking, setChecking] = useState(false);
@@ -36,7 +55,7 @@ export default function SmsSendBox({
   const bytes = smsByteLength(text);
   const type = smsType(text);
   const empty = !text.trim() || bytes > 2000 || !r;
-  const blocked = busy || checking;
+  const blocked = busy || checking || !service?.configured;
   async function confirmSend() {
     if (guard.current || blocked || empty) return;
     guard.current = true;
@@ -54,6 +73,7 @@ export default function SmsSendBox({
       </p>
       <p className="whitespace-pre-wrap rounded bg-white p-2 text-sm">{text}</p>
       <p className="text-xs text-stone-500">받는 사람과 위 문구를 확인한 뒤 보내기를 누르세요. 등록된 병원번호로 직접 발송 요청합니다.</p>
+      <p role="status" className={`text-xs ${service?.configured ? "text-stone-600" : "text-amber-800"}`}>{service?.label ?? "문자서비스 설정을 확인하고 있습니다."}</p>
       {guardError && <p role="alert" className="text-xs text-red-700">{guardError}</p>}
       {recipients.length > 1 && (
         <div className="flex flex-wrap gap-2">
@@ -61,7 +81,7 @@ export default function SmsSendBox({
             <button
               key={x.phone + i}
               type="button"
-              disabled={blocked}
+              disabled={busy || checking}
               onClick={() => setIdx(i)}
               className={`rounded border px-3 py-1.5 text-sm ${
                 i === idx ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300"
@@ -77,9 +97,9 @@ export default function SmsSendBox({
       </p>
       <div className="flex gap-2">
         <button type="button" className={PRIMARY} disabled={blocked || empty} onClick={() => void confirmSend()}>
-          {blocked ? "보내는 중…" : "보내기"}
+          {busy || checking ? "보내는 중…" : service === null ? "설정 확인 중…" : "보내기"}
         </button>
-        <button type="button" className={BTN} disabled={blocked} onClick={onCancel}>
+        <button type="button" className={BTN} disabled={busy || checking} onClick={onCancel}>
           취소
         </button>
       </div>

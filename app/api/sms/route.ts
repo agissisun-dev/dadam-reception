@@ -44,7 +44,8 @@ export async function GET(request: Request) {
   if (!sb) return reply(401, { error: "로그인이 필요합니다." });
   const clinic = await currentClinic(sb);
   if (!clinic) return reply(403, { error: "병원 연결을 확인하지 못했습니다." });
-  return Response.json({ clinic, configured: !!smsConfig(clinic), label: smsConfig(clinic) ? "설정됨" : "미설정", notice: "발신번호 승인·잔액·실제 발송은 검증하지 않았습니다." }, { headers: { "Cache-Control": "no-store" } });
+  const config = smsConfig(clinic);
+  return Response.json({ clinic, configured: !!config, sender: config?.from ?? null, label: config ? "설정됨" : "미설정", notice: "발신번호 승인·잔액·실제 발송은 검증하지 않았습니다." }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {

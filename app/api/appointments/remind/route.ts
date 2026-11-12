@@ -1,7 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { addDays } from "@/lib/dates";
-import { clinicInfo } from "@/lib/clinic";
-import { dateKo, fillTemplate } from "@/lib/appointmentRules";
+import { renderAppointmentTemplate } from "@/lib/appointmentRules";
 import { kstToday, remindTargets } from "@/lib/appointmentNotifyRules";
 import { smsType } from "@/lib/smsRules";
 import { NOT_CONFIGURED, smsConfig, solapiSend, writeSmsLog } from "@/lib/smsServer";
@@ -41,20 +40,21 @@ export async function GET(request: Request) {
   if (e1) return reply(500, { error: `예약 설정 읽기 실패: ${e1.message}` });
   if (!settings?.remind_enabled) return reply(200, { skipped: "전날 리마인더가 꺼져 있습니다." });
 
-  const cfg = smsConfig();
+  const { data: clinic, error: clinicError } = await sb.rpc("current_clinic");
+  if (clinicError || (clinic !== "S" && clinic !== "N") || settings.clinic !== clinic) return reply(403, { error: "리마인더 계정의 병원 연결을 확인하지 못했습니다." });
+  const cfg = smsConfig(clinic);
   if (!cfg) return reply(503, { error: NOT_CONFIGURED });
 
   const today = kstToday();
   const tomorrow = addDays(today, 1);
-  const { data: rows, error: e2 } = await sb.from("appointments").select("*").eq("day", tomorrow).eq("status", "booked");
+  const { data: rows, error: e2 } = await sb.from("appointments").select("*").eq("clinic", clinic).eq("day", tomorrow).eq("status", "booked");
   if (e2) return reply(500, { error: `예약 읽기 실패: ${e2.message}` });
   const targets = remindTargets((rows ?? []) as Appointment[], tomorrow);
-  const clinicName = clinicInfo(settings.clinic).name;
 
   let sent = 0;
   let failed = 0;
   for (const a of targets) {
-    const text = fillTemplate(settings.remind_body, { 이름: a.patient_name, 병원: clinicName, 날짜: dateKo(a.day), 시간: a.time });
+    const text = renderAppointmentTemplate(settings.remind_body, a, a.clinic);
     const to = a.phone!.replace(/\D/g, "");
     const type = smsType(text);
     const result = await solapiSend(cfg, { to, text, type });

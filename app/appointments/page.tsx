@@ -14,16 +14,15 @@ import {
   getSettings,
   listOverrides,
   listRange,
-  markNotified,
   saveSettings,
   setOverride,
   setStatus,
   updateAppointment,
 } from "@/lib/appointments";
-import { KIND_LABEL, SOURCE_LABEL, STATUS_LABEL, countByDay, dateKo, dayHours, fillTemplate, parseNaverPaste, slotLoad, slotsOf } from "@/lib/appointmentRules";
+import { KIND_LABEL, SOURCE_LABEL, STATUS_LABEL, countByDay, dateKo, dayHours, defaultNotifyBody, renderAppointmentTemplate, parseNaverPaste, slotLoad, slotsOf } from "@/lib/appointmentRules";
 import { clinicInfo, fetchCurrentClinic, type ClinicCode } from "@/lib/clinic";
 import { autoNotify } from "@/lib/appointmentNotify";
-import SmsAppLink from "@/components/SmsAppLink";
+import AppointmentSmsSend from "@/components/AppointmentSmsSend";
 import { DEFAULT_REMIND_BODY, shouldAutoNotify } from "@/lib/appointmentNotifyRules";
 import { firstDayISO, isInMonth, lastDayISO, monthGrid, monthLabel, shiftMonth, yearMonthOf, type YearMonth } from "@/lib/calendarRules";
 import { addDays, todayISO } from "@/lib/dates";
@@ -216,7 +215,7 @@ function Board() {
     }
   }
 
-  const s: AppointmentSettings = settings ?? { clinic, slot_minutes: 30, consult_per_slot: 1, treatment_per_slot: 3, notify_body: "", auto_notify: false, remind_enabled: false, remind_body: DEFAULT_REMIND_BODY };
+  const s: AppointmentSettings = settings ?? { clinic, slot_minutes: 30, consult_per_slot: 1, treatment_per_slot: 3, notify_body: defaultNotifyBody(clinic), auto_notify: false, remind_enabled: false, remind_body: DEFAULT_REMIND_BODY };
   const overrideOf = (iso: string) => overrides.find((o) => o.day === iso) ?? null;
   const hours = dayHours(day, clinic, overrideOf(day));
   const slots = slotsOf(hours, s.slot_minutes);
@@ -226,7 +225,7 @@ function Board() {
   const live = dayAppts.filter((a) => a.status !== "cancelled");
   const consultN = live.filter((a) => a.kind === "consult").length;
 
-  const notifyText = (a: Appointment) => fillTemplate(s.notify_body, { 이름: a.patient_name, 병원: info.name, 날짜: dateKo(a.day), 시간: a.time });
+  const notifyText = (a: Appointment) => renderAppointmentTemplate(s.notify_body, a, a.clinic);
 
   function pickDay(iso: string) {
     setDay(iso);
@@ -437,10 +436,9 @@ function Board() {
             <span className="rounded bg-[#f0f7f3] px-2 py-1 text-xs font-bold text-[#0f3d23]">✓ 안내 문자를 자동으로 보냈습니다</span>
           ) : (
             <>
-              {smsError && <span className="basis-full text-xs text-red-700">예약은 잡혔습니다. 자동 문자는 못 보냈습니다: {smsError} → 복사해서 병원 휴대폰으로 보내 주세요.</span>}
-              <SmsAppLink phone={justBooked.phone} text={notifyText(justBooked)} />
+              {smsError && <span className="basis-full text-xs text-red-700">예약은 잡혔습니다. 자동 문자는 못 보냈습니다: {smsError} → 아래 문자 보내기로 다시 시도할 수 있습니다.</span>}
+              <AppointmentSmsSend key={justBooked.id} appointment={justBooked} text={notifyText(justBooked)} staff={staff} onSent={() => { load(); }} />
               <button type="button" className={BTN} onClick={() => { navigator.clipboard?.writeText(notifyText(justBooked)).catch(() => undefined); }}>복사</button>
-              <button type="button" className={PRIMARY} onClick={() => run(async () => { await markNotified(justBooked.id, "병원 휴대폰"); setJustBooked(null); })}>병원 휴대폰으로 보냈음</button>
             </>
           )}
           <button type="button" className="text-xs underline" onClick={() => setEditNotify((v) => !v)}>문구 고치기</button>
@@ -511,9 +509,8 @@ function EditBox({ a, staff, notify, notifyBody, onNotifySaved, onChanged, onClo
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 rounded bg-stone-50 p-2 text-xs">
         <span className="min-w-[240px] flex-1">{notify}</span>
-        <SmsAppLink phone={a.phone} text={notify} />
+        <AppointmentSmsSend key={a.id} appointment={a} text={notify} staff={staff} onSent={onChanged} />
         <button type="button" className={BTN} onClick={() => { navigator.clipboard?.writeText(notify).catch(() => undefined); }}>복사</button>
-        <button type="button" className={BTN} onClick={() => run(() => markNotified(a.id, "병원 휴대폰"))}>병원 휴대폰으로 보냈음</button>
         <button type="button" className="underline" onClick={() => setEditNotify((v) => !v)}>문구 고치기</button>
       </div>
       {editNotify && (
@@ -584,13 +581,15 @@ function SettingsBox({ settings, onSaved, onClose }: { settings: AppointmentSett
         <label className="block"><span className="text-[11px] text-stone-500">한 칸 상담</span><input type="number" min={0} value={consult} onChange={(e) => setConsult(Number(e.target.value))} className={`${IN} block w-16`} /></label>
         <label className="block"><span className="text-[11px] text-stone-500">한 칸 침</span><input type="number" min={0} value={treat} onChange={(e) => setTreat(Number(e.target.value))} className={`${IN} block w-16`} /></label>
       </div>
-      <label className="mt-2 block"><span className="text-[11px] text-stone-500">예약 안내 문구 — 자리표 {"{이름} {병원} {날짜} {시간}"}</span>
+      <label className="mt-2 block"><span className="text-[11px] text-stone-500">예약 안내 문구 — 자리표 {"{이름} {병원} {날짜} {시간} {월} {일} {요일} {전화번호}"}</span>
         <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} className="w-full rounded border border-stone-300 px-2 py-1 text-sm" /></label>
+      <p className="mt-1 whitespace-pre-wrap rounded bg-stone-50 px-3 py-2 text-xs">{renderAppointmentTemplate(body, { patient_name: "홍길동", day: todayISO(), time: "16:30" }, settings.clinic)}</p>
+      <button type="button" className="mt-1 text-xs underline" onClick={() => setBody(defaultNotifyBody(settings.clinic))}>기본 문구로 되돌리기</button>
       <div className="mt-3 space-y-2 rounded border border-stone-200 bg-stone-50 p-2">
         <p className="text-[11px] font-bold text-stone-600">자동 안내 문자</p>
         <label className="flex items-center gap-2"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> 예약이 잡히면 바로 확인 문자 보내기 <span className="text-[11px] text-stone-500">(접수실에서 잡은 것만, 네이버 예약은 네이버가 보냄)</span></label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={remind} onChange={(e) => setRemind(e.target.checked)} /> 전날 오후 5시에 리마인더 보내기 <span className="text-[11px] text-stone-500">(내일 예약 전원)</span></label>
-        <label className="block"><span className="text-[11px] text-stone-500">리마인더 문구 — 자리표 {"{이름} {병원} {날짜} {시간}"}</span>
+        <label className="block"><span className="text-[11px] text-stone-500">리마인더 문구 — 자리표 {"{이름} {병원} {날짜} {시간} {월} {일} {요일} {전화번호}"}</span>
           <textarea value={remindBody} onChange={(e) => setRemindBody(e.target.value)} rows={2} className="w-full rounded border border-stone-300 px-2 py-1 text-sm" /></label>
         <p className="text-[11px] text-stone-500">문자 업체 키와 발신번호가 등록되어 있어야 실제로 나갑니다. 보낸 것은 모두 [현황] 아래 문자 장부에 남습니다.</p>
       </div>

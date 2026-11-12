@@ -11,7 +11,7 @@ export const GROUP_LABEL: Record<LedgerGroup, string> = {
 export const GROUP_ORDER: LedgerGroup[] = ["decoction", "cabinet", "treatment", "extract", "other"];
 
 /** 구분(보험 종류) 후보. 사용자 지정 2026-10-02. 직접 쳐도 된다. */
-export const INSURANCE_KINDS = ["보험", "일반", "1종", "2종", "1종지정", "차상1종", "차상2종", "희귀1종", "2종장애", "초진", "재초진", "전화상담"] as const;
+export const INSURANCE_KINDS = ["보험", "일반", "1종", "2종", "1종지정", "차상1종", "차상2종", "희귀1종", "2종장애", "초진", "재초진", "전화상담", "자보", "산정특례"] as const;
 
 /** 붉은 금액 사유 후보: 접수실 서랍에 돈은 없지만 현금영수증은 끊는 경우(금액은 합계에 그대로 들어감) */
 export const PAY_NOTES = ["제로페이", "서울페이", "계좌입금", "기타"] as const;

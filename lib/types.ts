@@ -377,7 +377,7 @@ export type Recontact = {
   updated_at: string;
 };
 /** 명단 한 줄 + 연결된 환자의 연락처 */
-export type RecontactRow = Recontact & { patient: { id: number; name: string; phone: string; excluded_at: string | null } | null };
+export type RecontactRow = Recontact & { patient: { id: number; clinic: "S" | "N"; name: string; phone: string; excluded_at: string | null } | null };
 export type RecontactSettings = {
   clinic: "S" | "N";
   daily_cap: number;

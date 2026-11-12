@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_RECONTACT_SETTINGS,
+  defaultRecontactSettings,
+  contactBlockReason,
   EMPTY_CONTEXT,
   blockReason,
   bodyKindFor,
@@ -72,7 +74,7 @@ describe("묶음마다 다른 첫 문자", () => {
 
 describe("오늘 보낼 사람", () => {
   const row = (id: number, p: Partial<{ patient_id: number | null; status: "todo" | "sent"; segment: "due_now" | "due_soon" | "vip"; last_herb_date: string; sent_at: string | null }> = {}) => ({
-    id, patient_id: id as number | null, status: "todo" as "todo" | "sent", segment: "due_now" as "due_now" | "due_soon" | "vip", last_herb_date: "2026-09-01", sent_at: null as string | null, ...p,
+    id, clinic: "S" as const, patient: { id, clinic: "S" as const, phone: "01012345678", excluded_at: null as string | null }, patient_id: id as number | null, status: "todo" as "todo" | "sent", segment: "due_now" as "due_now" | "due_soon" | "vip", last_herb_date: "2026-09-01", sent_at: null as string | null, ...p,
   });
   const ctx = (p: Partial<RecontactContext>): RecontactContext => ({ ...EMPTY_CONTEXT, ...p });
 
@@ -134,11 +136,11 @@ describe("엑셀 명단 읽기", () => {
     expect(r.rows[0]).toMatchObject({ patient_name: "홍길동", phone: "01012345678", birth_hint: "1970", segment: "due_now", call_target: true, herb_count: 5, last_herb_date: "2026-09-18", avg_interval_days: 33, herb_kind: "보험 탕약", doctor_note: "밤에 신물 올라오는 건 줄었는지요?", variant: "A" });
     expect(r.rows[1]).toMatchObject({ patient_name: "김영희", phone: null, segment: "due_soon", variant: "B" });
   });
-  it("메모에 '빼기'가 있으면 건너뛰고, 묶음 칸이 없으면 고른 묶음으로", () => {
+  it("최근 내원 빼기 메모도 후보로 보존하고, 묶음 칸이 없으면 고른 묶음으로", () => {
     const r = parseImportTable([["이름", "연락처", "메모"], ["가", "01011112222", "빼기 — 지난주 내원"], ["나", "0101111", ""]], "vip");
-    expect(r.skipped).toBe(1);
-    expect(r.rows).toHaveLength(1);
-    expect(r.rows[0]).toMatchObject({ patient_name: "나", phone: null, segment: "vip" });
+    expect(r.skipped).toBe(0);
+    expect(r.rows).toHaveLength(2);
+    expect(r.rows[1]).toMatchObject({ patient_name: "나", phone: null, segment: "vip" });
   });
   it("이름 칸이 없으면 이유를 돌려준다", () => {
     expect(parseImportTable([["다담S 한약 재구매 연락 대상 정리"], ["만든 날", "2026-11-06"]], "vip").problem).toContain("이름");
@@ -149,5 +151,54 @@ describe("요약 한 줄", () => {
   it("있는 것만 잇는다", () => {
     expect(factLine({ herb_count: 5, last_herb_date: "2026-09-18", avg_interval_days: 33, herb_kind: "보험 탕약" }, TODAY)).toBe("한약 5회 · 마지막 2026-09-18(54일 전) · 평균 간격 33일 · 보험 탕약");
     expect(factLine({ herb_count: null, last_herb_date: null, avg_interval_days: null, herb_kind: null }, TODAY)).toBe("");
+  });
+});
+
+
+describe("연락 안전 회귀", () => {
+  const patient = { id: 1, clinic: "S" as const, phone: "01012345678", excluded_at: null as string | null };
+  const r = { id: 1, clinic: "S" as const, patient_id: 1, patient, status: "todo" as const, segment: "vip" as const, last_herb_date: null, sent_at: null as string | null };
+  it("조회되지 않은 환자·다른 지점·잘못 연결된 ID·번호는 모두 차단한다", () => {
+    expect(blockReason({ ...r, patient: null }, EMPTY_CONTEXT)).not.toBeNull();
+    expect(blockReason({ ...r, patient: { ...patient, clinic: "N" } }, EMPTY_CONTEXT)).not.toBeNull();
+    expect(blockReason({ ...r, patient: { ...patient, id: 2 } }, EMPTY_CONTEXT)).not.toBeNull();
+    for (const phone of ["", "010123", "00000000000", "0212345678"]) {
+      expect(blockReason({ ...r, patient: { ...patient, phone } }, EMPTY_CONTEXT)).not.toBeNull();
+    }
+    expect(blockReason(r, null)).not.toBeNull();
+    expect(todaysBatch([r], null, 20, TODAY).batch).toEqual([]);
+  });
+  it("답이 왔거나 보낸 분도 수신거부와 번호 확인을 생략하지 않는다", () => {
+    expect(contactBlockReason({ ...r, status: "replied", patient: { ...patient, excluded_at: "2026-11-11" } }, EMPTY_CONTEXT)).toBe("연락 제외 환자입니다.");
+    expect(contactBlockReason({ ...r, status: "sent", patient: { ...patient, phone: "123" } }, EMPTY_CONTEXT)).not.toBeNull();
+  });
+  it("오늘 이미 보낸 모든 행이 하루20 상한을 차감하며 다시 올려도 중복 연락하지 않는다", () => {
+    const sent = Array.from({ length: 19 }, (_, i) => ({ ...r, id: i + 10, status: "sent" as const, sent_at: "2026-11-11T01:00:00Z" }));
+    const result = todaysBatch([...sent, r, { ...r, id: 2 }], EMPTY_CONTEXT, 20, TODAY);
+    expect(result.batch).toHaveLength(1);
+    expect(result.left).toBe(1);
+    expect(result.waiting).toBe(1);
+    expect(todaysBatch([{ ...r, sent_at: "2026-11-11T01:00:00Z" }], EMPTY_CONTEXT, 20, TODAY).batch).toEqual([]);
+  });
+  it("검증된 지점 이름과 기본 하루20, N 호환 기본값", () => {
+    expect(defaultRecontactSettings("N")).toEqual(DEFAULT_RECONTACT_SETTINGS);
+    expect(defaultRecontactSettings("S").daily_cap).toBe(20);
+    expect(defaultRecontactSettings("S").body_a).toContain("다담에스한의원");
+    expect(defaultRecontactSettings("S").body_a).not.toContain("노원다담");
+    expect(defaultRecontactSettings("N").body_a).toContain("노원다담한의원");
+  });
+  it("검토63명 양식: 미확인 구매횟수와 추정 수납일은 확정 구매로 승격하지 않는다", () => {
+    const headers = ["환자 이름", "휴대전화", "실제 탕약 구매횟수", "유력 수납일(추정)", "당시 불편했던 증상", "받은 탕약/치료", "원장님이 궁금한 점", "메모"];
+    const imported = parseImportTable([headers, ...Array.from({ length: 63 }, (_, i) => ["동명이인", "01012345678", i === 0 ? "2" : "미확인", "2026-10-01", "속쓰림", "탕약", "밤 속쓰림은 줄었나요?", "최근 내원 빼기 메모"])], "vip");
+    expect(imported.rows).toHaveLength(63);
+    expect(imported.rows[0]).toMatchObject({ patient_name: "동명이인", phone: "01012345678", herb_count: 2, last_herb_date: null });
+    expect(imported.rows[1].herb_count).toBeNull();
+    expect(imported.rows[1].doctor_note).toBe("당시 증상: 속쓰림\n받은 탕약/치료: 탕약\n밤 속쓰림은 줄었나요?");
+    expect(imported.skipped).toBe(0);
+  });
+  it("명시적 마지막 한약 구매일만 실제 구매일로 읽는다", () => {
+    const result = parseImportTable([["환자 이름", "마지막 수납일(추정)", "마지막 한약 구매일", "실제 탕약 구매횟수"], ["가", "2026-10-02", "2026-09-18", "확인 필요"]], "vip");
+    expect(result.rows[0].last_herb_date).toBe("2026-09-18");
+    expect(result.rows[0].herb_count).toBeNull();
   });
 });

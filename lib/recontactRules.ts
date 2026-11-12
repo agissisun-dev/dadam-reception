@@ -1,6 +1,6 @@
 import { addDays, daysBetween } from "./dates";
 import { isClinicClosed } from "./holidays";
-import { normalizePhone } from "./phone";
+import { isValidPhone, normalizePhone } from "./phone";
 import type { Recontact, RecontactSegment, RecontactSettings } from "./types";
 
 /**
@@ -9,7 +9,7 @@ import type { Recontact, RecontactSegment, RecontactSettings } from "./types";
  *
  * 사용자 결정
  * - 첫 문자는 경과만 묻는다. 재주문 이야기는 답 온 분께 드리는 두 번째 문자·전화에서만.
- * - 하루 20~30통으로 제한(기본 25). 한꺼번에 보내지 않는다.
+ * - 하루 15~20통으로 제한(기본 20). 한꺼번에 보내지 않는다.
  * - 답이 필요한 문자라 병원 휴대폰 번호로 보낸다(솔라피 대표번호는 답장을 못 받음).
  */
 /** 화면에 보이는 이름. 바꾸려면 여기 한 군데만 (사용자 2026-11-11: 안부가 아니라 재진으로 다시 모실 분이라는 뜻이 드러나게) */
@@ -29,7 +29,7 @@ export const SEGMENT_ORDER: RecontactSegment[] = ["due_now", "due_soon", "vip", 
 /** 답이 없으면 전화까지 하는 묶음 */
 export const CALL_SEGMENTS: RecontactSegment[] = ["due_now", "due_soon", "vip", "once_p1"];
 
-export const DEFAULT_DAILY_CAP = 25;
+export const DEFAULT_DAILY_CAP = 20;
 export const DEFAULT_BODY_A = "{이름}님, 노원다담한의원입니다. {월}에 지어 가신 {약} 드시고 어떠신지 원장님이 궁금해하셔서 연락드려요. {원장한줄} 한 줄만 답 주시면 원장님께 전해 드릴게요.";
 /** B는 번호로 답하는 글 — 답하는 수고를 줄여 답장률을 비교한다(2026-11-11). 1·2·3이 그대로 다음 할 일(감사 / 원장 상담 권유 / 당일 전화)을 가른다. */
 export const DEFAULT_BODY_B = "{이름}님, 노원다담한의원입니다. {월}에 지어 가신 {약} 드신 뒤 어떠신지 원장님이 궁금해하세요. {원장한줄} 번호만 답 주셔도 됩니다. 1 많이 좋아졌어요 / 2 비슷해요 / 3 다시 불편해요";
@@ -65,6 +65,17 @@ export const DEFAULT_RECONTACT_SETTINGS: Omit<RecontactSettings, "clinic"> = {
   body_reply: DEFAULT_BODY_REPLY,
   body_missed: DEFAULT_BODY_MISSED,
 };
+
+/** 기존 N 기본 문구만 지점에 맞춰 바꾼다. 저장된 사용자 문구는 건드리지 않는다. */
+export function defaultRecontactSettings(clinic: "S" | "N"): Omit<RecontactSettings, "clinic"> {
+  const defaults = { ...DEFAULT_RECONTACT_SETTINGS };
+  if (clinic === "S") {
+    for (const key of ["body_a", "body_b", "body_vip", "body_once", "body_reply", "body_missed"] as const) {
+      defaults[key] = defaults[key].replaceAll("노원다담한의원", "다담에스한의원");
+    }
+  }
+  return defaults;
+}
 
 /** 장부의 종류 글자 → 문자에 쓰는 말 */
 export function herbWord(kind: string | null | undefined): string {
@@ -135,14 +146,31 @@ export type RecontactContext = {
 };
 export const EMPTY_CONTEXT: RecontactContext = { excluded: new Set(), booked: new Set(), visited: new Set(), happyCall: new Set() };
 
-/** 오늘 보낼 수 없는 이유. 보낼 수 있으면 null. */
-export function blockReason(r: Pick<Recontact, "patient_id" | "status">, ctx: RecontactContext): string | null {
-  if (r.status !== "todo") return "이미 보냈거나 끝난 분입니다.";
+/** RLS로 실제 조회된 같은 지점의 환자만 연락할 수 있다. ID만으로는 부족하다. */
+export type ContactRow = Pick<Recontact, "patient_id" | "status" | "clinic"> & {
+  patient: { id: number; clinic: "S" | "N"; phone: string; excluded_at: string | null } | null;
+};
+
+/** 답장 후·전화 때도 수신거부/연락처/지점 확인은 생략하지 않는다. */
+export function contactBlockReason(r: ContactRow, ctx: RecontactContext | null): string | null {
+  if (!ctx) return "연락 가능 여부를 불러오지 못했습니다. 새로 불러온 뒤 연락해 주세요.";
   if (!r.patient_id) return "연락처가 아직 없습니다.";
-  if (ctx.excluded.has(r.patient_id)) return "연락 제외 환자입니다.";
-  if (ctx.booked.has(r.patient_id)) return "예약이 잡혀 있습니다.";
-  if (ctx.visited.has(r.patient_id)) return "최근 2주 안에 내원하셨습니다.";
-  if (ctx.happyCall.has(r.patient_id)) return "해피콜이 예정되어 있습니다.";
+  if (!r.patient || r.patient.id !== r.patient_id || r.patient.clinic !== r.clinic) return "같은 지점의 환자 연결을 확인해 주세요.";
+  if (r.patient.excluded_at || ctx.excluded.has(r.patient_id)) return "연락 제외 환자입니다.";
+  if (!isValidPhone(r.patient.phone) || !/^01[016789]/.test(normalizePhone(r.patient.phone))) return "유효한 휴대폰 번호를 확인해 주세요.";
+  return null;
+}
+
+/** 오늘 보낼 수 없는 이유. 보낼 수 있으면 null. */
+export function blockReason(r: ContactRow, ctx: RecontactContext | null): string | null {
+  const contact = contactBlockReason(r, ctx);
+  if (contact) return contact;
+  if (r.status !== "todo") return "이미 보냈거나 끝난 분입니다.";
+  // contactBlockReason이 연결 및 context를 확인한 뒤에만 아래 조건을 검사한다.
+  const id = r.patient_id!;
+  if (ctx!.booked.has(id)) return "예약이 잡혀 있습니다.";
+  if (ctx!.visited.has(id)) return "최근 2주 안에 내원하셨습니다.";
+  if (ctx!.happyCall.has(id)) return "해피콜이 예정되어 있습니다.";
   return null;
 }
 
@@ -168,14 +196,14 @@ export function sentToday(rows: Pick<Recontact, "sent_at">[], today: string): nu
  * 오늘 보낼 사람: 보낼 수 있는 분을 묶음 순(지금 → 곧 → VIP …)·최근 구매 순으로 세워 하루 상한에서 오늘 보낸 수를 뺀 만큼.
  * waiting = 상한 때문에 내일로 넘어가는 수.
  */
-export function todaysBatch<T extends Pick<Recontact, "id" | "patient_id" | "status" | "segment" | "last_herb_date" | "sent_at">>(
+export function todaysBatch<T extends ContactRow & Pick<Recontact, "id" | "segment" | "last_herb_date" | "sent_at">>(
   rows: T[],
-  ctx: RecontactContext,
+  ctx: RecontactContext | null,
   cap: number,
   today: string,
 ): { batch: T[]; waiting: number; left: number } {
-  const ready = rows.filter((r) => blockReason(r, ctx) === null).sort(bySegmentThenRecent);
-  const left = Math.max(0, cap - sentToday(rows, today));
+  const ready = rows.filter((r) => blockReason(r, ctx) === null && (!r.sent_at || kstDay(r.sent_at) !== today)).sort(bySegmentThenRecent);
+  const left = Math.max(0, (Number.isFinite(cap) ? Math.floor(cap) : 0) - sentToday(rows, today));
   return { batch: ready.slice(0, left), waiting: Math.max(0, ready.length - left), left };
 }
 
@@ -220,7 +248,8 @@ export type ImportRow = {
 };
 
 function num(s: string | undefined): number | null {
-  const n = Number((s ?? "").replace(/[^\d.-]/g, ""));
+  if (!s || !/\d/.test(s) || /미확인|추정|확인 필요|불명/.test(s)) return null;
+  const n = Number(s.replace(/[^\d.-]/g, ""));
   return s && s.trim() && Number.isFinite(n) ? Math.round(n) : null;
 }
 function isoDate(s: string | undefined): string | null {
@@ -232,35 +261,34 @@ function isoDate(s: string | undefined): string | null {
  * 엑셀 표(첫 줄이 머리글)를 명단으로. 머리글 글자로 칸을 찾으니 칸 순서가 달라도 된다.
  * 「1차 연락 51명」 파일과 원래 명단 파일의 시트 모두 읽는다.
  * - "묶음" 칸이 "지금"·"곧"이면 그 묶음, 없으면 화면에서 고른 묶음(fallback)
- * - 메모에 "빼기"가 있으면 건너뜀(최근에 다녀가신 분)
+ * - 최근 내원·빼기 메모도 후보 명단에는 보존한다. 실제 연락 가능 여부는 별도로 판정한다.
  */
 export function parseImportTable(table: string[][], fallback: RecontactSegment): { rows: ImportRow[]; skipped: number; problem: string | null } {
   const head = (table[0] ?? []).map((h) => (h ?? "").replace(/\s+/g, " ").trim());
   const col = (...keys: string[]) => head.findIndex((h) => keys.some((k) => h.includes(k)));
   const c = {
     name: col("이름", "성함"),
-    phone: col("연락처"),
+    phone: col("휴대전화", "연락처", "휴대폰"),
     birth: col("생년"),
-    count: col("횟수"),
-    last: col("마지막 한약", "마지막 구매", "한약 구매일"),
+    count: head.findIndex((h) => h === "실제 탕약 구매횟수") >= 0 ? head.findIndex((h) => h === "실제 탕약 구매횟수") : col("횟수"),
+    last: head.findIndex((h) => !/추정|수납|내원|유력/.test(h) && ["마지막 한약", "마지막 구매", "한약 구매일", "확인된 마지막 탕약"].some((k) => h.includes(k))),
     gap: col("간격"),
     kind: col("종류"),
     seg: head.findIndex((h) => h === "묶음" || h === "순위"),
     note: col("원장님"),
+    symptoms: col("당시 불편했던 증상"),
+    treatment: col("받은 탕약/치료"),
+    question: col("원장님이 궁금한 점"),
     memo: head.findIndex((h) => h === "메모"),
   };
   if (c.name < 0) return { rows: [], skipped: 0, problem: "첫 줄에서 '이름' 칸을 찾지 못했습니다. 머리글이 첫 줄에 있는 시트인지 확인해 주세요." };
   const at = (r: string[], i: number) => (i >= 0 ? (r[i] ?? "").trim() : "");
   const rows: ImportRow[] = [];
-  let skipped = 0;
+  const skipped = 0;
   for (const r of table.slice(1)) {
     const name = at(r, c.name);
     if (!name) continue;
     const memo = at(r, c.memo);
-    if (memo.includes("빼기")) {
-      skipped += 1;
-      continue;
-    }
     const segText = at(r, c.seg);
     const segment: RecontactSegment = segText.includes("지금") ? "due_now" : segText.includes("곧") ? "due_soon" : segText.includes("1순위") ? "once_p1" : segText.includes("2순위") ? "once_p2" : fallback;
     // 엑셀이 숫자로 읽어 앞의 0이 떨어진 번호(1012345678)는 0을 다시 붙인다
@@ -276,7 +304,11 @@ export function parseImportTable(table: string[][], fallback: RecontactSegment):
       last_herb_date: isoDate(at(r, c.last)),
       avg_interval_days: num(at(r, c.gap)),
       herb_kind: at(r, c.kind) || null,
-      doctor_note: at(r, c.note) || null,
+      doctor_note: [
+        c.symptoms >= 0 && at(r, c.symptoms) ? `당시 증상: ${at(r, c.symptoms)}` : "",
+        c.treatment >= 0 && at(r, c.treatment) ? `받은 탕약/치료: ${at(r, c.treatment)}` : "",
+        at(r, c.question >= 0 ? c.question : c.note),
+      ].filter(Boolean).join("\n") || null,
       memo: memo || null,
       variant: rows.length % 2 === 0 ? "A" : "B",
     });

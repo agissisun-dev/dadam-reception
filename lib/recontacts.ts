@@ -1,11 +1,11 @@
 import { getSupabase } from "./supabaseClient";
-import { fetchCurrentClinic } from "./clinic";
-import { createPatient, findPatientByPhone } from "./patients";
-import { isValidPhone, normalizePhone } from "./phone";
-import { DEFAULT_RECONTACT_SETTINGS, RECONTACT_NAME, todaysBatch, visitedSince, type ImportRow, type RecontactContext } from "./recontactRules";
+import { normalizePhone } from "./phone";
+import { defaultRecontactSettings, RECONTACT_NAME, todaysBatch, visitedSince, type ImportRow, type RecontactContext } from "./recontactRules";
 import type { Patient, Recontact, RecontactRow, RecontactSettings, RecontactStatus } from "./types";
 
-/** 표가 아직 없을 때(SQL 실행 전) 알아듣기 쉬운 말로 바꾼다. */
+type Clinic = "S" | "N";
+type ScopedPatient = Patient & { clinic: Clinic };
+
 function fail(action: string, message: string): never {
   if (/recontact/.test(message) && /(does not exist|Could not find|schema cache)/i.test(message)) {
     throw new Error(`${RECONTACT_NAME} 표가 아직 없습니다. Supabase에서 schema-v12-recontact.sql을 먼저 실행해 주세요.`);
@@ -13,162 +13,272 @@ function fail(action: string, message: string): never {
   throw new Error(`${action} 실패: ${message}`);
 }
 
-export async function getRecontactSettings(): Promise<RecontactSettings> {
-  const { data, error } = await getSupabase().from("recontact_settings").select("*").maybeSingle();
+/** Never cache a clinic or fall back to S on a missing mapping/session. */
+async function requireClinic(): Promise<Clinic> {
+  const { data, error } = await getSupabase().rpc("current_clinic");
+  if (error) fail("병원 확인", error.message);
+  if (data !== "S" && data !== "N") throw new Error("병원에 연결된 계정으로 다시 로그인해 주세요.");
+  return data;
+}
+
+async function settingsFor(clinic: Clinic): Promise<RecontactSettings> {
+  const { data, error } = await getSupabase().from("recontact_settings").select("*").eq("clinic", clinic).maybeSingle();
   if (error) fail("설정 불러오기", error.message);
-  // 표에 아직 없는 칸(나중에 더한 문구)은 기본값으로 채운다
-  if (data) return { ...DEFAULT_RECONTACT_SETTINGS, ...Object.fromEntries(Object.entries(data).filter(([, v]) => v !== null && v !== undefined)) } as RecontactSettings;
-  return { clinic: await fetchCurrentClinic(), ...DEFAULT_RECONTACT_SETTINGS };
+  if (data && data.clinic !== clinic) throw new Error("설정의 병원을 확인해 주세요.");
+  return { ...defaultRecontactSettings(clinic), ...Object.fromEntries(Object.entries(data ?? {}).filter(([, v]) => v !== null && v !== undefined)), clinic } as RecontactSettings;
+}
+
+export async function getRecontactSettings(): Promise<RecontactSettings> {
+  return settingsFor(await requireClinic());
 }
 
 export async function saveRecontactSettings(patch: Partial<Omit<RecontactSettings, "clinic">>): Promise<RecontactSettings> {
-  const cur = await getRecontactSettings();
-  const next = { ...cur, ...patch };
-  const { error } = await getSupabase().from("recontact_settings").upsert(next);
+  const clinic = await requireClinic();
+  const cur = await settingsFor(clinic);
+  // Whitelist editable fields; a runtime caller cannot inject a different clinic.
+  const next = { clinic, daily_cap: patch.daily_cap ?? cur.daily_cap, body_a: patch.body_a ?? cur.body_a,
+    body_b: patch.body_b ?? cur.body_b, body_vip: patch.body_vip ?? cur.body_vip,
+    body_once: patch.body_once ?? cur.body_once, body_reply: patch.body_reply ?? cur.body_reply,
+    body_missed: patch.body_missed ?? cur.body_missed };
+  const { data, error } = await getSupabase().from("recontact_settings").upsert(next, { onConflict: "clinic" }).select("*").single();
   if (error) fail("설정 저장", error.message);
-  return next;
+  if (!data || data.clinic !== clinic) throw new Error("설정 저장 결과를 확인하지 못했습니다.");
+  return data as RecontactSettings;
 }
 
 export async function listRecontacts(): Promise<RecontactRow[]> {
-  const { data, error } = await getSupabase()
-    .from("recontacts")
-    .select("*, patient:patients(id, name, phone, excluded_at)")
-    .order("id");
+  const clinic = await requireClinic();
+  const { data, error } = await getSupabase().from("recontacts")
+    .select("*, patient:patients(id,clinic,name,phone,excluded_at)").eq("clinic", clinic).order("id");
   if (error) fail("명단 불러오기", error.message);
-  return (data ?? []) as RecontactRow[];
-}
-
-/** 오늘 보낼 사람에서 빼야 하는 환자들: 연락 제외 · 예약 있음 · 최근 2주 내원 · 해피콜 예정 */
-export async function recontactContext(rows: RecontactRow[], today: string): Promise<RecontactContext> {
-  const ids = [...new Set(rows.map((r) => r.patient_id).filter((x): x is number => !!x))];
-  const excluded = new Set(rows.filter((r) => r.patient?.excluded_at).map((r) => r.patient!.id));
-  if (ids.length === 0) return { excluded, booked: new Set(), visited: new Set(), happyCall: new Set() };
-  const sb = getSupabase();
-  const [appts, visits, calls] = await Promise.all([
-    sb.from("appointments").select("patient_id").gte("day", today).eq("status", "booked").in("patient_id", ids),
-    sb.from("ledger_entries").select("patient_id").gte("day", visitedSince(today)).in("patient_id", ids),
-    sb.from("happy_calls").select("prescription:prescriptions!inner(patient_id)").eq("status", "pending"),
-  ]);
-  const set = (list: { patient_id: number | null }[] | null) => new Set((list ?? []).map((x) => x.patient_id).filter((x): x is number => !!x));
-  const hc = new Set<number>();
-  for (const c of (calls.data ?? []) as unknown as { prescription: { patient_id: number } | { patient_id: number }[] | null }[]) {
-    const p = Array.isArray(c.prescription) ? c.prescription[0] : c.prescription;
-    if (p && ids.includes(p.patient_id)) hc.add(p.patient_id);
+  const rows = (data ?? []) as RecontactRow[];
+  if (rows.some((r) => r.clinic !== clinic || (r.patient && (r.patient.clinic !== clinic || r.patient.id !== r.patient_id)))) {
+    throw new Error("명단의 환자·병원 연결을 확인해 주세요.");
   }
-  return { excluded, booked: set(appts.data), visited: set(visits.data), happyCall: hc };
+  return rows;
 }
 
-/** 이 번호는 이미 다른 이름으로 등록되어 있다 — 화면에서 한 번 더 묻는다. */
+/** Every suppression source is mandatory. Missing/hidden patients fail closed. */
+export async function recontactContext(rows: RecontactRow[], today: string): Promise<RecontactContext> {
+  const clinic = await requireClinic();
+  if (rows.some((r) => r.clinic !== clinic)) throw new Error("명단의 병원이 현재 계정과 다릅니다.");
+  const ids = [...new Set(rows.map((r) => r.patient_id).filter((id): id is number => id !== null))];
+  const excluded = new Set<number>();
+  if (!ids.length) return { excluded, booked: new Set(), visited: new Set(), happyCall: new Set() };
+  const sb = getSupabase();
+  const [patients, appts, visits, calls] = await Promise.all([
+    sb.from("patients").select("id,clinic,phone,excluded_at").eq("clinic", clinic).in("id", ids),
+    sb.from("appointments").select("patient_id").eq("clinic", clinic).gte("day", today).eq("status", "booked").in("patient_id", ids),
+    sb.from("ledger_entries").select("patient_id").eq("clinic", clinic).gte("day", visitedSince(today)).in("patient_id", ids),
+    sb.from("happy_calls").select("prescription:prescriptions!inner(patient_id,clinic)").eq("clinic", clinic)
+      .eq("prescription.clinic", clinic).in("prescription.patient_id", ids).eq("status", "pending"),
+  ]);
+  for (const result of [patients, appts, visits, calls]) if (result.error) fail("연락 대기 사유 확인", result.error.message);
+  const fresh = new Map((patients.data ?? []).map((p) => [p.id as number, p]));
+  for (const id of ids) {
+    const p = fresh.get(id);
+    if (!p || p.clinic !== clinic || p.excluded_at || !/^01[016789]\d{7,8}$/.test(normalizePhone(p.phone ?? ""))) excluded.add(id);
+  }
+  const set = (list: { patient_id: number | null }[] | null) => new Set((list ?? []).map((x) => x.patient_id).filter((id): id is number => id !== null));
+  const happyCall = new Set<number>();
+  type CallJoin = { prescription: { patient_id: number; clinic: Clinic } | { patient_id: number; clinic: Clinic }[] | null };
+  for (const c of (calls.data ?? []) as unknown as CallJoin[]) {
+    const prescriptions = Array.isArray(c.prescription) ? c.prescription : c.prescription ? [c.prescription] : [];
+    for (const p of prescriptions) {
+      if (p.clinic !== clinic) throw new Error("해피콜의 병원 연결을 확인해 주세요.");
+      if (ids.includes(p.patient_id)) happyCall.add(p.patient_id);
+    }
+  }
+  return { excluded, booked: set(appts.data), visited: set(visits.data), happyCall };
+}
+
 export class NameMismatch extends Error {
   constructor(public existing: Patient, public wanted: string) {
     super(`이 번호는 ${existing.name}님으로 등록되어 있습니다. ${wanted}님과 같은 분이 맞는지 확인해 주세요.`);
+    this.name = "NameMismatch";
   }
 }
 
-/**
- * 연락처를 넣으면 **환자등록에 올라간다**(사용자 2026-11-11: 재진콜에만 뜨면 안 되고 언제든 쓸 수 있게).
- * 같은 번호의 환자가 이미 있으면 그 환자와 잇고, 없으면 새 환자로 등록한 뒤 잇는다.
- * 이름이 다르면 NameMismatch — 가족 번호이거나 잘못 넣은 번호일 수 있어 사람이 확인한다.
- */
-export async function linkPhone(r: Pick<Recontact, "id" | "patient_name" | "birth_hint">, phone: string, acceptDifferentName = false): Promise<Patient> {
+export class MissingPatient extends Error {
+  constructor(public wanted: string) {
+    super(`${wanted}님의 등록된 환자를 찾지 못했습니다. 새 환자 등록은 별도 확인이 필요합니다.`);
+    this.name = "MissingPatient";
+  }
+}
+
+async function patientByPhone(clinic: Clinic, phone: string): Promise<ScopedPatient | null> {
+  const { data, error } = await getSupabase().from("patients").select("*").eq("clinic", clinic).eq("phone", phone).maybeSingle();
+  if (error) fail("환자 조회", error.message);
+  if (data && data.clinic !== clinic) throw new Error("환자의 병원을 확인해 주세요.");
+  return data as ScopedPatient | null;
+}
+
+/** UI checks are advisory; the RPC locks, verifies and links/creates in one transaction. */
+export async function linkPhone(r: Pick<Recontact, "id" | "patient_name" | "birth_hint">, phone: string, acceptDifferentName = false, allowCreate = false): Promise<Patient> {
+  const clinic = await requireClinic();
   const digits = normalizePhone(phone);
-  if (!isValidPhone(digits) || !digits.startsWith("01")) throw new Error("휴대폰 번호 10~11자리를 넣어 주세요.");
-  const existing = await findPatientByPhone(digits);
+  if (!/^01[016789]\d{7,8}$/.test(digits)) throw new Error("올바른 휴대폰 번호 10~11자리를 넣어 주세요.");
+  const existing = await patientByPhone(clinic, digits);
   if (existing && existing.name.trim() !== r.patient_name.trim() && !acceptDifferentName) throw new NameMismatch(existing, r.patient_name);
-  const patient =
-    existing ??
-    (await createPatient({
-      name: r.patient_name,
-      phone: digits,
-      family_phone: "",
-      family_note: "",
-      condition: "general",
-      memo: `${RECONTACT_NAME} 명단에서 등록${r.birth_hint ? ` (${r.birth_hint})` : ""}`,
-      source: "",
-      source_note: "",
-    }));
-  const { error } = await getSupabase().from("recontacts").update({ patient_id: patient.id, updated_at: new Date().toISOString() }).eq("id", r.id);
-  if (error) fail("연락처 연결", error.message);
-  return patient;
+  // The RPC also matches legacy formatted numbers. Do not turn an advisory miss
+  // into an early MissingPatient, which would incorrectly offer registration.
+  const { data, error } = await getSupabase().rpc("recontact_link_phone", {
+    p_id: r.id, p_phone: digits, p_accept_different_name: acceptDifferentName, p_allow_create: allowCreate,
+  });
+  if (error) {
+    if (/PATIENT_MISSING/.test(error.message)) throw new MissingPatient(r.patient_name);
+    if (/NAME_MISMATCH/.test(error.message)) {
+      let current: ScopedPatient | null = null;
+      try {
+        const detail: unknown = JSON.parse(error.details ?? "null");
+        if (detail && typeof detail === "object" && "clinic" in detail && detail.clinic === clinic
+          && "id" in detail && typeof detail.id === "number" && "name" in detail && typeof detail.name === "string"
+          && "phone" in detail && typeof detail.phone === "string" && normalizePhone(detail.phone) === digits) current = detail as ScopedPatient;
+      } catch { /* Fall back to a fresh, scoped lookup below. */ }
+      current ??= await patientByPhone(clinic, digits);
+      if (current) throw new NameMismatch(current, r.patient_name);
+    }
+    fail("연락처 연결", error.message);
+  }
+  const linked = data as { patient: ScopedPatient; recontact: Recontact } | null;
+  if (!linked?.patient || !linked.recontact || linked.patient.clinic !== clinic || linked.recontact.clinic !== clinic
+    || linked.recontact.id !== r.id || linked.recontact.patient_id !== linked.patient.id) throw new Error("연락처 연결 결과를 확인하지 못했습니다.");
+  return linked.patient;
+}
+
+export type ContactPurpose = "initial" | "followup" | "call";
+export async function assertRecontactContact(id: number, purpose: ContactPurpose): Promise<void> {
+  await requireClinic();
+  const { error } = await getSupabase().rpc("recontact_assert_contact", { p_id: id, p_purpose: purpose });
+  if (error) fail("연락 가능 여부 확인", error.message);
+}
+
+export async function optOutRecontact(id: number, reason: string): Promise<void> {
+  await requireClinic();
+  const { error } = await getSupabase().rpc("recontact_opt_out", { p_id: id, p_reason: reason.trim() || "재진콜 연락 제외" });
+  if (error) fail("연락 제외", error.message);
 }
 
 export type ImportResult = { added: number; duplicated: number; linked: number; problems: string[] };
 
-/** 엑셀에서 읽은 명단을 넣는다. 같은 이름·같은 마지막 한약 날짜가 이미 있으면 건너뛴다. 연락처가 있는 줄은 바로 환자와 잇는다. */
-export async function importRecontacts(rows: ImportRow[], staff: string): Promise<ImportResult> {
+/** A source row is an import identity, never a patient identity. */
+async function importKey(sourceIdentity: string, rowIndex: number): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new Error("명단 식별을 위한 보안 연결(HTTPS)이 필요합니다.");
+  const bytes = new TextEncoder().encode(JSON.stringify(["recontact-import-v1", sourceIdentity, rowIndex]));
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+type ImportCandidate = Pick<Recontact, "id" | "patient_name" | "birth_hint" | "patient_id" | "clinic">;
+
+/** Inserts only candidates. Reimports never overwrite a candidate or patient. */
+export async function importRecontacts(rows: ImportRow[], staff: string, sourceIdentity = ""): Promise<ImportResult> {
+  const clinic = await requireClinic();
   const sb = getSupabase();
-  const { data: cur, error: e0 } = await sb.from("recontacts").select("patient_name, last_herb_date");
-  if (e0) fail("명단 확인", e0.message);
-  const seen = new Set((cur ?? []).map((x) => `${x.patient_name}|${x.last_herb_date ?? ""}`));
   const result: ImportResult = { added: 0, duplicated: 0, linked: 0, problems: [] };
-  for (const row of rows) {
-    const key = `${row.patient_name}|${row.last_herb_date ?? ""}`;
-    if (seen.has(key)) {
+  const columns = "id,clinic,patient_name,birth_hint,patient_id";
+  const find = async (key: string): Promise<ImportCandidate | null> => {
+    const { data, error } = await sb.from("recontacts").select(columns).eq("clinic", clinic).eq("source_key", key).maybeSingle();
+    if (error) fail("명단 확인", error.message);
+    return data as ImportCandidate | null;
+  };
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index];
+    const key = await importKey(sourceIdentity, index);
+    let candidate = await find(key);
+    let duplicate = candidate !== null;
+    if (!candidate) {
+      const { data, error } = await sb.from("recontacts").insert({
+        clinic, source_key: key, staff_name: staff, patient_name: row.patient_name,
+        birth_hint: row.birth_hint, segment: row.segment, call_target: row.call_target,
+        herb_count: row.herb_count, last_herb_date: row.last_herb_date,
+        avg_interval_days: row.avg_interval_days, herb_kind: row.herb_kind,
+        doctor_note: row.doctor_note, memo: row.memo, variant: row.variant,
+      }).select(columns).single();
+      if (error) {
+        if (error.code !== "23505") fail("명단 넣기", error.message);
+        candidate = await find(key);
+        if (!candidate) fail("명단 넣기", error.message);
+        duplicate = true;
+      } else {
+        candidate = data as ImportCandidate | null;
+        if (!candidate) throw new Error("명단 등록 결과를 확인하지 못했습니다.");
+        result.added += 1;
+      }
+    }
+    if (candidate.clinic !== clinic) throw new Error("명단의 병원을 확인해 주세요.");
+    if (duplicate) {
       result.duplicated += 1;
+      if (candidate.patient_name.trim() !== row.patient_name.trim()) result.problems.push(`${row.patient_name}: 같은 파일·줄에 다른 이름이 있어 기존 명단을 보존했습니다.`);
+      // Even linking could alter a previously reviewed candidate: leave it intact.
       continue;
     }
-    seen.add(key);
-    const { phone, ...rest } = row;
-    const { data, error } = await sb.from("recontacts").insert({ ...rest, staff_name: staff }).select("id, patient_name, birth_hint").single();
-    if (error) fail("명단 넣기", error.message);
-    result.added += 1;
-    if (phone) {
+    if (row.phone) {
       try {
-        await linkPhone(data as Pick<Recontact, "id" | "patient_name" | "birth_hint">, phone);
+        await linkPhone(candidate, row.phone, false, false);
         result.linked += 1;
       } catch (e) {
-        result.problems.push(`${row.patient_name}: ${(e as Error).message}`);
+        result.problems.push(`${row.patient_name}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
   }
   return result;
 }
 
-export async function updateRecontact(
-  id: number,
-  patch: Partial<Pick<Recontact, "doctor_note" | "draft_text" | "doctor_reply" | "memo" | "birth_hint" | "call_target" | "segment">>,
-): Promise<void> {
-  const { error } = await getSupabase().from("recontacts").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
-  if (error) fail("저장", error.message);
+type EditableRecontact = Partial<Pick<Recontact, "doctor_note" | "draft_text" | "doctor_reply" | "memo" | "birth_hint" | "call_target" | "segment">>;
+export async function updateRecontact(id: number, values: EditableRecontact): Promise<void> {
+  const safe: EditableRecontact = {};
+  for (const key of ["doctor_note", "draft_text", "doctor_reply", "memo", "birth_hint", "call_target", "segment"] as const) {
+    if (Object.prototype.hasOwnProperty.call(values, key)) Object.assign(safe, { [key]: values[key] });
+  }
+  return patch(id, safe, "저장");
 }
 
 async function patch(id: number, values: Record<string, unknown>, action: string): Promise<void> {
-  const { error } = await getSupabase().from("recontacts").update({ ...values, updated_at: new Date().toISOString() }).eq("id", id);
+  const clinic = await requireClinic();
+  const { data, error } = await getSupabase().from("recontacts").update({ ...values, updated_at: new Date().toISOString() })
+    .eq("clinic", clinic).eq("id", id).select("id,clinic").single();
   if (error) fail(action, error.message);
+  if (!data || data.id !== id || data.clinic !== clinic) fail(action, "명단이 없거나 권한이 없습니다.");
 }
 
-/** 보냈음: 병원 휴대폰으로 보낸 뒤 누른다. 보낸 글을 그대로 남긴다. */
-export function markSent(r: Pick<Recontact, "id" | "attempts">, staff: string, text: string): Promise<void> {
-  return patch(r.id, { status: "sent", sent_at: new Date().toISOString(), sent_by: staff, sent_text: text, attempts: r.attempts + 1 }, "보냄 기록");
+/** Record a manually completed action only. These RPCs never send messages. */
+export async function markSent(r: Pick<Recontact, "id" | "attempts">, staff: string, text: string): Promise<void> {
+  const clinic = await requireClinic();
+  const { data, error } = await getSupabase().rpc("recontact_record_sent", { p_id: r.id, p_expected_attempts: r.attempts, p_staff: staff, p_text: text });
+  if (error) fail("보냄 기록", error.message);
+  if (!data || data.id !== r.id || data.clinic !== clinic) fail("보냄 기록", "기록 결과를 확인하지 못했습니다.");
 }
-/** 답 옴: 환자가 보낸 답을 옮겨 적는다. */
+
 export function markReplied(id: number, reply: string): Promise<void> {
   return patch(id, { status: "replied", reply_text: reply.trim(), replied_at: new Date().toISOString() }, "답 기록");
 }
-/** 전화함: 통화 결과를 한 줄로. 상태는 그대로(답이 오면 답 옴으로). */
-export function markCalled(r: Pick<Recontact, "id" | "attempts">, result: string): Promise<void> {
-  return patch(r.id, { called_at: new Date().toISOString(), call_result: result.trim() || "통화함", attempts: r.attempts + 1 }, "전화 기록");
-}
-/** 예약됨 · 거절 · 쉼 · 다시 올리기(todo) */
-export function setRecontactStatus(id: number, status: RecontactStatus): Promise<void> {
-  const reset = status === "todo" ? { sent_at: null, sent_by: null, called_at: null, call_result: null, reply_text: null, replied_at: null } : {};
-  return patch(id, { status, ...reset }, "상태 바꾸기");
-}
-export async function deleteRecontact(id: number): Promise<void> {
-  const { error } = await getSupabase().from("recontacts").delete().eq("id", id);
-  if (error) fail("지우기", error.message);
+
+export async function markCalled(r: Pick<Recontact, "id" | "attempts">, result: string): Promise<void> {
+  const clinic = await requireClinic();
+  const { data, error } = await getSupabase().rpc("recontact_record_call", { p_id: r.id, p_expected_attempts: r.attempts, p_result: result.trim() || "통화함" });
+  if (error) fail("전화 기록", error.message);
+  if (!data || data.id !== r.id || data.clinic !== clinic) fail("전화 기록", "기록 결과를 확인하지 못했습니다.");
 }
 
-/** 첫 화면 요약: 오늘 보낼 사람 수. 표가 없거나 실패하면 0. */
+/** Status changes never erase send/call timestamps, texts or attempt history. */
+export function setRecontactStatus(id: number, status: RecontactStatus): Promise<void> {
+  return patch(id, { status }, "상태 바꾸기");
+}
+
+/** Archive, never DELETE: retain source identity and all contact audit history. */
+export function deleteRecontact(id: number): Promise<void> {
+  return patch(id, { status: "rest" }, "보관");
+}
+
+/** Dashboard only: lookup failures suppress the count, never enable contact. */
 export async function countRecontactToday(today: string): Promise<number> {
   try {
     const [rows, settings] = await Promise.all([listRecontacts(), getRecontactSettings()]);
-    if (rows.length === 0) return 0;
+    if (!rows.length) return 0;
     const ctx = await recontactContext(rows, today);
     return todaysBatch(rows, ctx, settings.daily_cap, today).batch.length;
-  } catch {
-    return 0;
-  }
+  } catch { return 0; }
 }
 
 /** 엑셀 파일의 시트들을 글자 표로 읽는다(브라우저). exceljs는 쓸 때만 불러온다. 파일은 서버로 올라가지 않는다. */

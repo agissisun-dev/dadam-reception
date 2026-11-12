@@ -8,7 +8,7 @@ type ScopedPatient = Patient & { clinic: Clinic };
 
 function fail(action: string, message: string): never {
   if (/recontact/.test(message) && /(does not exist|Could not find|schema cache)/i.test(message)) {
-    throw new Error(`${RECONTACT_NAME} 표가 아직 없습니다. Supabase에서 schema-v12-recontact.sql을 먼저 실행해 주세요.`);
+    throw new Error(`${RECONTACT_NAME} 표가 아직 없습니다. Supabase에서 schema-v12-recontact-s-only.sql을 먼저 실행해 주세요.`);
   }
   throw new Error(`${action} 실패: ${message}`);
 }

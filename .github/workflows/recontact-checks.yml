@@ -26,3 +26,4 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/recontact-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.16
           PGLITE_MODULE="file://$RUNNER_TEMP/recontact-db/node_modules/@electric-sql/pglite/dist/index.js" node scripts/test-recontact-db.mjs
+          PGLITE_MODULE="file://$RUNNER_TEMP/recontact-db/node_modules/@electric-sql/pglite/dist/index.js" node scripts/test-recontact-s-only-db.mjs

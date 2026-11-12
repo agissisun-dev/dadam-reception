@@ -19,6 +19,8 @@ import { expiryStatus } from "@/lib/cabinetRules";
 import { listLedgerDaysOpen, loadDay } from "@/lib/ledger";
 import { sumEntries, won } from "@/lib/ledgerRules";
 import { countToday } from "@/lib/appointments";
+import { canUseRecontacts, countRecontactToday } from "@/lib/recontacts";
+import { RECONTACT_NAME } from "@/lib/recontactRules";
 import { weekEndISO } from "@/lib/weeklyRules";
 import { addDays, todayISO, weekdayKo } from "@/lib/dates";
 import { dayLabel, sameMonth, shiftMonth, yearMonthOf, type YearMonth } from "@/lib/calendarRules";
@@ -128,6 +130,8 @@ function CalendarBoard() {
   const [month, setMonth] = useState<YearMonth>(() => yearMonthOf(todayISO()));
   const [selected, setSelected] = useState<string>(() => todayISO());
   const [celebrate, setCelebrate] = useState(false);
+  const [recontactToday, setRecontactToday] = useState(0);
+  const [recontactEnabled, setRecontactEnabled] = useState(false);
 
   const load = useCallback(() => {
     const now = todayISO();
@@ -154,6 +158,17 @@ function CalendarBoard() {
   useEffect(() => {
     load();
     listTemplates("weekly").then(setTemplates).catch(() => setTemplates([]));
+    // 확인된 S 계정에만 재진콜 수와 바로가기를 보여 준다.
+    let active = true;
+    void canUseRecontacts().then(async (enabled) => {
+      if (!active) return;
+      setRecontactEnabled(enabled);
+      if (enabled) {
+        const count = await countRecontactToday(todayISO());
+        if (active) setRecontactToday(count);
+      }
+    });
+    return () => { active = false; };
   }, [load]);
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
@@ -208,6 +223,11 @@ function CalendarBoard() {
           <Link href="/happy-calls" className="underline">
             해피콜 오늘 {hcToday}명
           </Link>
+          {recontactEnabled && recontactToday > 0 && (
+            <Link href="/happy-calls?tab=recontact" className="underline">
+              {RECONTACT_NAME} 오늘 {recontactToday}명
+            </Link>
+          )}
           <Link href="/weekly" className="underline">
             주간 관리 이번 주 {wkThisWeek}명
           </Link>

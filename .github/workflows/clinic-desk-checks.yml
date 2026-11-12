@@ -1,0 +1,23 @@
+name: Clinic desk checks
+on:
+  pull_request:
+  push:
+    branches: ["aside/clinic-sms-appointments-*"]
+permissions:
+  contents: read
+concurrency:
+  group: clinic-desk-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Changed clinic desk file lint
+        run: npx eslint lib/appointmentRules.ts lib/appointmentRules.test.ts lib/appointments.ts lib/appointments.test.ts lib/appointmentNotify.ts app/api/appointments/remind/route.ts app/appointments/page.tsx components/NotifyBodyEditor.tsx lib/ledgerRules.ts lib/ledgerRules.test.ts lib/ledgerExportRules.test.ts lib/sms.ts lib/smsServer.ts app/api/sms/route.ts components/SmsSendBox.tsx components/HappyCallRow.tsx components/WeeklyRow.tsx components/AppointmentSmsSend.tsx lib/sms.test.ts lib/smsServer.test.ts

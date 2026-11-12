@@ -16,21 +16,25 @@ const SEND_URL = "https://api.solapi.com/messages/v4/send";
 
 export type SmsConfig = { apiKey: string; apiSecret: string; from: string };
 
-/** Vercel 환경 변수에서 업체 키·발신번호. 하나라도 없으면 null (→ "문자 설정이 아직 안 되어 있습니다"). */
-export function smsConfig(): SmsConfig | null {
-  const apiKey = process.env.SOLAPI_API_KEY;
-  const apiSecret = process.env.SOLAPI_API_SECRET;
-  const from = normalizePhone(process.env.SMS_SENDER_NUMBER ?? "");
-  if (!apiKey || !apiSecret || !from) return null;
+/** Explicit clinic sender required. Presence is configuration, never provider approval/delivery proof. */
+export function smsConfig(clinic?: "S" | "N", env: Record<string, string | undefined> = process.env): SmsConfig | null {
+  // No default clinic, no legacy shared/personal sender fallback.
+  if (clinic !== "S" && clinic !== "N") return null;
+  const from = normalizePhone(env[`SMS_SENDER_NUMBER_${clinic}`] ?? "");
+  const ownKey = env[`SOLAPI_API_KEY_${clinic}`];
+  const ownSecret = env[`SOLAPI_API_SECRET_${clinic}`];
+  const apiKey = ownKey || ownSecret ? ownKey : env.SOLAPI_API_KEY;
+  const apiSecret = ownKey || ownSecret ? ownSecret : env.SOLAPI_API_SECRET;
+  if (!apiKey?.trim() || !apiSecret?.trim() || !/^0\d{8,10}$/.test(from)) return null;
   return { apiKey, apiSecret, from };
 }
 
-export const NOT_CONFIGURED = "문자 설정이 아직 안 되어 있습니다. 문자 업체 키와 발신번호를 등록해야 보낼 수 있습니다.";
+export const NOT_CONFIGURED = "이 병원의 문자 설정이 아직 안 되어 있습니다. 병원별 발신번호와 문자 업체 키를 등록해야 보낼 수 있습니다.";
 
 export async function solapiSend(
   cfg: SmsConfig,
   msg: { to: string; text: string; type: SmsType },
-): Promise<{ ok: true; messageId: string | null } | { ok: false; error: string }> {
+): Promise<{ ok: true; messageId: string | null } | { ok: false; error: string; unknown?: boolean }> {
   const date = new Date().toISOString();
   const salt = randomBytes(16).toString("hex");
   const signature = createHmac("sha256", cfg.apiSecret).update(date + salt).digest("hex");
@@ -45,14 +49,18 @@ export async function solapiSend(
       body: JSON.stringify({ message: { to: msg.to, from: cfg.from, text: msg.text, type: msg.type } }),
     });
   } catch {
-    return { ok: false, error: "문자 업체에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+    return { ok: false, unknown: true, error: "문자 업체의 접수 결과를 확인하지 못했습니다. 중복 발송하지 말고 업체 발송 내역을 확인해 주세요." };
   }
-  const result = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const parsed = await res.json().catch(() => null);
+  if (!parsed || typeof parsed !== "object") return { ok: false, unknown: true, error: "문자 업체 응답을 확인하지 못했습니다. 중복 발송하지 말고 업체 내역을 확인해 주세요." };
+  const result = parsed as Record<string, unknown>;
   const statusCode = typeof result.statusCode === "string" ? result.statusCode : "";
   if (!res.ok || (statusCode && !statusCode.startsWith("2"))) {
+    if (res.status >= 500) return { ok: false, unknown: true, error: "문자 업체의 접수 결과를 확인하지 못했습니다. 중복 발송하지 말고 업체 내역을 확인해 주세요." };
     const why = result.errorMessage ?? result.statusMessage ?? result.errorCode ?? `응답 ${res.status}`;
     return { ok: false, error: `문자 업체가 거절했습니다. ${String(why)}` };
   }
+  if (!statusCode.startsWith("2") && typeof result.messageId !== "string") return { ok: false, unknown: true, error: "문자 업체의 접수 증빙이 없습니다. 중복 발송하지 말고 업체 내역을 확인해 주세요." };
   return { ok: true, messageId: typeof result.messageId === "string" ? result.messageId : null };
 }
 
@@ -70,15 +78,16 @@ export type SmsLogRow = {
 };
 
 /** 장부 기록. 기록 자체가 실패해도 발송 결과 응답은 막지 않는다 (장부 표가 아직 없을 때 대비). */
-export async function writeSmsLog(sb: SupabaseClient, row: SmsLogRow): Promise<void> {
+export async function writeSmsLog(sb: SupabaseClient, row: SmsLogRow): Promise<boolean> {
   try {
-    await sb.from("sms_logs").insert(row);
+    const { error } = await sb.from("sms_logs").insert(row);
+    return !error;
   } catch {
-    /* 장부 실패는 응답에 영향 주지 않음 */
+    return false;
   }
 }
 
-type PatientLite = { id: number; name: string; phone: string; family_phone: string | null; family_note: string | null };
+type PatientLite = { id: number; name: string; phone: string; family_phone: string | null; family_note: string | null; excluded_at: string | null };
 export type Recipient = { patientId: number | null; patientName: string; label: string };
 
 /**
@@ -101,11 +110,13 @@ export async function resolveRecipient(
       .eq("id", q.appointmentId)
       .maybeSingle<{ id: number; patient_id: number | null; patient_name: string; phone: string | null }>();
     if (!appt) return { ok: false, refused: "예약을 찾지 못했습니다.", r: unknown(`(예약 ${q.appointmentId} 없음)`, null) };
+    const linkedPatient = appt.patient_id ? await patientById(sb, appt.patient_id) : null;
+    if (appt.patient_id && (!linkedPatient || linkedPatient.excluded_at)) return { ok: false, refused: "연락 제외 상태이거나 환자 연결을 확인하지 못했습니다.", r: unknown(appt.patient_name, appt.patient_id) };
     if (appt.phone && normalizePhone(appt.phone) === to) {
       return { ok: true, r: { patientId: appt.patient_id, patientName: appt.patient_name, label: "예약 연락처" } };
     }
     if (appt.patient_id) {
-      const p = await patientById(sb, appt.patient_id);
+      const p = linkedPatient;
       const label = p ? recipientLabelFor(p, to) : null;
       if (p && label) return { ok: true, r: { patientId: p.id, patientName: p.name, label } };
     }
@@ -114,11 +125,12 @@ export async function resolveRecipient(
 
   const p = await patientById(sb, q.patientId);
   const label = p ? recipientLabelFor(p, to) : null;
+  if (p?.excluded_at) return { ok: false, refused: "연락 제외된 환자에게는 보낼 수 없습니다.", r: unknown(p.name, p.id) };
   if (!p || !label) return { ok: false, refused: "등록된 환자·가족 번호로만 보낼 수 있습니다.", r: unknown(p?.name ?? `(환자 ${q.patientId} 없음)`, p?.id ?? null) };
   return { ok: true, r: { patientId: p.id, patientName: p.name, label } };
 }
 
 async function patientById(sb: SupabaseClient, id: number): Promise<PatientLite | null> {
-  const { data } = await sb.from("patients").select("id, name, phone, family_phone, family_note").eq("id", id).maybeSingle<PatientLite>();
+  const { data } = await sb.from("patients").select("id, name, phone, family_phone, family_note, excluded_at").eq("id", id).maybeSingle<PatientLite>();
   return data ?? null;
 }

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { getSettings, saveSettings } from "@/lib/appointments";
-import { dateKo, fillTemplate } from "@/lib/appointmentRules";
-import { clinicInfo, fetchCurrentClinic } from "@/lib/clinic";
+import { defaultNotifyBody, renderAppointmentTemplate } from "@/lib/appointmentRules";
+import { fetchCurrentClinic, type ClinicCode } from "@/lib/clinic";
 import { todayISO } from "@/lib/dates";
 
 const BTN = "rounded border border-stone-300 px-3 py-1.5 text-sm";
@@ -11,12 +11,12 @@ const PRIMARY = "rounded bg-stone-900 px-3 py-1.5 text-sm text-white disabled:op
 
 /**
  * 예약 안내 문구 고치기. 예약 화면과 문구 틀 화면 양쪽에서 같은 글을 고친다(샘들이 어디서든 바꿀 수 있게, 사용자 2026-11-04).
- * 자리표 {이름} {병원} {날짜} {시간}은 예약이 잡힐 때 채워진다.
+ * 자리표는 예약이 잡힐 때 채워지고, 미리 보기의 샘플 이름·날짜는 저장하지 않는다.
  */
 export default function NotifyBodyEditor({ initial, onSaved, onClose }: { initial?: string; onSaved?: (body: string) => void; onClose?: () => void }) {
   const [body, setBody] = useState(initial ?? "");
   const [loaded, setLoaded] = useState(initial !== undefined);
-  const [clinicName, setClinicName] = useState("다담에스한의원");
+  const [clinic, setClinic] = useState<ClinicCode>("S");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -31,11 +31,11 @@ export default function NotifyBodyEditor({ initial, onSaved, onClose }: { initia
         .catch((e: Error) => setError(e.message));
     }
     fetchCurrentClinic()
-      .then((c) => c && setClinicName(clinicInfo(c).name))
+      .then(setClinic)
       .catch(() => undefined);
   }, [initial]);
 
-  const preview = fillTemplate(body, { 이름: "홍길동", 병원: clinicName, 날짜: dateKo(todayISO()), 시간: "10:30" });
+  const preview = renderAppointmentTemplate(body, { patient_name: "홍길동", day: todayISO(), time: "16:30" }, clinic);
 
   async function save() {
     setBusy(true);
@@ -55,14 +55,15 @@ export default function NotifyBodyEditor({ initial, onSaved, onClose }: { initia
     <section className="rounded-lg border border-stone-300 bg-white p-3 text-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <b>예약 안내 문구</b>
-        <span className="text-[11px] text-stone-500">자리표 {"{이름} {병원} {날짜} {시간}"} 은 예약이 잡힐 때 그 환자 것으로 채워집니다.</span>
+        <span className="text-[11px] text-stone-500">자리표 {"{이름} {병원} {날짜} {시간} {월} {일} {요일} {전화번호}"} 은 예약이 잡힐 때 그 환자 것으로 채워집니다.</span>
       </div>
       {!loaded ? (
         <p className="mt-2 text-xs text-stone-500">불러오는 중…</p>
       ) : (
         <>
           <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} className="mt-2 w-full rounded border border-stone-300 px-2 py-1 text-sm" />
-          <p className="mt-1 text-[11px] text-stone-500">미리 보기</p>
+          <button type="button" className="mt-1 text-xs underline" onClick={() => setBody(defaultNotifyBody(clinic))}>기본 문구로 되돌리기</button>
+          <p className="mt-1 text-[11px] text-stone-500">미리 보기 (샘플은 저장되지 않습니다)</p>
           <p className="whitespace-pre-wrap rounded bg-stone-50 px-3 py-2 text-xs">{preview}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button type="button" className={PRIMARY} disabled={busy} onClick={save}>저장</button>

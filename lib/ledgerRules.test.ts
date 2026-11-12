@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { parseNote, parseWon, sumEntries, sumExpenses, nextSeq, won, itemSummary, isFree, itemLabel, daySummary, tallyByDay } from "./ledgerRules";
+import { INSURANCE_KINDS, parseNote, parseWon, sumEntries, sumExpenses, nextSeq, won, itemSummary, isFree, itemLabel, daySummary, tallyByDay } from "./ledgerRules";
 import type { LedgerCode } from "./types";
+
+describe("ledger insurance categories", () => {
+  it("appends new shared S/N suggestions without changing existing categories", () => {
+    expect(INSURANCE_KINDS).toEqual(["보험", "일반", "1종", "2종", "1종지정", "차상1종", "차상2종", "희귀1종", "2종장애", "초진", "재초진", "전화상담", "자보", "산정특례"]);
+    expect(new Set(INSURANCE_KINDS).size).toBe(INSURANCE_KINDS.length);
+  });
+});
 
 const c = (code: string, name: string, group: LedgerCode["group"], extra: Partial<LedgerCode> = {}): LedgerCode => ({
   id: 0, code, name, group, cabinet_item_id: null, decoction_kind: null, active: true, sort_order: 0, created_at: "", ...extra,

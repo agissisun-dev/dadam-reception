@@ -21,8 +21,7 @@ import { excludePatient } from "@/lib/patients";
 import PhoneText from "./PhoneText";
 import StaffSelect from "./StaffSelect";
 import SmsSendBox, { type SmsRecipient } from "./SmsSendBox";
-import SmsAppLink from "./SmsAppLink";
-import { sendSms } from "@/lib/sms";
+import { recordAcceptedSms, sendSms, SmsOutcomeUnknown } from "@/lib/sms";
 
 type Mode = null | "contacted" | "represc" | "exclude" | "reschedule" | "sms";
 
@@ -60,6 +59,7 @@ export default function HappyCallRow({
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [smsLocked, setSmsLocked] = useState(false);
 
   const late = daysBetween(row.due_date, today);
   const p = row.prescription;
@@ -101,14 +101,22 @@ export default function HappyCallRow({
     setBusy(true);
     setError(null);
     try {
-      await sendSms(to, messageText, { patientId: pt.id, staff });
+      if (smsLocked) return;
+      const result = await recordAcceptedSms(
+        () => sendSms(to, messageText, { patientId: pt.id, staff }),
+        async () => { await markContacted(row.id, "sms", `문자 발송 → ${label}\n${messageText}`, staff); onDone(); },
+      );
+      setSmsLocked(true);
+      setMode(null);
+      setError(result.warning ?? "문자 업체가 발송 요청을 접수했습니다.");
     } catch (e) {
-      setError(`문자를 보내지 못했습니다. ${(e as Error).message}`);
+      if (e instanceof SmsOutcomeUnknown) setSmsLocked(true);
+      setError((e as Error).message);
       setBusy(false);
       return;
     }
     setBusy(false);
-    await run(() => markContacted(row.id, "sms", `문자 발송 → ${label}\n${messageText}`, staff));
+
   }
 
   return (
@@ -158,11 +166,10 @@ export default function HappyCallRow({
                 <span className="text-sm text-stone-600">보낼 문구 ({tpl.name})</span>
                 <span className="flex items-center gap-2">
                   {copied && <span className="text-sm text-green-700">복사됨</span>}
-                  <SmsAppLink phone={pt.phone} text={messageText} />
                   <button className={BTN} onClick={copy}>
                     문구 복사
                   </button>
-                  <button className={PRIMARY} disabled={busy} onClick={() => setMode("sms")}>
+                  <button className={PRIMARY} disabled={busy || smsLocked} onClick={() => setMode("sms")}>
                     문자 보내기
                   </button>
                 </span>

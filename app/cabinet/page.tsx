@@ -6,6 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import CabinetRow from "@/components/CabinetRow";
 import { createCabinetItem, listCabinetItems, loadCabinet, updateCabinetItem, type CabinetStatus } from "@/lib/cabinet";
 import { CABINET_KINDS, KIND_LABEL, kindInfo, purposeLabel } from "@/lib/cabinetRules";
+import { clinicInfo, fetchCurrentClinic, type ClinicCode } from "@/lib/clinic";
 import { todayISO } from "@/lib/dates";
 import type { CabinetItem, CabinetKind, CabinetMove } from "@/lib/types";
 
@@ -20,10 +21,11 @@ function whenKo(ts: string): string {
 }
 
 /** 품목 관리: 이름·구분·부족 기준 추가·수정, 사용 안 함. */
-function ItemManager({ onChanged }: { onChanged: () => void }) {
+function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: ClinicCode }) {
   const [items, setItems] = useState<CabinetItem[] | null>(null);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<CabinetKind>("medicine");
+  const [unit, setUnit] = useState("개");
   const [minStock, setMinStock] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +57,8 @@ function ItemManager({ onChanged }: { onChanged: () => void }) {
           <li key={it.id} className="flex flex-wrap items-center gap-2 py-1.5">
             <span className={`inline-block h-2.5 w-2.5 rounded-full ${kindInfo(it.kind).dot}`} />
             <span className={it.active ? "" : "text-stone-400 line-through"}>{it.name}</span>
-            <span className="text-xs text-stone-500">{kindInfo(it.kind).label}</span>
+            <span className="text-xs text-stone-500">{kindInfo(it.kind).label}{it.unit && it.unit !== "개" ? ` · ${it.unit}` : ""}</span>
+            {it.clinic && <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: clinicInfo(it.clinic).bg, color: clinicInfo(it.clinic).text }}>{clinicInfo(it.clinic).short}</span>}
             <label className="ml-2 text-xs text-stone-500">
               부족 기준{" "}
               <input
@@ -82,10 +85,27 @@ function ItemManager({ onChanged }: { onChanged: () => void }) {
         </label>
         <label className="block">
           <span className="text-xs text-stone-500">구분</span>
-          <select value={kind} onChange={(e) => setKind(e.target.value as CabinetKind)} className={`mt-1 ${INPUT}`}>
+          <select
+            value={kind}
+            onChange={(e) => {
+              const k = e.target.value as CabinetKind;
+              setKind(k);
+              setUnit(kindInfo(k).unit);
+            }}
+            className={`mt-1 ${INPUT}`}
+          >
             {CABINET_KINDS.map((k) => (<option key={k.value} value={k.value}>{k.label}</option>))}
           </select>
         </label>
+        <label className="block">
+          <span className="text-xs text-stone-500">단위</span>
+          <input value={unit} onChange={(e) => setUnit(e.target.value)} className={`mt-1 w-16 ${INPUT}`} />
+        </label>
+        {kind === "insured" && (
+          <span className="rounded px-2 py-1 text-xs" style={{ background: clinicInfo(clinic).bg, color: clinicInfo(clinic).text }}>
+            {clinicInfo(clinic).short} 보험약 (병원별)
+          </span>
+        )}
         <label className="block">
           <span className="text-xs text-stone-500">부족 기준</span>
           <input type="number" min={0} value={minStock} onChange={(e) => setMinStock(Math.max(0, Number(e.target.value)))} className={`mt-1 w-20 ${INPUT}`} />
@@ -96,7 +116,7 @@ function ItemManager({ onChanged }: { onChanged: () => void }) {
           onClick={() =>
             run(async () => {
               const order = (items ?? []).filter((i) => i.kind === kind).length + kindInfo(kind).order;
-              await createCabinetItem({ name: name.trim(), kind, min_stock: minStock, active: true, sort_order: order });
+              await createCabinetItem({ name: name.trim(), kind, min_stock: minStock, active: true, sort_order: order, clinic: kind === "insured" ? clinic : null, unit: unit.trim() || kindInfo(kind).unit });
               setName("");
               setMinStock(0);
             })
@@ -115,6 +135,8 @@ function Board() {
   const [moves, setMoves] = useState<CabinetMove[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [manage, setManage] = useState(false);
+  const [clinic, setClinic] = useState<ClinicCode>("S");
+  const [openKinds, setOpenKinds] = useState<Record<string, boolean>>({});
 
   const load = useCallback(() => {
     loadCabinet()
@@ -126,6 +148,7 @@ function Board() {
   }, []);
   useEffect(() => {
     load();
+    fetchCurrentClinic().then(setClinic).catch(() => undefined);
   }, [load]);
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
@@ -146,29 +169,31 @@ function Board() {
         </div>
       </div>
 
-      <p className="flex flex-wrap gap-3 text-xs text-stone-500">
-        <span>
-          <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#16863b] align-middle" /> 약
-        </span>
-        <span>
-          <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500 align-middle" /> 외용제
-        </span>
-        <span>
-          <span className="inline-block h-2.5 w-2.5 rounded-full bg-stone-400 align-middle" /> 용품(핫팩·파스)
-        </span>
-        <span>숫자는 있어야 할 수. 유통기한은 남은 것 중 가장 빠른 것. 30일 안 붉게, 60일 안 노랗게.</span>
-      </p>
+      <p className="text-xs text-stone-500">숫자는 있어야 할 수. 유통기한은 남은 것 중 가장 빠른 것. 30일 안 붉게, 60일 안 노랗게. 보험약은 {clinicInfo(clinic).short} 것만 보입니다.</p>
 
-      {manage && <ItemManager onChanged={load} />}
+      {manage && <ItemManager onChanged={load} clinic={clinic} />}
 
-      <section className="space-y-2">
-        {statuses.map((s) => (
-          <CabinetRow key={s.item.id} status={s} today={today} onDone={load} />
-        ))}
-        {statuses.length === 0 && (
-          <p className="rounded-lg border border-stone-200 bg-white p-6 text-center text-stone-600">품목이 없습니다. [품목 관리]에서 추가하세요.</p>
-        )}
-      </section>
+      {CABINET_KINDS.map((k) => {
+        const list = statuses.filter((s) => s.item.kind === k.value);
+        const short = list.filter((s) => s.stock < s.item.min_stock).length;
+        const open = openKinds[k.value] ?? true;
+        return (
+          <section key={k.value} className="space-y-2">
+            <button type="button" onClick={() => setOpenKinds((o) => ({ ...o, [k.value]: !open }))} className="flex w-full flex-wrap items-center gap-2 text-left">
+              <span className={`inline-block h-2.5 w-2.5 rounded-full ${k.dot}`} />
+              <h2 className="font-bold">{k.label}</h2>
+              <span className="text-xs text-stone-500">{list.length}개 품목{short > 0 ? ` · 부족 ${short}` : ""} · {k.hint}</span>
+              <span className="ml-auto text-xs text-stone-400">{open ? "접기" : "펼치기"}</span>
+            </button>
+            {open && list.map((s) => <CabinetRow key={s.item.id} status={s} today={today} onDone={load} />)}
+            {open && list.length === 0 && (
+              <p className="rounded-lg border border-dashed border-stone-200 bg-white p-3 text-center text-xs text-stone-500">
+                아직 품목이 없습니다. [품목 관리]에서 {k.label} 품목을 추가하세요.
+              </p>
+            )}
+          </section>
+        );
+      })}
 
       <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
         <div className="mb-2 flex items-baseline justify-between">

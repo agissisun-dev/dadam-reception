@@ -1,6 +1,7 @@
 import { getSupabase } from "./supabaseClient";
 import { addPrescription, createPatient, findPatientByPhone } from "./patients";
 import { recordIn, recordOut } from "./cabinet";
+import { extractPacks } from "./cabinetRules";
 import { daysFromPacks } from "./packs";
 import { isValidPhone } from "./phone";
 import { createJobs, deleteJobsOfEntry } from "./brew";
@@ -38,8 +39,9 @@ export async function upsertCode(input: LedgerCodeInput & { id?: number }): Prom
     code: input.code.trim(),
     name: input.name.trim(),
     group: input.group,
-    cabinet_item_id: input.group === "cabinet" ? input.cabinet_item_id : null,
+    cabinet_item_id: input.group === "cabinet" || input.group === "extract" ? input.cabinet_item_id : null,
     decoction_kind: input.group === "decoction" ? input.decoction_kind : null,
+    per_day: input.group === "extract" ? input.per_day : null,
     active: input.active,
     sort_order: input.sort_order,
   };
@@ -263,6 +265,18 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
           memo: `장부 ${input.day} #${input.seq}`,
         });
         moveId = mv.id;
+      } else if (i.group === "extract" && i.cabinet_item_id && !i.unknown && extractPacks(i.days, i.per_day) > 0) {
+        // 보험약(엑스제) 자동 차감: "오적산2일" → 2일 × 하루 포 수(기본 3) 포 나감 (V15)
+        const mv = await recordOut({
+          item_id: i.cabinet_item_id,
+          qty: extractPacks(i.days, i.per_day),
+          purpose: i.free ? "service" : "sale",
+          patient_id: patientId,
+          patient_name: name,
+          staff_name: input.staff_name,
+          memo: `장부 ${input.day} #${input.seq} ${i.raw}`,
+        });
+        moveId = mv.id;
       }
       rows.push({
         entry_id: entry.id,
@@ -348,10 +362,11 @@ export async function deleteEntry(entry: LedgerEntryWithItems, staff: string): P
     throw new Error("이 줄의 해피콜에 이미 연락 기록이 있어 지울 수 없습니다. 정정 줄로 남겨 주세요.");
   }
   for (const i of entry.items) {
-    if (i.cabinet_move_id && i.group === "cabinet") {
+    if (i.cabinet_move_id && (i.group === "cabinet" || i.group === "extract")) {
       const code = i.code;
       const itemId = await cabinetItemOfMove(i.cabinet_move_id);
-      if (itemId) await recordIn({ item_id: itemId, qty: i.qty, expiry: null, staff_name: staff, memo: `장부 줄 삭제 되돌림 (${entry.day} #${entry.seq} ${code})` });
+      const qty = i.group === "extract" ? await cabinetMoveQty(i.cabinet_move_id) : i.qty;
+      if (itemId && qty > 0) await recordIn({ item_id: itemId, qty, expiry: null, staff_name: staff, memo: `장부 줄 삭제 되돌림 (${entry.day} #${entry.seq} ${code})` });
     }
   }
   if (list.length > 0) {
@@ -376,6 +391,11 @@ export async function renumberAfterDelete(day: string, deletedSeq: number): Prom
     const { error: e } = await sb.from("ledger_entries").update({ seq: r.seq - 1 }).eq("id", r.id);
     if (e) fail("번호 정리", e.message);
   }
+}
+
+async function cabinetMoveQty(moveId: number): Promise<number> {
+  const { data } = await getSupabase().from("cabinet_moves").select("qty").eq("id", moveId).maybeSingle();
+  return (data as { qty: number } | null)?.qty ?? 0;
 }
 
 async function cabinetItemOfMove(moveId: number): Promise<number | null> {

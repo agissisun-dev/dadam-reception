@@ -28,6 +28,8 @@ export type ParsedItem = {
   split: number | null; // 분할 수령 횟수
   cabinet_item_id: number | null;
   decoction_kind: DecoctionKind | null;
+  /** 엑스제 하루 포 수(약어 표). 보험약 자동 차감용(V15) */
+  per_day: number | null;
   /** (F) = free, 무상으로 드린 것. 약장 나감 사유는 서비스. 접수실 2026-10-05 */
   free: boolean;
   unknown: boolean;
@@ -114,7 +116,7 @@ export function parseNote(raw: string, codes: LedgerCode[]): { items: ParsedItem
     if (!found) {
       items.push({
         raw: token, code: token, name: token, group: "other", qty: 1,
-        amount: null, days: null, split: null, cabinet_item_id: null, decoction_kind: null, free, unknown: true,
+        amount: null, days: null, split: null, cabinet_item_id: null, decoction_kind: null, per_day: null, free, unknown: true,
       });
       continue;
     }
@@ -139,6 +141,7 @@ function make(
     split: p.split ?? null,
     cabinet_item_id: c.cabinet_item_id,
     decoction_kind: c.decoction_kind,
+    per_day: c.per_day ?? null,
     free: p.free ?? false,
     unknown: false,
   };

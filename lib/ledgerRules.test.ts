@@ -10,7 +10,7 @@ describe("ledger insurance categories", () => {
 });
 
 const c = (code: string, name: string, group: LedgerCode["group"], extra: Partial<LedgerCode> = {}): LedgerCode => ({
-  id: 0, code, name, group, cabinet_item_id: null, decoction_kind: null, active: true, sort_order: 0, created_at: "", ...extra,
+  id: 0, code, name, group, cabinet_item_id: null, decoction_kind: null, per_day: null, active: true, sort_order: 0, created_at: "", ...extra,
 });
 const CODES: LedgerCode[] = [
   c("전", "전침", "treatment"),
@@ -151,5 +151,13 @@ describe("합계·번호·금액", () => {
       { name: "공진단", group: "cabinet", qty: 5 },
       { name: "전침", group: "treatment", qty: 2 },
     ]);
+  });
+});
+
+describe("엑스제 하루 포 수 (V15)", () => {
+  it("약어 표의 per_day·보험약 품목이 항목에 따라온다", () => {
+    const codes = [c("오적산", "오적산", "extract", { cabinet_item_id: 7, per_day: 3 })];
+    const { items } = parseNote("오적산2일", codes);
+    expect(items[0]).toMatchObject({ code: "오적산", days: 2, per_day: 3, cabinet_item_id: 7 });
   });
 });

@@ -166,7 +166,8 @@ export type SmsLog = {
 };
 
 /** 약장 품목. 약(medicine)·외용제(topical)·용품(supply: 핫팩·한방파스 등). */
-export type CabinetKind = "medicine" | "topical" | "supply";
+/** 재고 5칸(V15): 다담환약 · 외용제 · 용품 · 보험약(엑스제, 병원별·포) · 약침 */
+export type CabinetKind = "medicine" | "topical" | "supply" | "insured" | "yakchim";
 export type CabinetItem = {
   id: number;
   name: string;
@@ -174,6 +175,10 @@ export type CabinetItem = {
   min_stock: number;
   active: boolean;
   sort_order: number;
+  /** null = 두 병원 공통. 보험약은 병원별(V15) */
+  clinic: "S" | "N" | null;
+  /** 개 · 포(보험약) · 병(약침) 등 */
+  unit: string;
   created_at: string;
 };
 export type CabinetItemInput = Omit<CabinetItem, "id" | "created_at">;
@@ -213,6 +218,8 @@ export type LedgerCode = {
   group: LedgerGroup;
   cabinet_item_id: number | null;
   decoction_kind: DecoctionKind | null;
+  /** 엑스제: 하루 포 수(없으면 3). "오적산2일" → 2 × per_day 포 나감 (V15) */
+  per_day: number | null;
   active: boolean;
   sort_order: number;
   created_at: string;

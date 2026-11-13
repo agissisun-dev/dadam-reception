@@ -21,6 +21,7 @@ const REVIEW_HINT = "리뷰 증정 기준: 소화기 환자는 소합원 3개 ·
 
 export default function CabinetRow({ status, today, onDone }: { status: CabinetStatus; today: string; onDone: () => void }) {
   const { item, stock, nearest, moves } = status;
+  const unit = item.unit || "개";
   const [mode, setMode] = useState<Mode>(null);
   const [staff, setStaff] = useState<StaffName>(() => (typeof window === "undefined" ? STAFF_NAMES[0] : loadLastStaff()));
   const [qty, setQty] = useState(1);
@@ -101,7 +102,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
       <div className="flex flex-wrap items-center gap-3">
         <span className={`inline-block h-2.5 w-2.5 rounded-full ${dot}`} title={kindInfo(item.kind).label} />
         <span className="font-medium">{item.name}</span>
-        <span className={`text-lg font-semibold ${short ? "text-red-700" : ""}`}>{stock}개</span>
+        <span className={`text-lg font-semibold ${short ? "text-red-700" : ""}`}>{stock}{unit}</span>
         {short && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700">부족</span>}
         <span className={`text-xs ${ex.cls}`}>{ex.text}</span>
         <span className="ml-auto flex gap-1.5">
@@ -195,7 +196,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
                 })
               }
             >
-              {qty}개 나감 저장
+              {qty}{unit} 나감 저장
             </button>
             <button className={BTN} onClick={reset}>
               취소
@@ -209,13 +210,13 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
           {inStep === 1 && (
             <>
               <p className="text-sm">
-                지금 실제로 몇 개 남았나요? <span className="text-stone-500">(있어야 할 수 {stock}개)</span>
+                지금 실제로 몇 {unit} 남았나요? <span className="text-stone-500">(있어야 할 수 {stock}{unit})</span>
               </p>
               <input type="number" min={0} value={counted} onChange={(e) => setCounted(e.target.value)} className="w-28 rounded border border-stone-300 px-2 py-1.5 text-sm" placeholder="센 수" />
               {first && <p className="text-sm text-stone-600">처음 등록이라 사유 없이 저장됩니다. 유통기한까지 적으려면 [처음 수량 넣기]를 쓰세요.</p>}
               {!first && diff !== null && diff !== 0 && (
                 <p className="text-sm text-red-700">
-                  {Math.abs(diff)}개 {diff > 0 ? "많습니다" : "모자랍니다"}. 사유를 적어야 저장됩니다.
+                  {Math.abs(diff)}{unit} {diff > 0 ? "많습니다" : "모자랍니다"}. 사유를 적어야 저장됩니다.
                 </p>
               )}
               {!first && diff === 0 && <p className="text-sm text-green-700">장부와 같습니다.</p>}
@@ -256,7 +257,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
               <p className="text-sm text-stone-600">
                 {first
                   ? "처음이라 지금 약장에 있는 수량과 유통기한을 그대로 적습니다. 기한이 다른 묶음이 섞여 있으면 묶음마다 따로 넣으세요."
-                  : `센 수 ${countedNum}개${diff !== 0 ? ` (차이 ${diff! > 0 ? "+" : ""}${diff}, 사유: ${memo})` : ""} 기록 뒤, 새로 들어온 것을 적습니다.`}
+                  : `센 수 ${countedNum}${unit}${diff !== 0 ? ` (차이 ${diff! > 0 ? "+" : ""}${diff}, 사유: ${memo})` : ""} 기록 뒤, 새로 들어온 것을 적습니다.`}
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
@@ -282,7 +283,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
                     })
                   }
                 >
-                  {first ? `${qty}개로 시작` : `${qty}개 입고 저장`}
+                  {first ? `${qty}${unit}로 시작` : `${qty}${unit} 입고 저장`}
                 </button>
                 <button className={BTN} onClick={() => (first ? reset() : setInStep(1))}>
                   {first ? "취소" : "이전"}
@@ -328,7 +329,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
             </button>
             {status.lots.length > 0 && (
               <span className="ml-auto text-xs text-stone-500">
-                남은 묶음: {status.lots.map((l) => `${l.expiry ?? "기한 없음"} ${l.qty}개`).join(" · ")}
+                남은 묶음: {status.lots.map((l) => `${l.expiry ?? "기한 없음"} ${l.qty}${unit}`).join(" · ")}
               </span>
             )}
           </div>
@@ -337,7 +338,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
               <li key={m.id} className={`flex flex-wrap gap-2 py-1 ${m.kind === "count" && m.diff ? "text-red-700" : "text-stone-600"}`}>
                 <span>{m.created_at.slice(0, 10)}</span>
                 <span className="font-medium">{KIND_LABEL[m.kind]}</span>
-                <span>{m.kind === "count" ? `${m.qty}개로 맞춤${m.diff ? ` (${m.diff > 0 ? "+" : ""}${m.diff})` : ""}` : `${m.qty}개`}</span>
+                <span>{m.kind === "count" ? `${m.qty}${unit}로 맞춤${m.diff ? ` (${m.diff > 0 ? "+" : ""}${m.diff})` : ""}` : `${m.qty}${unit}`}</span>
                 {m.purpose && <span>{purposeLabel(m.purpose)}</span>}
                 {m.patient_name && <span>{m.patient_name}</span>}
                 {m.expiry && <span>기한 {m.expiry}</span>}

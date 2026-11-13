@@ -16,7 +16,15 @@ export async function listCabinetItems(includeInactive = false): Promise<Cabinet
 
 export async function createCabinetItem(input: CabinetItemInput): Promise<CabinetItem> {
   const { data, error } = await getSupabase().from("cabinet_items").insert(input).select().single();
-  if (error) fail("품목 추가", error.message);
+  if (error) {
+    // V15 SQL 전(clinic·unit 칸 없음): 기본 칸만 넣는다. 보험약·약침은 V15 뒤에만.
+    if (/clinic|unit/.test(error.message) && input.kind !== "insured" && input.kind !== "yakchim") {
+      const { clinic: _c, unit: _u, ...legacy } = input; // eslint-disable-line @typescript-eslint/no-unused-vars
+      const retry = await getSupabase().from("cabinet_items").insert(legacy).select().single();
+      if (!retry.error) return retry.data as CabinetItem;
+    }
+    fail("품목 추가", error.message.includes("clinic") || error.message.includes("unit") ? "재고 5칸 표(supabase/schema-v15-cabinet-kinds.sql)를 먼저 실행해 주세요." : error.message);
+  }
   return data as CabinetItem;
 }
 

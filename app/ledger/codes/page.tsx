@@ -5,6 +5,7 @@ import Link from "next/link";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import { listCabinetItems } from "@/lib/cabinet";
+import { DEFAULT_EXTRACT_PER_DAY } from "@/lib/cabinetRules";
 import { listCodes, upsertCode } from "@/lib/ledger";
 import { GROUP_LABEL, GROUP_ORDER, chipClass } from "@/lib/ledgerRules";
 import type { CabinetItem, DecoctionKind, LedgerCode, LedgerGroup } from "@/lib/types";
@@ -17,11 +18,13 @@ function Row({ c, cabinetItems, onSaved }: { c: LedgerCode; cabinetItems: Cabine
   const [group, setGroup] = useState<LedgerGroup>(c.group);
   const [cabinetId, setCabinetId] = useState<number | "">(c.cabinet_item_id ?? "");
   const [kind, setKind] = useState<DecoctionKind>(c.decoction_kind ?? "general");
+  const [perDay, setPerDay] = useState<number | "">(c.per_day ?? "");
   const [active, setActive] = useState(c.active);
   const [error, setError] = useState<string | null>(null);
   const dirty =
     name !== c.name || group !== c.group || active !== c.active ||
-    (group === "cabinet" && (cabinetId === "" ? null : Number(cabinetId)) !== c.cabinet_item_id) ||
+    ((group === "cabinet" || group === "extract") && (cabinetId === "" ? null : Number(cabinetId)) !== c.cabinet_item_id) ||
+    (group === "extract" && (perDay === "" ? null : Number(perDay)) !== c.per_day) ||
     (group === "decoction" && kind !== c.decoction_kind);
 
   async function save() {
@@ -29,8 +32,9 @@ function Row({ c, cabinetItems, onSaved }: { c: LedgerCode; cabinetItems: Cabine
     try {
       await upsertCode({
         id: c.id, code: c.code, name, group,
-        cabinet_item_id: group === "cabinet" && cabinetId !== "" ? Number(cabinetId) : null,
+        cabinet_item_id: (group === "cabinet" || group === "extract") && cabinetId !== "" ? Number(cabinetId) : null,
         decoction_kind: group === "decoction" ? kind : null,
+        per_day: group === "extract" && perDay !== "" ? Number(perDay) : null,
         active, sort_order: c.sort_order,
       });
       onSaved();
@@ -51,10 +55,25 @@ function Row({ c, cabinetItems, onSaved }: { c: LedgerCode; cabinetItems: Cabine
       {group === "cabinet" && (
         <select value={cabinetId} onChange={(e) => setCabinetId(e.target.value === "" ? "" : Number(e.target.value))} className={SEL}>
           <option value="">약장 품목 (연결 안 함)</option>
-          {cabinetItems.map((i) => (
+          {cabinetItems.filter((i) => i.kind !== "insured").map((i) => (
             <option key={i.id} value={i.id}>{i.name}</option>
           ))}
         </select>
+      )}
+      {group === "extract" && (
+        <>
+          <select value={cabinetId} onChange={(e) => setCabinetId(e.target.value === "" ? "" : Number(e.target.value))} className={SEL} title="보험약 재고에서 자동으로 뺍니다">
+            <option value="">보험약 재고 (연결 안 함)</option>
+            {cabinetItems.filter((i) => i.kind === "insured").map((i) => (
+              <option key={i.id} value={i.id}>{i.name}</option>
+            ))}
+          </select>
+          <label className="flex items-center gap-1 text-xs text-stone-600">
+            하루
+            <input type="number" min={1} value={perDay} onChange={(e) => setPerDay(e.target.value === "" ? "" : Math.max(1, Number(e.target.value)))} placeholder={String(DEFAULT_EXTRACT_PER_DAY)} className={`${INP} w-14`} />
+            포
+          </label>
+        </>
       )}
       {group === "decoction" && (
         <select value={kind} onChange={(e) => setKind(e.target.value as DecoctionKind)} className={SEL}>
@@ -83,6 +102,7 @@ function Codes() {
   const [newGroup, setNewGroup] = useState<LedgerGroup>("treatment");
   const [newCabinet, setNewCabinet] = useState<number | "">("");
   const [newKind, setNewKind] = useState<DecoctionKind>("general");
+  const [newPerDay, setNewPerDay] = useState<number | "">("");
 
   const load = useCallback(() => {
     Promise.all([listCodes(true), listCabinetItems()])
@@ -101,8 +121,9 @@ function Codes() {
     try {
       await upsertCode({
         code: newCode, name: newName || newCode, group: newGroup,
-        cabinet_item_id: newGroup === "cabinet" && newCabinet !== "" ? Number(newCabinet) : null,
+        cabinet_item_id: (newGroup === "cabinet" || newGroup === "extract") && newCabinet !== "" ? Number(newCabinet) : null,
         decoction_kind: newGroup === "decoction" ? newKind : null,
+        per_day: newGroup === "extract" && newPerDay !== "" ? Number(newPerDay) : null,
         active: true, sort_order: 50,
       });
       setNewCode("");
@@ -120,7 +141,7 @@ function Codes() {
         <Link href="/ledger" className="text-sm text-stone-500 underline">오늘 장부로</Link>
       </div>
       <p className="text-sm text-stone-600">
-        기타 칸에 치는 약어와 그 뜻입니다. 묶음에 따라 앱이 하는 일이 다릅니다. <b>탕약</b>은 처방·해피콜을 만들고, <b>약장 품목</b>은 약장 나감을 남기고, 치료·엑스제·기타는 세기만 합니다.
+        기타 칸에 치는 약어와 그 뜻입니다. 묶음에 따라 앱이 하는 일이 다릅니다. <b>탕약</b>은 처방·해피콜을 만들고, <b>약장 품목</b>은 약장 나감을 남기고, <b>엑스제</b>는 보험약 재고에 연결하면 일수 × 하루 포 수만큼 자동으로 빼고, 치료·기타는 세기만 합니다.
         안 쓰는 약어는 지우지 말고 &ldquo;사용 중&rdquo;을 끄세요. 괄호 숫자는 만원 금액, 숫자+T는 개수, #2는 2회 분할 수령으로 읽습니다.
       </p>
       {error && <p className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-700">{error}</p>}
@@ -138,10 +159,25 @@ function Codes() {
           {newGroup === "cabinet" && (
             <select value={newCabinet} onChange={(e) => setNewCabinet(e.target.value === "" ? "" : Number(e.target.value))} className={SEL}>
               <option value="">약장 품목 (연결 안 함)</option>
-              {cabinetItems.map((i) => (
+              {cabinetItems.filter((i) => i.kind !== "insured").map((i) => (
                 <option key={i.id} value={i.id}>{i.name}</option>
               ))}
             </select>
+          )}
+          {newGroup === "extract" && (
+            <>
+              <select value={newCabinet} onChange={(e) => setNewCabinet(e.target.value === "" ? "" : Number(e.target.value))} className={SEL}>
+                <option value="">보험약 재고 (연결 안 함)</option>
+                {cabinetItems.filter((i) => i.kind === "insured").map((i) => (
+                  <option key={i.id} value={i.id}>{i.name}</option>
+                ))}
+              </select>
+              <label className="flex items-center gap-1 text-xs text-stone-600">
+                하루
+                <input type="number" min={1} value={newPerDay} onChange={(e) => setNewPerDay(e.target.value === "" ? "" : Math.max(1, Number(e.target.value)))} placeholder={String(DEFAULT_EXTRACT_PER_DAY)} className={`${INP} w-14`} />
+                포
+              </label>
+            </>
           )}
           {newGroup === "decoction" && (
             <select value={newKind} onChange={(e) => setNewKind(e.target.value as DecoctionKind)} className={SEL}>

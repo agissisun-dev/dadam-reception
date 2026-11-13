@@ -62,6 +62,7 @@ function UnknownCodeForm({
         group,
         cabinet_item_id: group === "cabinet" && cabinetId !== "" ? Number(cabinetId) : null,
         decoction_kind: group === "decoction" ? kind : null,
+        per_day: null,
         active: true,
         sort_order: 50,
       });

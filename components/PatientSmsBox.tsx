@@ -10,7 +10,6 @@ import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib
 import { PUBLIC_CLINIC_NAME } from "@/lib/appointmentRules";
 import type { Patient, Template } from "@/lib/types";
 
-const PRIMARY = "rounded bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-50";
 
 /**
  * 환자 찾기에서 바로 문자 보내기 (사용자 2026-11-13: "해피콜이든 재진콜에 안 떠도, 환자 검색해서 바로 보낼 수 있게").

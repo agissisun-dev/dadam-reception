@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import PrescriptionForm from "@/components/PrescriptionForm";
@@ -29,6 +30,8 @@ function emptyPatient(): PatientInput {
 }
 
 function NewPatient() {
+  const params = useSearchParams();
+  const initialPhone = params.get("phone") ?? "";
   const nameInput = useRef<HTMLInputElement>(null);
   const focusNextName = useRef(true);
   const phoneRevision = useRef(0);
@@ -40,7 +43,7 @@ function NewPatient() {
   const [registration, setRegistration] = useState(0);
   const [success, setSuccess] = useState<Patient | null>(null);
   const [prescriptionWarning, setPrescriptionWarning] = useState<Patient | null>(null);
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(initialPhone);
   const [checked, setChecked] = useState<null | { existing: Patient | null; phone: string }>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<PatientInput>(emptyPatient);
@@ -56,6 +59,15 @@ function NewPatient() {
     // Ignore lookups that finish after leaving this page.
     phoneRevision.current += 1;
   }, []);
+
+  // 환자 찾기에서 "이 번호로 새로 등록"으로 들어오면 번호가 채워진 채 바로 조회한다.
+  const checkedInitial = useRef(false);
+  useEffect(() => {
+    if (checkedInitial.current || normalizePhone(initialPhone).length < 10) return;
+    checkedInitial.current = true;
+    check(initialPhone);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPhone]);
 
   async function check(value: string = phone) {
     if (saveInFlight.current || partialPatient.current) return;
@@ -165,7 +177,7 @@ function NewPatient() {
     <main className="mx-auto max-w-2xl space-y-6 p-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-bold">환자 등록</h1>
-        <Link href="/patients" className="text-sm underline">환자 목록 · 조회</Link>
+        <Link href="/patients" className="text-sm underline">환자등록·찾기로</Link>
       </div>
 
       <div role="status" aria-live="polite" aria-atomic="true">
@@ -349,7 +361,9 @@ export default function NewPatientPage() {
       {() => (
         <>
           <AppHeader />
-          <NewPatient />
+          <Suspense fallback={<p className="p-6 text-stone-500">불러오는 중…</p>}>
+            <NewPatient />
+          </Suspense>
         </>
       )}
     </AuthGate>

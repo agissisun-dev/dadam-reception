@@ -16,7 +16,7 @@ const MENU: { href: string; label: string }[] = [
   { href: "/brew", label: "약대장" },
   { href: "/appointments", label: "예약" },
   { href: "/happy-calls", label: "해피콜" },
-  { href: "/patients", label: "환자등록" },
+  { href: "/patients", label: "환자등록·찾기" },
   { href: "/cabinet", label: "재고현황" },
   { href: "/tasks/new", label: "업무 등록" },
   { href: "/templates", label: "문구 틀" },

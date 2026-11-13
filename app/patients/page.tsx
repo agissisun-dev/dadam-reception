@@ -5,12 +5,14 @@ import Link from "next/link";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import PhoneText from "@/components/PhoneText";
+import PatientSmsBox from "@/components/PatientSmsBox";
 import { listPatients } from "@/lib/patients";
 import { CONDITIONS, conditionLabel } from "@/lib/conditions";
 import type { Condition, Patient } from "@/lib/types";
 
 function List() {
   const [q, setQ] = useState("");
+  const [smsFor, setSmsFor] = useState<number | null>(null);
   const [cond, setCond] = useState<Condition | "">("");
   const [excluded, setExcluded] = useState(false);
   const [rows, setRows] = useState<Patient[] | null>(null);
@@ -76,8 +78,18 @@ function List() {
                 <span className="ml-auto text-sm">
                   <PhoneText phone={p.phone} />
                 </span>
+                {!p.excluded_at && (
+                  <button type="button" onClick={() => setSmsFor((v) => (v === p.id ? null : p.id))} className="rounded border border-[#16863b] px-2 py-0.5 text-xs font-bold text-[#0f3d23]">
+                    문자
+                  </button>
+                )}
               </div>
               {p.memo && <p className="mt-1 text-xs text-stone-500">{p.memo}</p>}
+              {smsFor === p.id && (
+                <div className="mt-2">
+                  <PatientSmsBox patient={p} onClose={() => setSmsFor(null)} />
+                </div>
+              )}
             </li>
           ))}
         </ul>

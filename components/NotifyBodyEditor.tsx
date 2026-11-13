@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSettings, saveSettings } from "@/lib/appointments";
-import { defaultNotifyBody, renderAppointmentTemplate } from "@/lib/appointmentRules";
+import { defaultNotifyBody, hasDateTimePlaceholders, renderAppointmentTemplate } from "@/lib/appointmentRules";
 import { fetchCurrentClinic, type ClinicCode } from "@/lib/clinic";
 import { todayISO } from "@/lib/dates";
 
@@ -36,6 +36,7 @@ export default function NotifyBodyEditor({ initial, onSaved, onClose }: { initia
   }, [initial]);
 
   const preview = renderAppointmentTemplate(body, { patient_name: "홍길동", day: todayISO(), time: "16:30" }, clinic);
+  const missingDateTime = loaded && !hasDateTimePlaceholders(body);
 
   async function save() {
     setBusy(true);
@@ -63,10 +64,13 @@ export default function NotifyBodyEditor({ initial, onSaved, onClose }: { initia
         <>
           <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} className="mt-2 w-full rounded border border-stone-300 px-2 py-1 text-sm" />
           <button type="button" className="mt-1 text-xs underline" onClick={() => setBody(defaultNotifyBody(clinic))}>기본 문구로 되돌리기</button>
-          <p className="mt-1 text-[11px] text-stone-500">미리 보기 (샘플은 저장되지 않습니다)</p>
+          <p className="mt-1 text-[11px] text-stone-500">예시 — 이름·날짜·시간은 오늘 기준 보기용이고, 실제 문자는 예약마다 그 환자·그 날짜·그 시간으로 나갑니다.</p>
           <p className="whitespace-pre-wrap rounded bg-stone-50 px-3 py-2 text-xs">{preview}</p>
+          {missingDateTime && (
+            <p className="mt-1 text-xs font-bold text-red-700">문구에 {"{날짜}"}와 {"{시간}"}이 없어서 예약 날짜·시간이 안 들어갑니다. 넣어 주세요.</p>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button type="button" className={PRIMARY} disabled={busy} onClick={save}>저장</button>
+            <button type="button" className={PRIMARY} disabled={busy || missingDateTime} onClick={save}>저장</button>
             {onClose && <button type="button" className={BTN} onClick={onClose}>닫기</button>}
             {savedAt && <span className="text-xs text-[#0f3d23]">저장했습니다 ({savedAt}). 다음 예약부터 이 글로 나옵니다.</span>}
           </div>

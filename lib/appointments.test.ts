@@ -22,8 +22,11 @@ describe("예약 설정의 병원별 기본 문구", () => {
   it("예전 DB 기본 문구만 갱신하고 사용자 문구는 보존", async () => {
     mocks.row = { clinic: "S", notify_body: LEGACY_NOTIFY_BODY, auto_notify: true };
     expect(await getSettings()).toMatchObject({ clinic: "S", notify_body: defaultNotifyBody("S"), auto_notify: true });
-    mocks.row = { clinic: "N", notify_body: "직접 쓴 {이름}님 문구" };
-    expect((await getSettings()).notify_body).toBe("직접 쓴 {이름}님 문구");
+    mocks.row = { clinic: "N", notify_body: "직접 쓴 {이름}님 {날짜} {시간} 문구" };
+    expect((await getSettings()).notify_body).toBe("직접 쓴 {이름}님 {날짜} {시간} 문구");
+    // 날짜·시간 자리표가 없는 글은 예약 문구로 못 쓰므로 기본 문구로 (다담에스 문구에 날짜·시간이 안 들어가던 문제)
+    mocks.row = { clinic: "S", notify_body: "직접 쓴 {이름}님 문구" };
+    expect((await getSettings()).notify_body).toBe(defaultNotifyBody("S"));
   });
   it("문구만 저장할 때 샘플이 아닌 자리표와 기존 자동문자 상태 저장", async () => {
     mocks.row = { clinic: "N", notify_body: LEGACY_NOTIFY_BODY, auto_notify: false, remind_enabled: false };

@@ -1,7 +1,7 @@
 import { getSupabase } from "./supabaseClient";
 import { normalizePhone } from "./phone";
 import { DEFAULT_REMIND_BODY } from "./appointmentNotifyRules";
-import { defaultNotifyBody, LEGACY_NOTIFY_BODY } from "./appointmentRules";
+import { LEGACY_NOTIFY_BODIES, LEGACY_NOTIFY_BODY, defaultNotifyBody, hasDateTimePlaceholders } from "./appointmentRules";
 import { fetchCurrentClinic } from "./clinic";
 import type { Appointment, AppointmentKind, AppointmentSettings, ClinicDayOverride } from "./types";
 
@@ -27,7 +27,10 @@ export async function getSettings(): Promise<AppointmentSettings> {
   const clinic = data?.clinic === "N" ? "N" : data?.clinic === "S" ? "S" : await fetchCurrentClinic();
   const settings: AppointmentSettings = { ...DEFAULT_SETTINGS, ...(data as Partial<AppointmentSettings> | null), clinic };
   // 예전 DB 기본 문구만 새 자리표 틀로 바꾼다. 사용자 문구·자동 발송 설정은 보존.
-  if (!settings.notify_body?.trim() || settings.notify_body === LEGACY_NOTIFY_BODY) settings.notify_body = defaultNotifyBody(clinic);
+  if (!settings.notify_body?.trim() || settings.notify_body === LEGACY_NOTIFY_BODY || LEGACY_NOTIFY_BODIES.includes(settings.notify_body) || !hasDateTimePlaceholders(settings.notify_body)) {
+    settings.notify_body = defaultNotifyBody(clinic);
+  }
+  if (!settings.remind_body?.trim() || !hasDateTimePlaceholders(settings.remind_body)) settings.remind_body = DEFAULT_REMIND_BODY;
   return settings;
 }
 

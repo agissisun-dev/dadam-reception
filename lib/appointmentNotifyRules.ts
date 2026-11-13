@@ -1,7 +1,7 @@
 import { normalizePhone } from "./phone";
 
 /** 전날 리마인더 기본 문구. 자리표는 예약 안내 문구와 같다: {이름} {병원} {날짜} {시간} */
-export const DEFAULT_REMIND_BODY = "{이름}님, 내일 {날짜} {시간} {병원} 예약 안내드립니다. 변경이 필요하시면 전화 주세요.";
+export const DEFAULT_REMIND_BODY = "{이름}님, {병원}입니다. 내일 {날짜} {시간} 예약입니다. 변경 사항 있으면 {전화번호}로 연락 주세요. 병원에서 뵙겠습니다^^";
 
 /** 휴대폰 번호(01로 시작, 10~11자리)인가 */
 export function isMobile(phone: string | null | undefined): boolean {

@@ -6,6 +6,7 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import PhoneText from "@/components/PhoneText";
 import PrescriptionForm from "@/components/PrescriptionForm";
+import PatientSmsBox from "@/components/PatientSmsBox";
 import StaffSelect from "@/components/StaffSelect";
 import {
   addPrescription,
@@ -66,6 +67,7 @@ function Detail() {
   const [replyText, setReplyText] = useState("");
   const [askDoctor, setAskDoctor] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [smsOpen, setSmsOpen] = useState(false);
   const [adding, setAdding] = useState<boolean>(
     () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("add") === "1",
   );
@@ -163,6 +165,11 @@ function Detail() {
               <button className={BTN} onClick={() => startEdit(patient)}>
                 수정
               </button>
+              {!patient.excluded_at && (
+                <button className={`${BTN} border-[#16863b] font-bold text-[#0f3d23]`} onClick={() => setSmsOpen((v) => !v)}>
+                  문자
+                </button>
+              )}
               {patient.excluded_at ? (
                 <button className={BTN} onClick={() => run(() => unexcludePatient(patient.id))}>
                   제외 해제
@@ -315,7 +322,12 @@ function Detail() {
           </div>
         )}
 
-        {adding && (
+        {smsOpen && patient && (
+              <div className="mt-3">
+                <PatientSmsBox patient={patient} onClose={() => setSmsOpen(false)} />
+              </div>
+            )}
+            {adding && (
           <div className="mt-3 border-t border-stone-200 pt-3">
             <PrescriptionForm
               initial={{ receive_date: addDays(todayISO(), 3), days: 0, packs: null, per_day: DEFAULT_PER_DAY, memo: "" }}

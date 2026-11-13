@@ -63,17 +63,18 @@ describe("parseNaverPaste", () => {
 
 
 describe("노원 진료시간", () => {
-  it("화·목 21시, 수·금 19시와 기존 시작·점심·월·토 보존", () => {
+  it("화·목 21시(예약은 20시 칸까지), 월·수·금 19시, 점심 13~14, 토 15시 (사용자 2026-11-13)", () => {
     for (const d of ["2026-11-17", "2026-11-19"]) {
-      expect(dayHours(d, "N")).toMatchObject({ open: true, start: "09:30", end: "21:00", lunchStart: "13:00", lunchEnd: "14:00" });
-      expect(slotsOf(dayHours(d, "N"), 30).at(-1)).toBe("20:30");
+      expect(dayHours(d, "N")).toMatchObject({ open: true, start: "09:30", end: "21:00", lunchStart: "13:00", lunchEnd: "14:00", bookUntil: "20:00" });
+      expect(slotsOf(dayHours(d, "N"), 30).at(-1)).toBe("20:00");
+      expect(slotsOf(dayHours(d, "N"), 15).at(-1)).toBe("20:00");
     }
-    for (const d of ["2026-11-18", "2026-11-20"]) {
-      expect(dayHours(d, "N")).toMatchObject({ open: true, end: "19:00" });
+    for (const d of ["2026-11-16", "2026-11-18", "2026-11-20"]) {
+      expect(dayHours(d, "N")).toMatchObject({ open: true, end: "19:00", bookUntil: null });
       expect(slotsOf(dayHours(d, "N"), 30).at(-1)).toBe("18:30");
-      expect(dayHours(d, "S").open).toBe(false);
     }
-    expect(dayHours("2026-11-16", "N")).toMatchObject({ open: true, start: "09:30", end: "18:00" });
+    expect(dayHours("2026-11-18", "S").open).toBe(false);
+    expect(dayHours("2026-11-20", "S").open).toBe(false);
     expect(dayHours("2026-11-21", "N")).toMatchObject({ open: true, end: "15:00", lunchStart: null });
     expect(dayHours("2026-11-22", "N").open).toBe(false);
     expect(dayHours("2026-12-25", "N").open).toBe(false);
@@ -83,13 +84,13 @@ describe("노원 진료시간", () => {
 describe("예약 문구 렌더링", () => {
   const a = { patient_name: "박정희", day: "2026-11-19", time: "16:30" };
   it("실제 이름·날짜·요일·시간·노원 전화번호 치환", () => {
-    expect(renderAppointmentTemplate(defaultNotifyBody("N"), a, "N")).toBe("안녕하세요. 노원다담한의원입니다. 박정희님 11월 19일 목요일 4시 30분에 뵙겠습니다. 변동사항 있으면 전화 부탁드립니다. 02-949-3900.");
+    expect(renderAppointmentTemplate(defaultNotifyBody("N"), a, "N")).toBe("박정희님, 노원다담한의원입니다. 11월 19일 목요일 4시 30분 예약 확인되었습니다. 변경 사항 있으면 02-949-3900로 연락 주세요. 병원에서 뵙겠습니다^^");
     expect(defaultNotifyBody("N")).toContain("{이름}");
     expect(defaultNotifyBody("N")).not.toContain("박정희");
   });
-  it("S는 S 이름·전화번호, 다른 예약으로도 재사용", () => {
+  it("S도 대외 이름은 노원다담한의원, 전화번호만 S 것 (사용자 2026-11-13)", () => {
     const text = renderAppointmentTemplate(defaultNotifyBody("S"), { patient_name: "김하나", day: "2026-11-23", time: "09:00" }, "S");
-    expect(text).toContain("다담에스한의원입니다. 김하나님 11월 23일 월요일 9시에");
+    expect(text).toContain("김하나님, 노원다담한의원입니다. 11월 23일 월요일 9시 예약 확인");
     expect(text).toContain("02-949-3980");
     expect(text).not.toContain("3900");
   });

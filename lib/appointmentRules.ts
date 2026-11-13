@@ -3,7 +3,8 @@ import { holidayLabel, isClinicClosed } from "./holidays";
 import type { Appointment, AppointmentKind, AppointmentSettings, ClinicDayOverride } from "./types";
 
 /** 진료 시간 (HH:MM). lunch가 없으면 점심 없이. */
-export type DayHours = { open: boolean; start: string; end: string; lunchStart: string | null; lunchEnd: string | null; note: string | null };
+/** bookUntil = 예약을 받는 마지막 칸 시각(진료는 end까지 해도 그 뒤 칸은 안 연다). 없으면 end까지. */
+export type DayHours = { open: boolean; start: string; end: string; lunchStart: string | null; lunchEnd: string | null; bookUntil: string | null; note: string | null };
 
 /**
  * 병원별 기본 진료 시간. 요일 0=일 … 6=토.
@@ -11,13 +12,16 @@ export type DayHours = { open: boolean; start: string; end: string; lunchStart: 
  * 노원다담: 화·목 21시, 수·금 19시까지 진료.
  * 시작·점심·월·토 시간은 기존 임시값을 보존한다. 노원 실운영 시간 확인 필요.
  */
-const CLOSED: DayHours = { open: false, start: "09:30", end: "18:00", lunchStart: null, lunchEnd: null, note: null };
-const WEEKDAY: DayHours = { open: true, start: "09:30", end: "18:00", lunchStart: "13:00", lunchEnd: "14:00", note: null };
-const SATURDAY: DayHours = { open: true, start: "09:30", end: "15:00", lunchStart: null, lunchEnd: null, note: null };
+const CLOSED: DayHours = { open: false, start: "09:30", end: "18:00", lunchStart: null, lunchEnd: null, bookUntil: null, note: null };
+const WEEKDAY: DayHours = { open: true, start: "09:30", end: "18:00", lunchStart: "13:00", lunchEnd: "14:00", bookUntil: null, note: null };
+const SATURDAY: DayHours = { open: true, start: "09:30", end: "15:00", lunchStart: null, lunchEnd: null, bookUntil: null, note: null };
+/** 노원다담 (사용자 2026-11-13): 월·수·금 19시, 화·목 야간 21시(예약은 20시 칸까지, 저녁 식사는 돌아가며 해서 안 잡음), 토 15시, 일·공휴일 휴진 */
+const N_DAY: DayHours = { ...WEEKDAY, end: "19:00" };
+const N_NIGHT: DayHours = { ...WEEKDAY, end: "21:00", bookUntil: "20:00" };
 
 export const CLINIC_HOURS: Record<"S" | "N", DayHours[]> = {
   S: [CLOSED, WEEKDAY, WEEKDAY, CLOSED, WEEKDAY, CLOSED, SATURDAY],
-  N: [CLOSED, WEEKDAY, { ...WEEKDAY, end: "21:00" }, { ...WEEKDAY, end: "19:00" }, { ...WEEKDAY, end: "21:00" }, { ...WEEKDAY, end: "19:00" }, SATURDAY],
+  N: [CLOSED, N_DAY, N_NIGHT, N_DAY, N_NIGHT, N_DAY, SATURDAY],
 };
 
 function dow(iso: string): number {
@@ -39,6 +43,7 @@ export function dayHours(iso: string, clinic: "S" | "N", override?: ClinicDayOve
       end: override.end_time ?? tmpl.end,
       lunchStart: override.lunch_start ?? (override.open && !override.start_time ? tmpl.lunchStart : null),
       lunchEnd: override.lunch_end ?? (override.open && !override.start_time ? tmpl.lunchEnd : null),
+      bookUntil: override.end_time ? null : tmpl.bookUntil,
       note: override.memo ?? (override.open ? "그날만 진료" : "그날만 휴진"),
     };
   }
@@ -59,8 +64,10 @@ export function slotsOf(h: DayHours, slotMinutes: number): string[] {
   const out: string[] = [];
   const ls = h.lunchStart ? toMin(h.lunchStart) : null;
   const le = h.lunchEnd ? toMin(h.lunchEnd) : null;
+  const last = h.bookUntil ? toMin(h.bookUntil) : null;
   for (let t = toMin(h.start); t + slotMinutes <= toMin(h.end); t += slotMinutes) {
     if (ls !== null && le !== null && t >= ls && t < le) continue;
+    if (last !== null && t > last) break;
     out.push(toHHMM(t));
   }
   return out;
@@ -99,16 +106,30 @@ export function fillTemplate(body: string, v: { 이름: string; 병원: string; 
 }
 
 export const LEGACY_NOTIFY_BODY = "{이름}님, {병원} 예약 안내드립니다. {날짜} {시간}에 뵙겠습니다. 변경이 필요하시면 전화 주세요.";
-export const DEFAULT_NOTIFY_BODY = "안녕하세요. {병원}입니다. {이름}님 {날짜} {시간}에 뵙겠습니다. 변동사항 있으면 전화 부탁드립니다.";
+/** 기본 예약 확인 문구 (사용자 2026-11-13 "변경사항 있으면 연락주세요. 병원에서 뵙겠습니다^^ 이 정도"). */
+export const DEFAULT_NOTIFY_BODY = "{이름}님, {병원}입니다. {날짜} {시간} 예약 확인되었습니다. 변경 사항 있으면 {전화번호}로 연락 주세요. 병원에서 뵙겠습니다^^";
+/** 예전 기본 문구들. 설정에 이 글이 그대로 남아 있으면 새 기본 문구로 바꾼다. 사용자가 고친 글은 건드리지 않는다. */
+export const LEGACY_NOTIFY_BODIES = [
+  "안녕하세요. {병원}입니다. {이름}님 {날짜} {시간}에 뵙겠습니다. 변동사항 있으면 전화 부탁드립니다.",
+  "안녕하세요. {병원}입니다. {이름}님 {날짜} {시간}에 뵙겠습니다. 변동사항 있으면 전화 부탁드립니다. {전화번호}.",
+];
 
-/** 병원별 대표번호. S는 하이닥·KMCRIC 교차 확인, N은 사용자 제공. */
+/** 환자에게 나가는 글의 병원 이름은 두 병원 모두 노원다담한의원으로 통일(사용자 2026-11-13 "대외적으로는 노원다담한의원으로만"). 전화번호는 병원별. */
+export const PUBLIC_CLINIC_NAME = "노원다담한의원";
 export const APPOINTMENT_CLINICS = {
-  S: { name: "다담에스한의원", phone: "02-949-3980" },
-  N: { name: "노원다담한의원", phone: "02-949-3900" },
+  S: { name: PUBLIC_CLINIC_NAME, phone: "02-949-3980" },
+  N: { name: PUBLIC_CLINIC_NAME, phone: "02-949-3900" },
 } as const;
 
-export function defaultNotifyBody(clinic: "S" | "N"): string {
-  return DEFAULT_NOTIFY_BODY + (APPOINTMENT_CLINICS[clinic].phone ? " {전화번호}." : "");
+// 병원이 달라도 같은 기본 문구(병원 이름·전화번호는 자리표로 들어간다). 인자는 호출하는 쪽 호환용.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function defaultNotifyBody(_clinic: "S" | "N"): string {
+  return DEFAULT_NOTIFY_BODY;
+}
+
+/** 날짜·시간 자리표가 둘 다 있어야 예약 문구로 쓸 수 있다. (다담에스 문구에 날짜·시간이 안 들어가던 문제, 2026-11-13) */
+export function hasDateTimePlaceholders(body: string): boolean {
+  return /\{날짜\}|\{월\}/.test(body) && /\{시간\}/.test(body);
 }
 
 /** 예약 HH:MM → 한국어 12시간제. 정각에는 0분을 붙이지 않는다. */

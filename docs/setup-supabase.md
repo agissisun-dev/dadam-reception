@@ -101,3 +101,8 @@
 - `supabase/schema-v12-recontact.sql`: `recontacts`(재진콜 명단 한 줄: 누구·어느 묶음·한약 횟수와 마지막 날짜·원장님 칸·보낸 글·답·전화 결과·상태) · `recontact_settings`(하루 보내는 수 25, 문구 네 개). 새 표 두 개만 만들고 기존 표는 그대로. 병원별 RLS.
 - 실행 전에는 해피콜 화면의 [재진콜] 탭에 "재진콜 표가 아직 없습니다"라고만 뜬다. 다른 화면은 그대로 돌아간다.
 - 설계: `docs/superpowers/specs/2026-11-11-다시연락-v12-design.md`.
+
+## 23. V14 물품 신청함 (2026-11-13, 아직 실행 전)
+- `supabase/schema-v14-supplies.sql`: `supply_requests`(신청 한 줄: 글·분류·상태 신청/승인/주문/받음/취소·누가·가격·업체·메모·상품 주소) · `supply_settings`(원장 잠금 번호). 두 병원 공통(원장이 한 목록으로 봄, clinic 칸은 표시용). 새 표만 만든다.
+- 실행 전에는 물품 신청 화면에 "표가 아직 없습니다"라고만 뜬다. 아사이드 연동·환경 변수는 `docs/setup-supplies.md`.
+

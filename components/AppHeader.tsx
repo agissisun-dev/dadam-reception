@@ -18,6 +18,7 @@ const MENU: { href: string; label: string }[] = [
   { href: "/happy-calls", label: "해피콜" },
   { href: "/patients", label: "환자등록·찾기" },
   { href: "/cabinet", label: "재고현황" },
+  { href: "/supplies", label: "물품 신청" },
   { href: "/tasks/new", label: "업무 등록" },
   { href: "/templates", label: "문구 틀" },
   { href: "/history", label: "지난 기록" },

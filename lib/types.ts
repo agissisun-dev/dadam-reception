@@ -390,3 +390,28 @@ export type RecontactSettings = {
   body_reply: string;
   body_missed: string;
 };
+
+/** 물품 신청함 (V14, 2026-11-13) */
+export type SupplyCategory = "yakchim" | "treatment" | "office";
+export type SupplyStatus = "requested" | "approved" | "ordered" | "received" | "cancelled";
+export type SupplyRequest = {
+  id: number;
+  clinic: "S" | "N";
+  text: string;
+  category: SupplyCategory;
+  status: SupplyStatus;
+  requested_by: string;
+  requested_at: string;
+  price: number | null;
+  vendor: string | null;
+  price_note: string | null;
+  product_url: string | null;
+  priced_at: string | null;
+  approved_at: string | null;
+  ordered_at: string | null;
+  received_at: string | null;
+  received_by: string | null;
+  cancelled_at: string | null;
+  memo: string | null;
+  created_at: string;
+};

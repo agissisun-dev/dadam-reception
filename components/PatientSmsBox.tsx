@@ -23,7 +23,7 @@ export default function PatientSmsBox({ patient, onClose }: { patient: Patient; 
   const [text, setText] = useState(`${patient.name}님, ${PUBLIC_CLINIC_NAME}입니다. `);
   const [staff, setStaff] = useState<StaffName>(() => (typeof window === "undefined" ? STAFF_NAMES[0] : loadLastStaff()));
   const [recipient, setRecipient] = useState<SmsRecipient>({ label: "환자", phone: patient.phone });
-  const [route, setRoute] = useState<null | "solapi">(null);
+  const [route, setRoute] = useState<null | "phone" | "solapi">(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,15 +89,21 @@ export default function PatientSmsBox({ patient, onClose }: { patient: Patient; 
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} className="w-full rounded border border-stone-300 px-3 py-2 text-sm" />
       <StaffSelect value={staff} onChange={setStaff} />
 
-      {route === null ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <SmsAppLink phone={recipient.phone} text={text} disabled={!text.trim()} />
-          <button type="button" className={PRIMARY} disabled={!text.trim()} onClick={() => setRoute("solapi")}>
-            병원 전화번호로 보내기
-          </button>
-          <span className="text-[11px] text-stone-500">답장을 받아야 하면 병원 휴대폰, 안내만이면 병원 전화번호.</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => setRoute(route === "phone" ? null : "phone")} className={`rounded border px-3 py-1.5 text-sm font-bold ${route === "phone" ? "border-stone-900 bg-stone-900 text-white" : "border-[#16863b] text-[#0f3d23]"}`} disabled={!text.trim()}>
+          병원 휴대폰
+        </button>
+        <button type="button" onClick={() => setRoute(route === "solapi" ? null : "solapi")} className={`rounded border px-3 py-1.5 text-sm font-bold ${route === "solapi" ? "border-stone-900 bg-stone-900 text-white" : "border-[#16863b] text-[#0f3d23]"}`} disabled={!text.trim()}>
+          병원 전화번호
+        </button>
+        <span className="text-[11px] text-stone-500">답장 받을 문자는 병원 휴대폰, 안내만이면 병원 전화번호.</span>
+      </div>
+      {route === "phone" && (
+        <div className="flex flex-wrap items-center gap-2 rounded border border-stone-200 bg-stone-50 p-2">
+          <SmsAppLink phone={recipient.phone} text={text} />
         </div>
-      ) : (
+      )}
+      {route === "solapi" && (
         <SmsSendBox recipients={[recipient]} text={text} busy={busy} onSend={sendViaClinicNumber} onCancel={() => setRoute(null)} />
       )}
       {done && <p className="text-xs text-[#0f3d23]">{done}</p>}

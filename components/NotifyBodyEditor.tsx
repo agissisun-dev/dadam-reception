@@ -64,7 +64,7 @@ export default function NotifyBodyEditor({ initial, onSaved, onClose }: { initia
         <>
           <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} className="mt-2 w-full rounded border border-stone-300 px-2 py-1 text-sm" />
           <button type="button" className="mt-1 text-xs underline" onClick={() => setBody(defaultNotifyBody(clinic))}>기본 문구로 되돌리기</button>
-          <p className="mt-1 text-[11px] text-stone-500">미리 보기 (샘플은 저장되지 않습니다)</p>
+          <p className="mt-1 text-[11px] text-stone-500">예시 — 이름·날짜·시간은 오늘 기준 보기용이고, 실제 문자는 예약마다 그 환자·그 날짜·그 시간으로 나갑니다.</p>
           <p className="whitespace-pre-wrap rounded bg-stone-50 px-3 py-2 text-xs">{preview}</p>
           {missingDateTime && (
             <p className="mt-1 text-xs font-bold text-red-700">문구에 {"{날짜}"}와 {"{시간}"}이 없어서 예약 날짜·시간이 안 들어갑니다. 넣어 주세요.</p>

@@ -114,11 +114,12 @@ export const LEGACY_NOTIFY_BODIES = [
   "안녕하세요. {병원}입니다. {이름}님 {날짜} {시간}에 뵙겠습니다. 변동사항 있으면 전화 부탁드립니다. {전화번호}.",
 ];
 
-/** 환자에게 나가는 글의 병원 이름은 두 병원 모두 노원다담한의원으로 통일(사용자 2026-11-13 "대외적으로는 노원다담한의원으로만"). 전화번호는 병원별. */
+/** 환자에게 나가는 글의 병원 이름·전화번호는 두 병원 모두 노원다담한의원 대표번호 하나(사용자 2026-11-13 "전화번호도 대표번호로 나가면 돼 02-949-3900"). */
 export const PUBLIC_CLINIC_NAME = "노원다담한의원";
+export const PUBLIC_CLINIC_PHONE = "02-949-3900";
 export const APPOINTMENT_CLINICS = {
-  S: { name: PUBLIC_CLINIC_NAME, phone: "02-949-3980" },
-  N: { name: PUBLIC_CLINIC_NAME, phone: "02-949-3900" },
+  S: { name: PUBLIC_CLINIC_NAME, phone: PUBLIC_CLINIC_PHONE },
+  N: { name: PUBLIC_CLINIC_NAME, phone: PUBLIC_CLINIC_PHONE },
 } as const;
 
 // 병원이 달라도 같은 기본 문구(병원 이름·전화번호는 자리표로 들어간다). 인자는 호출하는 쪽 호환용.

@@ -88,11 +88,18 @@ describe("예약 문구 렌더링", () => {
     expect(defaultNotifyBody("N")).toContain("{이름}");
     expect(defaultNotifyBody("N")).not.toContain("박정희");
   });
-  it("S도 대외 이름은 노원다담한의원, 전화번호만 S 것 (사용자 2026-11-13)", () => {
+  it("S도 대외 이름·전화번호는 노원다담한의원 대표번호 (사용자 2026-11-13)", () => {
     const text = renderAppointmentTemplate(defaultNotifyBody("S"), { patient_name: "김하나", day: "2026-11-23", time: "09:00" }, "S");
     expect(text).toContain("김하나님, 노원다담한의원입니다. 11월 23일 월요일 9시 예약 확인");
-    expect(text).toContain("02-949-3980");
-    expect(text).not.toContain("3900");
+    expect(text).toContain("02-949-3900");
+    expect(text).not.toContain("3980");
+  });
+  it("예약마다 그 예약의 날짜·요일·시간이 들어간다 (고정 날짜 아님)", () => {
+    const body = defaultNotifyBody("N");
+    expect(renderAppointmentTemplate(body, { patient_name: "가", day: "2026-11-13", time: "09:30" }, "N")).toContain("11월 13일 금요일 9시 30분");
+    expect(renderAppointmentTemplate(body, { patient_name: "나", day: "2026-12-01", time: "14:00" }, "S")).toContain("12월 1일 화요일 2시");
+    expect(renderAppointmentTemplate(body, { patient_name: "다", day: "2027-01-05", time: "20:00" }, "N")).toContain("1월 5일 화요일 8시");
+    expect(renderAppointmentTemplate(body, { patient_name: "라", day: "2026-11-21", time: "10:15" }, "N")).toContain("11월 21일 토요일 10시 15분");
   });
   it("정각·정오·자정, 개별 자리표와 알 수 없는 자리표 보존", () => {
     expect(appointmentTimeKo("12:00")).toBe("12시");

@@ -584,6 +584,7 @@ function SettingsBox({ settings, onSaved, onClose }: { settings: AppointmentSett
       <label className="mt-2 block"><span className="text-[11px] text-stone-500">예약 안내 문구 — 자리표 {"{이름} {병원} {날짜} {시간} {월} {일} {요일} {전화번호}"}</span>
         <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} className="w-full rounded border border-stone-300 px-2 py-1 text-sm" /></label>
       <p className="mt-1 whitespace-pre-wrap rounded bg-stone-50 px-3 py-2 text-xs">{renderAppointmentTemplate(body, { patient_name: "홍길동", day: todayISO(), time: "16:30" }, settings.clinic)}</p>
+      <p className="text-[11px] text-stone-500">예시입니다. 실제 문자는 예약마다 그 환자·그 날짜·그 시간으로 나갑니다.</p>
       <button type="button" className="mt-1 text-xs underline" onClick={() => setBody(defaultNotifyBody(settings.clinic))}>기본 문구로 되돌리기</button>
       <div className="mt-3 space-y-2 rounded border border-stone-200 bg-stone-50 p-2">
         <p className="text-[11px] font-bold text-stone-600">자동 안내 문자</p>

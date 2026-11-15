@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import SmsSendBox from "./SmsSendBox";
+import SmsAppLink from "./SmsAppLink";
 import { recordAcceptedSms, sendSms, SmsOutcomeUnknown } from "@/lib/sms";
 import StaffSelect from "./StaffSelect";
 import { todayISO } from "@/lib/dates";
@@ -132,10 +133,30 @@ function RecontactSmsSend({ r, text, staff, contact, purpose, onSent }: {
   r: RecontactRow; text: string; staff: string; contact: ContactGuard;
   purpose: "initial" | "followup"; onSent: () => void;
 }) {
-  const [confirm, setConfirm] = useState(false);
+  // 보내는 길 두 갈래(사용자 2026-11-13·11-15): 병원 휴대폰 = 답장을 받는다, 병원 전화번호 = 솔라피 대표번호(답장 못 받음).
+  // 재진콜은 답을 받아야 하는 문자라 병원 휴대폰이 먼저다. 번호·문구가 채워진 문자 창이 열려 손으로 치지 않는다.
+  const [route, setRoute] = useState<"phone" | "clinic" | null>(null);
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const confirm = route === "clinic";
+  const setConfirm = (on: boolean) => setRoute(on ? "clinic" : null);
+  /** 병원 휴대폰으로 보낸 뒤 누른다. 첫 문자만 보냄 기록을 남긴다(업체를 거치지 않으니 문자 장부에는 안 남는다). */
+  async function sentByPhone() {
+    if (busy || locked || contact.disabled) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await contact.beforeOpen();
+      if (purpose === "initial") await markSent(r, staff, text);
+      setLocked(true);
+      setRoute(null);
+      setNotice(purpose === "initial" ? "병원 휴대폰으로 보낸 것으로 기록했습니다." : "보냈습니다. 답이 오면 아래에서 이어 가세요.");
+      onSent();
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "기록하지 못했습니다.");
+    } finally { setBusy(false); }
+  }
   async function send(to: string) {
     if (busy || locked || contact.disabled || !r.patient_id) return;
     setBusy(true);
@@ -154,7 +175,21 @@ function RecontactSmsSend({ r, text, staff, contact, purpose, onSent }: {
     } finally { setBusy(false); }
   }
   return <div className="space-y-2">
-    {!locked && !confirm && <button type="button" className={PRIMARY} disabled={contact.disabled || !r.patient?.phone || !text.trim()} onClick={() => setConfirm(true)}>문자 보내기</button>}
+    {!locked && route === null && (
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className={PRIMARY} disabled={contact.disabled || !r.patient?.phone || !text.trim()} onClick={() => setRoute("phone")}>병원 휴대폰으로</button>
+        <button type="button" className={BTN} disabled={contact.disabled || !r.patient?.phone || !text.trim()} onClick={() => setRoute("clinic")}>병원 전화번호로</button>
+        <span className="text-[11px] text-stone-500">답을 받아야 하면 병원 휴대폰. 병원 전화번호(02)로 보내면 답장을 받지 못합니다.</span>
+      </div>
+    )}
+    {!locked && route === "phone" && (
+      <div className="flex flex-wrap items-center gap-2 rounded border border-[#16863b] bg-[#f0f7f3] p-2">
+        <SmsAppLink phone={r.patient?.phone} text={text} beforeOpen={contact.beforeOpen} disabled={contact.disabled || busy} />
+        <button type="button" className={PRIMARY} disabled={busy || contact.disabled} onClick={sentByPhone}>보냈음</button>
+        <button type="button" className={BTN} onClick={() => setRoute(null)}>취소</button>
+        <span className="basis-full text-[11px] text-stone-600">받는 번호와 문구가 채워진 문자 창이 열립니다. 전송한 뒤 [보냈음]을 누르세요. 병원 휴대폰에서 앱을 열었으면 [문자 앱으로 열기], PC는 병원 휴대폰이 연결되어 있어야 합니다.</span>
+      </div>
+    )}
     {confirm && !locked && <SmsSendBox recipients={r.patient ? [{ label: r.patient_name, phone: r.patient.phone }] : []} text={text} busy={busy || contact.disabled} beforeSend={contact.beforeOpen} onSend={send} onCancel={() => setConfirm(false)} />}
     {notice && <p role="status" className="text-xs text-amber-800">{notice}</p>}
   </div>;
@@ -642,7 +677,7 @@ export default function RecontactPanel() {
         <section className="space-y-2">
           {!win.ok && <p className="rounded bg-red-50 p-2 text-sm font-bold text-red-700">지금은 보내는 시간이 아닙니다. {win.reason}</p>}
           <p className="text-xs text-stone-500">
-            문구를 읽고 고친 뒤 [문자 보내기]에서 받는 사람과 문구를 확인하세요. 이 병원에 설정된 발신번호로 직접 발송 요청합니다. 답장 수신 가능 여부는 발신번호 서비스에 따라 다릅니다.
+            문구를 읽고 고친 뒤 보내세요. [병원 휴대폰으로]는 번호와 문구가 채워진 문자 창이 열리고 답장을 받습니다. [병원 전화번호로]는 대표번호로 바로 나가지만 답장을 받지 못합니다.
             {left === 0 ? " 오늘 보낼 수를 다 채웠습니다." : ""}
             {tomorrow > 0 ? ` 하루 수 때문에 ${tomorrow}명은 다음 날로 넘어갑니다.` : ""}
           </p>

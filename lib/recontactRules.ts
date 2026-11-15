@@ -290,7 +290,9 @@ export function parseImportTable(table: string[][], fallback: RecontactSegment):
     if (!name) continue;
     const memo = at(r, c.memo);
     const segText = at(r, c.seg);
-    const segment: RecontactSegment = segText.includes("지금") ? "due_now" : segText.includes("곧") ? "due_soon" : segText.includes("1순위") ? "once_p1" : segText.includes("2순위") ? "once_p2" : fallback;
+    // 묶음 칸의 글자로 묶음을 정한다. 단계별 명단(2026-11-15)은 VIP·오래됨·공진단도 이 칸에 적는다. 비어 있으면 화면에서 고른 묶음.
+    const segment: RecontactSegment = segText.includes("지금") ? "due_now" : segText.includes("곧") ? "due_soon" : segText.includes("1순위") ? "once_p1" : segText.includes("2순위") ? "once_p2"
+      : /vip/i.test(segText) ? "vip" : segText.includes("오래") ? "lapsed" : segText.includes("공진단") ? "tonic" : fallback;
     // 엑셀이 숫자로 읽어 앞의 0이 떨어진 번호(1012345678)는 0을 다시 붙인다
     const raw = normalizePhone(at(r, c.phone));
     const digits = /^1[016789]\d{7,8}$/.test(raw) ? `0${raw}` : raw;

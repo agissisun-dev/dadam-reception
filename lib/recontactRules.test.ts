@@ -142,6 +142,10 @@ describe("엑셀 명단 읽기", () => {
     expect(r.rows).toHaveLength(2);
     expect(r.rows[1]).toMatchObject({ patient_name: "나", phone: null, segment: "vip" });
   });
+  it("묶음 칸에 VIP·오래됨·공진단을 적으면 그 묶음으로 (단계별 명단)", () => {
+    const r = parseImportTable([["묶음", "이름"], ["VIP", "가"], ["오래됨", "나"], ["공진단", "다"], ["1순위", "라"], ["", "마"]], "due_now");
+    expect(r.rows.map((x) => x.segment)).toEqual(["vip", "lapsed", "tonic", "once_p1", "due_now"]);
+  });
   it("이름 칸이 없으면 이유를 돌려준다", () => {
     expect(parseImportTable([["다담S 한약 재구매 연락 대상 정리"], ["만든 날", "2026-11-06"]], "vip").problem).toContain("이름");
   });

@@ -7,13 +7,13 @@ const entry = (seq: number, extra: Partial<Parameters<typeof dayBlock>[0]["entri
 });
 
 describe("dayBlock — 일일장부 모양", () => {
-  const { rows, redRows } = dayBlock({ day: "2026-10-02", entries: [entry(2), entry(1)], expenses: [{ title: "시재", amount: 11600 }] });
+  const { rows, redCells } = dayBlock({ day: "2026-10-02", entries: [entry(2), entry(1)], expenses: [{ title: "시재", amount: 11600 }] });
   it("56줄: 제목·머리글 2줄·환자 50줄·합계·입금·잔액", () => {
     expect(rows).toHaveLength(3 + BLOCK_PATIENT_ROWS + 3);
     expect(rows[0][0]).toBe("* 일일매출장부 ( 2026년 10월 02일) *금");
     expect(rows[1]).toEqual([null, "성함", "구분", "매출", null, null, null, "기타", "지출내용", "금액"]);
     expect(rows[2][3]).toBe("현금");
-    expect(redRows).toEqual([]);
+    expect(redCells).toEqual([]);
   });
   it("환자 줄은 번호 순, 비는 칸은 null, 소계는 세 칸 합", () => {
     expect(rows[3]).toEqual([1, "환자1", "1종", 11000, null, null, 11000, "전,습", "시재", 11600]);
@@ -54,7 +54,7 @@ describe("dayBlock — 일일장부 모양", () => {
     expect(r.rows[4][4]).toBe(10500);
     expect(r.rows[4][6]).toBe(10500);
     expect(r.rows[4][7]).toBe("전,습 · 서울페이");
-    expect(r.redRows).toEqual([4]);
+    expect(r.redCells).toEqual([[4, 4], [4, 6]]);
     expect(r.rows[3 + BLOCK_PATIENT_ROWS].slice(3, 7)).toEqual([11000, 10500, null, 21500]);
   });
   it("51줄이면 블록이 한 줄 늘어난다", () => {
@@ -88,6 +88,6 @@ describe("monthRows", () => {
     expect(r.rows).toHaveLength(56 * 2);
     expect(r.rows[0][0]).toContain("10월 01일");
     expect(r.rows[56][0]).toContain("10월 05일");
-    expect(r.redRows).toEqual([56 + 3]);
+    expect(r.redCells).toEqual([[56 + 3, 3], [56 + 3, 6]]);
   });
 });

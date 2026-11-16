@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayCounts, defaultReceiveDay, fermentEndDay, fermentMidDays, jobLabel, layoutWeek, planJobsFromLedger, weekDays, weekMonday } from "./brewRules";
+import { dayCounts, defaultReceiveDay, fermentEndDay, fermentMidDays, jobLabel, layoutWeek, planJobsFromLedger, weekDays, weekMonday, brewTitle } from "./brewRules";
 import type { BrewJob } from "./types";
 
 describe("주 계산", () => {
@@ -26,9 +26,16 @@ describe("칸 글", () => {
   const j = (p: Partial<BrewJob>): Parameters<typeof jobLabel>[0] => ({
     patient_name: "김하나", title: "보험(처방)", kind: "decoction", delivery: "pickup", region: null, split_no: null, split_of: null, status: "planned", ...p,
   });
-  it("이름-종류-직", () => expect(jobLabel(j({}))).toBe("김하나-보험(처방)-직"));
+  it("이름-종류-직 (옛 제목 보험(처방)·탕약일반은 보험·일반으로 줄여 보임)", () => {
+    expect(jobLabel(j({}))).toBe("김하나-보험-직");
+    expect(jobLabel(j({ title: "탕약일반" }))).toBe("김하나-일반-직");
+    expect(jobLabel(j({ title: "탕약발효" }))).toBe("김하나-발효-직");
+    expect(brewTitle("insurance")).toBe("보험");
+    expect(brewTitle("fermented")).toBe("발효");
+    expect(brewTitle(null)).toBe("일반");
+  });
   it("택배 지역·분할·끝남", () => {
-    expect(jobLabel(j({ delivery: "courier", region: "안양", split_no: 1, split_of: 2, status: "done" }))).toBe("김하나-보험(처방)-#1/2-택(안양) o");
+    expect(jobLabel(j({ delivery: "courier", region: "안양", split_no: 1, split_of: 2, status: "done" }))).toBe("김하나-보험-#1/2-택(안양) o");
   });
   it("발효 짝은 종류 대신 발효시작/끝. 직/택은 발효끝(나가는 날)에만", () => {
     expect(jobLabel(j({ kind: "ferment_start", title: "발효 48만원", delivery: "pickup" }))).toBe("김하나-발효시작");

@@ -1,4 +1,4 @@
-import type { DecoctionKind, LedgerCode, LedgerGroup } from "./types";
+import type { DecoctionKind, LedgerCode, LedgerGroup, RedField } from "./types";
 
 /** 묶음 이름(화면용) */
 export const GROUP_LABEL: Record<LedgerGroup, string> = {
@@ -15,6 +15,31 @@ export const INSURANCE_KINDS = ["보험", "일반", "1종", "2종", "1종지정"
 
 /** 붉은 금액 사유 후보: 접수실 서랍에 돈은 없지만 현금영수증은 끊는 경우(금액은 합계에 그대로 들어감) */
 export const PAY_NOTES = ["제로페이", "서울페이", "계좌입금", "기타"] as const;
+
+export const RED_FIELDS: readonly RedField[] = ["cash", "cash_receipt", "card"];
+
+type RedEntryLike = { cash: number; cash_receipt: number; card: number; off_total?: boolean; red_fields?: RedField[] | null };
+
+/**
+ * 붉게 표시한 칸(V16, 2026-11-16: 칸마다 따로). red_fields가 없는 옛 줄은 off_total이면 금액 있는 세 칸 모두.
+ */
+export function redFieldsOf(e: RedEntryLike): RedField[] {
+  if (e.red_fields != null) return e.red_fields;
+  if (!e.off_total) return [];
+  return RED_FIELDS.filter((f) => e[f] !== 0);
+}
+
+/** 붉은 칸 금액의 합(참고 표시용). 합계에는 그대로 들어간다. */
+export function redAmount(e: RedEntryLike): number {
+  return redFieldsOf(e).reduce((s, f) => s + e[f], 0);
+}
+
+/** 붉은 칸이 있으면서 금액 있는 칸이 모두 붉으면 소계도 붉게 */
+export function allRed(e: RedEntryLike): boolean {
+  const red = redFieldsOf(e);
+  const nonZero = RED_FIELDS.filter((f) => e[f] !== 0);
+  return red.length > 0 && nonZero.every((f) => red.includes(f));
+}
 
 /** 기타 칸 한 조각을 읽은 결과 */
 export type ParsedItem = {
@@ -151,10 +176,10 @@ function make(
  * 그날 합계. **붉은 금액(off_total) 줄도 현금·현영·카드·소계에 그대로 더한다**(접수실 2026-11-05: "빨간색 표시만 되고 합계에는 합산").
  * 붉은 줄의 합은 참고용으로 offTotal에 따로 둔다. (2026-10-05~11-04까지는 합계에서 뺐었음 — 폐기)
  */
-export function sumEntries(entries: { cash: number; cash_receipt: number; card: number; off_total?: boolean }[]) {
+export function sumEntries(entries: RedEntryLike[]) {
   const t = { cash: 0, cash_receipt: 0, card: 0, subtotal: 0, offTotal: 0 };
   for (const e of entries) {
-    if (e.off_total) t.offTotal += e.cash + e.cash_receipt + e.card;
+    t.offTotal += redAmount(e);
     t.cash += e.cash;
     t.cash_receipt += e.cash_receipt;
     t.card += e.card;

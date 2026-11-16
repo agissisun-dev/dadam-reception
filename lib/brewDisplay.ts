@@ -19,7 +19,9 @@ export function brewCardColors(job: Pick<BrewJob, "kind" | "clinic" | "status">)
   const color = job.status === "done" ? "#78716c" : "#172022";
   // Fermentation stays red even when completed, regardless of clinic.
   if (isFermentKind(job.kind)) return { ...border, borderColor: "#dc2626", background: "#fff1f2", color };
-  if (job.kind === "note") return { ...border, borderColor: "#ca8a04", background: "#fefce8", color };
+  // 지정처방은 노랑(사용자 2026-11-16), 메모는 연한 회색
+  if (job.kind === "batch") return { ...border, borderColor: "#eab308", background: "#fef9c3", color };
+  if (job.kind === "note") return { ...border, borderColor: "#a8a29e", background: "#fafaf9", color };
   if (job.status === "done") return { ...border, borderColor: "#a8a29e", background: "#e7e5e4", color };
   return job.clinic === "N"
     ? { ...border, borderColor: "#2563eb", background: "#eff6ff", color }

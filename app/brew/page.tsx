@@ -6,7 +6,7 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import StaffSelect from "@/components/StaffSelect";
 import { createJobs, deleteJob, listJobs, listUnscheduled, listWeekdayRules, markDone, saveWeekdayRule, updateJob } from "@/lib/brew";
-import { KIND_LABEL, POUCHES, dayCounts, dayHeader, jobLabel, planJobsFromLedger, weekDays, weekMonday, type WeekRow } from "@/lib/brewRules";
+import { KIND_LABEL, POUCHES, brewTitle, dayCounts, dayHeader, jobLabel, planJobsFromLedger, weekDays, weekMonday, type WeekRow } from "@/lib/brewRules";
 import { brewCardColors, clinicMark, layoutBrewSections } from "@/lib/brewDisplay";
 import { addDays, todayISO } from "@/lib/dates";
 import { holidayLabel, isClinicClosed } from "@/lib/holidays";
@@ -88,7 +88,7 @@ function Card({ j, staff, onChanged }: { j: BrewJob; staff: StaffName; onChanged
           {j.kind !== "note" && j.kind !== "batch" && (
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름" className={IN} />
           )}
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="종류 (보험(처방) · 일반 · 디스크 100팩 · 메모)" className={IN} />
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="종류 (보험 · 일반 · 발효 · 디스크 100팩 · 메모)" className={IN} />
           {j.kind !== "note" && (
             <div className="flex flex-wrap items-center gap-1.5">
               <select value={delivery} onChange={(e) => setDelivery(e.target.value as "pickup" | "courier" | "")} className={IN}>
@@ -162,9 +162,9 @@ function Card({ j, staff, onChanged }: { j: BrewJob; staff: StaffName; onChanged
   );
 }
 
-type AddKind = "general" | "fermented" | "batch" | "note";
+type AddKind = "insurance" | "general" | "fermented" | "batch" | "note";
 
-/** 손으로 칸 넣기: 탕약일반 · 탕약발효 · 지정처방 · 메모 (순서는 접수실 2026-10-02) */
+/** 손으로 칸 넣기: 보험 · 일반 · 발효 · 지정처방 · 메모 (이름은 사용자 2026-11-16) */
 function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; staff: StaffName; onDone: () => void; onCancel: () => void }) {
   const [kind, setKind] = useState<AddKind>("general");
   const [day, setDay] = useState(defaultDay);
@@ -178,7 +178,7 @@ function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; s
 
   async function save() {
     setError(null);
-    if ((kind === "general" || kind === "fermented") && !name.trim()) {
+    if ((kind === "insurance" || kind === "general" || kind === "fermented") && !name.trim()) {
       setError("이름을 적어 주세요.");
       return;
     }
@@ -187,12 +187,12 @@ function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; s
       return;
     }
     try {
-      if (kind === "general" || kind === "fermented") {
+      if (kind === "insurance" || kind === "general" || kind === "fermented") {
         await createJobs(
           planJobsFromLedger({
             patient_id: null,
             patient_name: name.trim(),
-            title: kind === "fermented" ? "탕약발효" : "탕약일반",
+            title: brewTitle(kind),
             fermented: kind === "fermented",
             day,
             slot,
@@ -235,15 +235,16 @@ function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; s
     }
   }
 
-  const isDecoction = kind === "general" || kind === "fermented";
+  const isDecoction = kind === "insurance" || kind === "general" || kind === "fermented";
   return (
     <section className="rounded-lg border border-stone-300 bg-white p-3 text-sm">
       <div className="flex flex-wrap items-end gap-2">
         <label className="block">
           <span className="text-[11px] text-stone-500">무엇</span>
           <select value={kind} onChange={(e) => setKind(e.target.value as AddKind)} className={`${IN} block`}>
-            <option value="general">탕약일반</option>
-            <option value="fermented">탕약발효 (사흘)</option>
+            <option value="insurance">보험 (의보첩약)</option>
+            <option value="general">일반</option>
+            <option value="fermented">발효 (사흘)</option>
             <option value="batch">지정처방</option>
             <option value="note">메모 (월차 · 택배 마감)</option>
           </select>
@@ -393,7 +394,7 @@ function Board() {
         <span><b className="mr-1 text-sm text-stone-900">D</b><span className="mr-1 inline-block h-3 w-3 rounded border-2 border-blue-600 bg-blue-50 align-middle" />노원다담 일반약</span>
         <span><span className="mr-1 inline-block h-3 w-3 rounded border-2 border-red-600 bg-rose-50 align-middle" />발효약은 모두 빨강 · 병원은 S/D로 구분</span>
         <span>일반약 ↓ · 발효약 ↑</span>
-        <span>메모 노랑 · 완료는 회색 글씨와 o · 색 점 = 파우치</span>
+        <span><span className="mr-1 inline-block h-3 w-3 rounded border-2 border-yellow-500 bg-yellow-100 align-middle" />지정처방 노랑 · 메모 회색 · 완료는 회색 글씨와 o · 색 점 = 파우치</span>
         <span>“3/12개” = 잡힌 수(짜는 것 포함)/그 요일 한도 (넘으면 붉게, 막지는 않음)</span>
       </p>
 
@@ -488,7 +489,7 @@ function Board() {
       )}
 
       <p className="text-xs text-stone-500">
-        오늘 장부에서 탕약 줄을 저장하면 자동으로 들어오고, [+ 칸 넣기]로 탕약일반·탕약발효·지정처방·메모를 손으로 넣을 수도 있습니다. 칸을 누르면 날짜·오전/오후·받는 방법·지역·파우치·메모를 고치고, 날짜를 옮기면 받는 날과 해피콜이 따라가며 발효 짝은 같이 움직입니다.
+        오늘 장부에서 탕약 줄을 저장하면 자동으로 들어오고, [+ 칸 넣기]로 보험·일반·발효·지정처방·메모를 손으로 넣을 수도 있습니다. 칸을 누르면 날짜·오전/오후·받는 방법·지역·파우치·메모를 고치고, 날짜를 옮기면 받는 날과 해피콜이 따라가며 발효 짝은 같이 움직입니다.
       </p>
     </main>
   );

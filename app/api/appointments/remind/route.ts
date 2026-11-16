@@ -86,7 +86,8 @@ async function runForLogin(url: string, anon: string, login: Login): Promise<Out
     }
     return { clinic, day: tomorrow, targets: targets.length, sent, failed };
   } finally {
-    await sb.auth.signOut().catch(() => undefined);
+    // scope 없이 부르면 '그 계정의 모든 세션'이 풀려 접수실 PC까지 로그아웃된다(다담에스 매일 17시 끊김의 원인, 2026-11-16). 이 서버 세션만 끝낸다.
+    await sb.auth.signOut({ scope: "local" }).catch(() => undefined);
   }
 }
 

@@ -37,7 +37,7 @@ describe("brew display colors and marks", () => {
   });
   it("uses green S/default, blue N and the same dark ink for ordinary jobs", () => {
     expect(brewCardColors(job(1))).toEqual({ borderWidth: 2, borderLeftWidth: 4, borderColor: "#16a34a", background: "#f0fdf4", color: "#172022" });
-    expect(brewCardColors(job(2, { clinic: "S", kind: "batch" }))).toEqual(brewCardColors(job(1)));
+    expect(brewCardColors(job(2, { clinic: "S", kind: "batch" }))).toEqual({ borderWidth: 2, borderLeftWidth: 4, borderColor: "#eab308", background: "#fef9c3", color: "#172022" });
     expect(brewCardColors(job(3, { clinic: "N" }))).toEqual({ borderWidth: 2, borderLeftWidth: 4, borderColor: "#2563eb", background: "#eff6ff", color: "#172022" });
   });
   it("keeps both fermentation phases red for both clinics, even when done", () => {
@@ -51,9 +51,10 @@ describe("brew display colors and marks", () => {
       }
     }
   });
-  it("uses yellow notes and existing gray completed ordinary cards without changing their mark", () => {
+  it("메모는 연한 회색, 지정처방은 노랑(2026-11-16), 완료 일반 칸은 회색", () => {
     for (const clinic of ["S", "N"] as const) {
-      expect(brewCardColors(job(1, { clinic, kind: "note" }))).toEqual({ borderWidth: 2, borderLeftWidth: 4, borderColor: "#ca8a04", background: "#fefce8", color: "#172022" });
+      expect(brewCardColors(job(1, { clinic, kind: "note" }))).toEqual({ borderWidth: 2, borderLeftWidth: 4, borderColor: "#a8a29e", background: "#fafaf9", color: "#172022" });
+      expect(brewCardColors(job(1, { clinic, kind: "batch" })).background).toBe("#fef9c3");
       const done = job(2, { clinic, status: "done" });
       expect(brewCardColors(done)).toEqual({ borderWidth: 2, borderLeftWidth: 4, borderColor: "#a8a29e", background: "#e7e5e4", color: "#78716c" });
       expect(clinicMark(done.clinic)).toBe(clinic === "N" ? "D" : "S");

@@ -17,12 +17,12 @@ async function downloadSheets(sheets: { sheet: string; block: DayBlock }[], file
       { width: 5 }, { width: 12 }, { width: 9 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 34 }, { width: 14 }, { width: 11 },
     ];
     for (const r of block.rows) ws.addRow(r.map((c) => (c === null ? undefined : c)));
-    const red = new Set(block.redRows.map((i) => i + 1)); // 엑셀 행은 1부터
+    const red = new Set(block.redCells.map(([r, c]) => `${r + 1}:${c + 1}`)); // 엑셀 행·열은 1부터
     ws.eachRow((row, rowNumber) => {
       row.eachCell((cell, col) => {
         if (col >= 4 && col <= 7) cell.numFmt = "#,##0";
         if (col === 10) cell.numFmt = "#,##0";
-        if (red.has(rowNumber) && col >= 4 && col <= 7) cell.font = { color: { argb: "FFC00000" } };
+        if (red.has(`${rowNumber}:${col}`)) cell.font = { color: { argb: "FFC00000" } };
       });
     });
   }

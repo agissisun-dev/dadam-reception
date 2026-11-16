@@ -7,7 +7,7 @@ import { GROUP_LABEL, GROUP_ORDER, INSURANCE_KINDS, PAY_NOTES, chipClass, parseN
 import { DEFAULT_PER_DAY, PACK_PRESETS, daysFromPacks } from "@/lib/packs";
 import { maskPhone } from "@/lib/phone";
 import { SOURCES, sourceHint } from "@/lib/sources";
-import type { PatientSource } from "@/lib/types";
+import type { PatientSource, RedField } from "@/lib/types";
 import { weekdayKo } from "@/lib/dates";
 import { POUCHES, defaultReceiveDay } from "@/lib/brewRules";
 import MoneyInput from "@/components/MoneyInput";
@@ -138,8 +138,10 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
   const [newSource, setNewSource] = useState<PatientSource | "">("");
   const [newSourceNote, setNewSourceNote] = useState("");
   const [memo, setMemo] = useState("");
-  const [offTotal, setOffTotal] = useState(false);
+  const [red, setRed] = useState<RedField[]>([]);
   const [payNote, setPayNote] = useState<string>("계좌입금");
+  const toggleRed = (f: RedField) => setRed((r) => (r.includes(f) ? r.filter((x) => x !== f) : [...r, f]));
+  const offTotal = red.length > 0;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fixing, setFixing] = useState<string | null>(null);
@@ -180,7 +182,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
     setPouch("");
     setNewPhone("");
     setMemo("");
-    setOffTotal(false);
+    setRed([]);
     setPayNote("계좌입금");
     setFixing(null);
     nameRef.current?.focus();
@@ -218,7 +220,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
         review: parsed.review,
         decoction: hasDecoction && packsN > 0 ? { packs: packsN, per_day: perDay, receive_date: receiveDate } : null,
         brew: hasDecoction ? { day: brewDay, slot, delivery, region, pouch: pouch || null } : null,
-        off_total: offTotal,
+        red_fields: red,
         pay_note: offTotal ? payNote : null,
       });
       reset();
@@ -269,13 +271,13 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
           </datalist>
         </label>
         <div className="lg:col-span-1">
-          <MoneyInput label="현금" value={cash} onChange={setCash} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} />
+          <MoneyInput label="현금" value={cash} onChange={setCash} red={red.includes("cash")} onToggleRed={() => toggleRed("cash")} />
         </div>
         <div className="lg:col-span-1">
-          <MoneyInput label="현영" value={cashReceipt} onChange={setCashReceipt} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} />
+          <MoneyInput label="현영" value={cashReceipt} onChange={setCashReceipt} red={red.includes("cash_receipt")} onToggleRed={() => toggleRed("cash_receipt")} />
         </div>
         <div className="lg:col-span-1">
-          <MoneyInput label="카드" value={card} onChange={setCard} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} />
+          <MoneyInput label="카드" value={card} onChange={setCard} red={red.includes("card")} onToggleRed={() => toggleRed("card")} />
         </div>
         <label className="col-span-2 block sm:col-span-4 lg:col-span-4">
           <span className={LABEL}>기타 (지금처럼 약어로, 쉼표로 이어서)</span>
@@ -418,7 +420,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
             </select>
           </span>
         ) : (
-          <span className="text-[11px] text-stone-400">금액 칸 옆 ● 를 누르면 붉은 금액(계좌입금·제로페이)으로 표시됩니다. 합계에는 그대로 들어갑니다.</span>
+          <span className="text-[11px] text-stone-400">금액 칸 옆 ● 를 누르면 그 칸만 붉은 금액(계좌입금·제로페이)으로 표시됩니다. 칸마다 따로 고를 수 있고, 합계에는 그대로 들어갑니다.</span>
         )}
         <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="메모 (선택)" className="h-8 min-w-[160px] flex-1 rounded border border-stone-200 px-2 text-xs" />
         <span className="text-xs text-stone-500">처리자 {staff}</span>

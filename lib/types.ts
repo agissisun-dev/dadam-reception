@@ -226,6 +226,8 @@ export type LedgerCode = {
 };
 export type LedgerCodeInput = Omit<LedgerCode, "id" | "created_at">;
 export type LedgerDay = { day: string; closed_at: string | null; closed_by: string | null; memo: string | null };
+/** 장부 금액 칸 이름 (붉은 칸 표시용) */
+export type RedField = "cash" | "cash_receipt" | "card";
 export type LedgerEntry = {
   id: number;
   day: string;
@@ -246,6 +248,8 @@ export type LedgerEntry = {
   /** 붉은 금액 표시: 제로페이·서울페이·계좌입금처럼 접수실 서랍에 돈이 없는 줄. 금액은 합계에 그대로 들어간다(2026-11-05) */
   off_total: boolean;
   pay_note: string | null;
+  /** 붉게 표시한 칸(V16, 2026-11-16). V16 SQL 전 표에는 없어서 undefined → off_total로 판단 */
+  red_fields?: RedField[] | null;
   created_at: string;
   updated_at: string;
 };

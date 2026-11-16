@@ -12,6 +12,21 @@ export const KIND_LABEL: Record<BrewKind, string> = {
   note: "메모",
 };
 
+/** 탕약 칸 제목 세 가지: 보험(의보첩약) · 일반 · 발효 (사용자 2026-11-16) */
+export const BREW_TITLES = ["보험", "일반", "발효"] as const;
+
+export function brewTitle(kind: "insurance" | "general" | "fermented" | null | undefined): string {
+  if (kind === "fermented") return "발효";
+  if (kind === "insurance") return "보험";
+  return "일반";
+}
+
+/** 옛 제목(탕약일반·탕약발효)을 새 이름으로 줄여 보인다. 저장된 글은 안 바꾼다. */
+export function displayTitle(title: string | null | undefined): string {
+  if (!title) return "";
+  return title.replace(/탕약일반/g, "일반").replace(/탕약발효/g, "발효").replace(/보험\(처방\)/g, "보험");
+}
+
 function dow(iso: string): number {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d).getDay();
@@ -46,7 +61,7 @@ export function jobLabel(j: Pick<BrewJob, "patient_name" | "title" | "kind" | "d
   if (j.patient_name) parts.push(j.patient_name);
   if (j.kind === "ferment_start") parts.push("발효시작");
   else if (j.kind === "ferment_end") parts.push("발효끝");
-  else if (j.title) parts.push(j.title);
+  else if (j.title) parts.push(displayTitle(j.title));
   if (j.split_no && j.split_of) parts.push(`#${j.split_no}/${j.split_of}`);
   // 직/택은 나가는 날에만 (발효시작 날은 안 붙임 — 접수실 2026-10-05)
   if (j.kind !== "ferment_start") {

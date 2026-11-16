@@ -1,12 +1,21 @@
 import { getSupabase } from "./supabaseClient";
 import { addPrescription, createPatient, findPatientByPhone } from "./patients";
 import { recordIn, recordOut } from "./cabinet";
+import { extractPacks } from "./cabinetRules";
+import { brewTitle } from "./brewRules";
 import { daysFromPacks } from "./packs";
 import { isValidPhone } from "./phone";
 import { createJobs, deleteJobsOfEntry } from "./brew";
 import { planJobsFromLedger } from "./brewRules";
 import { tallyByDay, type ParsedItem } from "./ledgerRules";
+
+/** 붉은 칸 저장값: off_total(하나라도 붉음)·pay_note·red_fields */
+function redColumns(red: RedField[] | undefined, payNote: string | null | undefined) {
+  const fields = red ?? [];
+  return { off_total: fields.length > 0, pay_note: fields.length > 0 ? payNote?.trim() || null : null, red_fields: fields };
+}
 import type {
+  RedField,
   LedgerCode,
   LedgerCodeInput,
   LedgerDay,
@@ -38,8 +47,9 @@ export async function upsertCode(input: LedgerCodeInput & { id?: number }): Prom
     code: input.code.trim(),
     name: input.name.trim(),
     group: input.group,
-    cabinet_item_id: input.group === "cabinet" ? input.cabinet_item_id : null,
+    cabinet_item_id: input.group === "cabinet" || input.group === "extract" ? input.cabinet_item_id : null,
     decoction_kind: input.group === "decoction" ? input.decoction_kind : null,
+    per_day: input.group === "extract" ? input.per_day : null,
     active: input.active,
     sort_order: input.sort_order,
   };
@@ -107,7 +117,7 @@ export async function listMonthTally(monthKey: string): Promise<Map<string, { co
   const [y, m] = monthKey.split("-").map(Number);
   const to = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
   const [e, d] = await Promise.all([
-    sb.from("ledger_entries").select("day, kind, cash, cash_receipt, card, off_total").gte("day", from).lt("day", to),
+    sb.from("ledger_entries").select("day, kind, cash, cash_receipt, card, off_total, red_fields").gte("day", from).lt("day", to),
     sb.from("ledger_days").select("day, closed_at").gte("day", from).lt("day", to),
   ]);
   if (e.error) fail("장부 달력", e.error.message);
@@ -155,10 +165,15 @@ export type SaveEntryInput = {
   decoction: { packs: number; per_day: number; receive_date: string } | null;
   /** 약대장 칸: 달이는 날·오전/오후·받는 방법·지역·파우치. 탕약 항목이 있으면 항상 만든다. */
   brew?: { day: string; slot: "am" | "pm"; delivery: "pickup" | "courier" | null; region: string; pouch: string | null } | null;
-  /** 합계에서 빼기(붉은 금액) + 사유 */
-  off_total?: boolean;
+  /** 붉은 금액 칸(V16: 칸마다) + 사유. off_total은 붉은 칸이 하나라도 있으면 true로 같이 저장 */
+  red_fields?: RedField[];
   pay_note?: string | null;
 };
+
+/** V16 SQL 전(red_fields 칸 없음)이면 그 칸만 빼고 다시 시도한다. */
+function isRedFieldsMissing(message: string): boolean {
+  return /red_fields/.test(message);
+}
 
 /**
  * 한 줄 저장. 순서: (환자 등록) → 줄 → 처방·해피콜 → 약장 나감 → 항목.
@@ -181,9 +196,7 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
   }
   const makePresc = decoctionItems.length > 0 && !!patientId && !!input.decoction && input.decoction.packs > 0;
 
-  const { data: e, error } = await sb
-    .from("ledger_entries")
-    .insert({
+  const row = {
       day: input.day,
       seq: input.seq,
       patient_id: patientId,
@@ -196,11 +209,14 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
       memo: input.memo.trim() || null,
       staff_name: input.staff_name,
       packs_missing: decoctionItems.length > 0 && !makePresc,
-      off_total: !!input.off_total,
-      pay_note: input.off_total ? input.pay_note?.trim() || null : null,
-    })
-    .select("*")
-    .single();
+      ...redColumns(input.red_fields, input.pay_note),
+  };
+  let inserted = await sb.from("ledger_entries").insert(row).select("*").single();
+  if (inserted.error && isRedFieldsMissing(inserted.error.message)) {
+    const { red_fields: _r, ...legacy } = row; // eslint-disable-line @typescript-eslint/no-unused-vars
+    inserted = await sb.from("ledger_entries").insert(legacy).select("*").single();
+  }
+  const { data: e, error } = inserted;
   if (error) fail("장부 저장", /day_seq_key/.test(error.message) ? "번호가 겹칩니다. 화면을 새로고침해 주세요." : error.message);
   const entry = e as LedgerEntry;
 
@@ -263,6 +279,18 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
           memo: `장부 ${input.day} #${input.seq}`,
         });
         moveId = mv.id;
+      } else if (i.group === "extract" && i.cabinet_item_id && !i.unknown && extractPacks(i.days, i.per_day) > 0) {
+        // 보험약(엑스제) 자동 차감: "오적산2일" → 2일 × 하루 포 수(기본 3) 포 나감 (V15)
+        const mv = await recordOut({
+          item_id: i.cabinet_item_id,
+          qty: extractPacks(i.days, i.per_day),
+          purpose: i.free ? "service" : "sale",
+          patient_id: patientId,
+          patient_name: name,
+          staff_name: input.staff_name,
+          memo: `장부 ${input.day} #${input.seq} ${i.raw}`,
+        });
+        moveId = mv.id;
       }
       rows.push({
         entry_id: entry.id,
@@ -295,9 +323,9 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
   }
 }
 
-/** 약대장 칸 제목은 두 가지만: 탕약발효 · 탕약일반 (접수실 2026-10-02) */
+/** 약대장 칸 제목: 보험(의보첩약) · 일반 · 발효 (사용자 2026-11-16, 옛 "탕약일반·탕약발효"는 화면에서 줄여 보임) */
 function itemTitle(i: ParsedItem): string {
-  return i.decoction_kind === "fermented" ? "탕약발효" : "탕약일반";
+  return brewTitle(i.decoction_kind);
 }
 
 /** 돈·이름·구분·메모만 고치기(마감 전). 항목은 지우고 다시 넣는다. */
@@ -310,25 +338,28 @@ export async function updateEntryMoney(
     cash_receipt: number;
     card: number;
     memo: string;
-    off_total: boolean;
+    red_fields: RedField[];
     pay_note: string | null;
   },
 ): Promise<void> {
   if (!patch.patient_name.trim()) throw new Error("성함을 적어 주세요.");
-  const { error } = await getSupabase()
-    .from("ledger_entries")
-    .update({
+  const sb = getSupabase();
+  const row = {
       patient_name: patch.patient_name.trim(),
       insurance_kind: patch.insurance_kind?.trim() || null,
       cash: patch.cash,
       cash_receipt: patch.cash_receipt,
       card: patch.card,
       memo: patch.memo.trim() || null,
-      off_total: patch.off_total,
-      pay_note: patch.off_total ? patch.pay_note?.trim() || null : null,
+      ...redColumns(patch.red_fields, patch.pay_note),
       updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  };
+  let res = await sb.from("ledger_entries").update(row).eq("id", id);
+  if (res.error && isRedFieldsMissing(res.error.message)) {
+    const { red_fields: _r, ...legacy } = row; // eslint-disable-line @typescript-eslint/no-unused-vars
+    res = await sb.from("ledger_entries").update(legacy).eq("id", id);
+  }
+  const { error } = res;
   if (error) fail("장부 수정", error.message.includes("row-level") ? "마감된 날은 고칠 수 없습니다. 정정 줄로 남겨 주세요." : error.message);
 }
 
@@ -348,10 +379,11 @@ export async function deleteEntry(entry: LedgerEntryWithItems, staff: string): P
     throw new Error("이 줄의 해피콜에 이미 연락 기록이 있어 지울 수 없습니다. 정정 줄로 남겨 주세요.");
   }
   for (const i of entry.items) {
-    if (i.cabinet_move_id && i.group === "cabinet") {
+    if (i.cabinet_move_id && (i.group === "cabinet" || i.group === "extract")) {
       const code = i.code;
       const itemId = await cabinetItemOfMove(i.cabinet_move_id);
-      if (itemId) await recordIn({ item_id: itemId, qty: i.qty, expiry: null, staff_name: staff, memo: `장부 줄 삭제 되돌림 (${entry.day} #${entry.seq} ${code})` });
+      const qty = i.group === "extract" ? await cabinetMoveQty(i.cabinet_move_id) : i.qty;
+      if (itemId && qty > 0) await recordIn({ item_id: itemId, qty, expiry: null, staff_name: staff, memo: `장부 줄 삭제 되돌림 (${entry.day} #${entry.seq} ${code})` });
     }
   }
   if (list.length > 0) {
@@ -376,6 +408,11 @@ export async function renumberAfterDelete(day: string, deletedSeq: number): Prom
     const { error: e } = await sb.from("ledger_entries").update({ seq: r.seq - 1 }).eq("id", r.id);
     if (e) fail("번호 정리", e.message);
   }
+}
+
+async function cabinetMoveQty(moveId: number): Promise<number> {
+  const { data } = await getSupabase().from("cabinet_moves").select("qty").eq("id", moveId).maybeSingle();
+  return (data as { qty: number } | null)?.qty ?? 0;
 }
 
 async function cabinetItemOfMove(moveId: number): Promise<number | null> {
@@ -439,4 +476,18 @@ export async function addCorrection(p: {
     correction_reason: p.reason.trim(),
   });
   if (error) fail("정정 줄", error.message);
+}
+
+/** 환자의 최종 내원일(장부에 적힌 마지막 날). 없으면 null. 환자 찾기 요약용. */
+export async function lastVisitDay(patientId: number): Promise<string | null> {
+  const { data, error } = await getSupabase()
+    .from("ledger_entries")
+    .select("day")
+    .eq("patient_id", patientId)
+    .eq("kind", "normal")
+    .order("day", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) fail("최종 내원일", error.message);
+  return (data as { day: string } | null)?.day ?? null;
 }

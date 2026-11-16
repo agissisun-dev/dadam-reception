@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { countDiff, expectedStock, expiryStatus, nearestExpiry, remainingLots } from "./cabinetRules";
+import { countDiff, expectedStock, expiryStatus, nearestExpiry, remainingLots, extractPacks } from "./cabinetRules";
 import type { CabinetMove } from "./types";
 
 function mv(p: Partial<CabinetMove> & { id: number; kind: CabinetMove["kind"]; qty: number }): CabinetMove {
@@ -79,5 +79,14 @@ describe("countDiff", () => {
     expect(countDiff(8, 7)).toBe(-1);
     expect(countDiff(8, 8)).toBe(0);
     expect(countDiff(8, 9)).toBe(1);
+  });
+});
+
+describe("extractPacks (보험약 자동 차감, V15)", () => {
+  it("일수 × 하루 포 수, 기본 3", () => {
+    expect(extractPacks(2, null)).toBe(6);
+    expect(extractPacks(3, 2)).toBe(6);
+    expect(extractPacks(null, 3)).toBe(0);
+    expect(extractPacks(0, 3)).toBe(0);
   });
 });

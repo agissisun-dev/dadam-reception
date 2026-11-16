@@ -152,3 +152,19 @@ export async function countToday(day: string): Promise<{ total: number; arrived:
     return { total: 0, arrived: 0 };
   }
 }
+
+/** 환자의 다음 예약(오늘 이후, 잡힌 것만). 없으면 null. 환자 찾기 요약용. */
+export async function nextAppointmentFor(patientId: number, today: string): Promise<Appointment | null> {
+  const { data, error } = await getSupabase()
+    .from("appointments")
+    .select("*")
+    .eq("patient_id", patientId)
+    .eq("status", "booked")
+    .gte("day", today)
+    .order("day")
+    .order("time")
+    .limit(1)
+    .maybeSingle();
+  if (error) fail("다음 예약", error.message);
+  return (data as Appointment | null) ?? null;
+}

@@ -4,8 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import MoneyInput from "@/components/MoneyInput";
 import { updateEntryMoney } from "@/lib/ledger";
-import { INSURANCE_KINDS, PAY_NOTES, chipClass, itemLabel, itemSummary, parseWon, sumEntries, won } from "@/lib/ledgerRules";
-import type { LedgerEntryWithItems } from "@/lib/types";
+import { INSURANCE_KINDS, PAY_NOTES, allRed, chipClass, itemLabel, itemSummary, parseWon, redFieldsOf, sumEntries, won } from "@/lib/ledgerRules";
+import type { LedgerEntryWithItems, RedField } from "@/lib/types";
 
 type Props = {
   entries: LedgerEntryWithItems[];
@@ -65,8 +65,10 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
   const [cashReceipt, setCashReceipt] = useState(e.cash_receipt ? String(e.cash_receipt) : "");
   const [card, setCard] = useState(e.card ? String(e.card) : "");
   const [memo, setMemo] = useState(e.memo ?? "");
-  const [offTotal, setOffTotal] = useState(e.off_total);
+  const [red, setRed] = useState<RedField[]>(() => redFieldsOf(e));
   const [payNote, setPayNote] = useState(e.pay_note ?? "계좌입금");
+  const toggleRed = (f: RedField) => setRed((r) => (r.includes(f) ? r.filter((x) => x !== f) : [...r, f]));
+  const offTotal = red.length > 0;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -81,7 +83,7 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
         cash_receipt: parseWon(cashReceipt),
         card: parseWon(card),
         memo,
-        off_total: offTotal,
+        red_fields: red,
         pay_note: offTotal ? payNote : null,
       });
       onDone();
@@ -106,9 +108,9 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
             ))}
           </select>
         </div>
-        <div><MoneyInput compact value={cash} onChange={setCash} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} /></div>
-        <div><MoneyInput compact value={cashReceipt} onChange={setCashReceipt} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} /></div>
-        <div><MoneyInput compact value={card} onChange={setCard} red={offTotal} onToggleRed={() => setOffTotal((v) => !v)} /></div>
+        <div><MoneyInput compact value={cash} onChange={setCash} red={red.includes("cash")} onToggleRed={() => toggleRed("cash")} /></div>
+        <div><MoneyInput compact value={cashReceipt} onChange={setCashReceipt} red={red.includes("cash_receipt")} onToggleRed={() => toggleRed("cash_receipt")} /></div>
+        <div><MoneyInput compact value={card} onChange={setCard} red={red.includes("card")} onToggleRed={() => toggleRed("card")} /></div>
         <div className={`${NUM} font-bold`}>{won(parseWon(cash) + parseWon(cashReceipt) + parseWon(card))}</div>
         <div className="pl-3"><input value={memo} onChange={(x) => setMemo(x.target.value)} placeholder="메모" className={IN} /></div>
         <div className="flex flex-wrap items-center gap-1 text-xs">
@@ -119,7 +121,7 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
               ))}
             </select>
           ) : (
-            <span className="text-[10px] text-stone-400">금액 옆 ● = 붉은 금액</span>
+            <span className="text-[10px] text-stone-400">금액 옆 ● = 그 칸만 붉게</span>
           )}
         </div>
         <div className="flex flex-col gap-1 text-xs">
@@ -155,7 +157,8 @@ export default function LedgerTable({ entries, closed, onDelete, onCorrect, onCh
           <div>처리자</div>
         </div>
         {entries.length === 0 && <p className="px-3 py-6 text-center text-sm text-stone-500">아직 적은 줄이 없습니다.</p>}
-        {entries.map((e) => {
+        {/* 1번이 맨 아래, 새 줄이 위로 쌓인다(사용자 2026-11-16). 엑셀 내려받기는 번호 순 그대로. */}
+        {[...entries].sort((a, b) => b.seq - a.seq || b.id - a.id).map((e) => {
           if (editing === e.id) {
             return (
               <EditRow
@@ -171,7 +174,9 @@ export default function LedgerTable({ entries, closed, onDelete, onCorrect, onCh
           }
           const correction = e.kind === "correction";
           const sub = e.cash + e.cash_receipt + e.card;
-          const red = e.off_total;
+          const reds = redFieldsOf(e);
+          const anyRed = reds.length > 0;
+          const subRed = allRed(e);
           return (
             <div key={e.id} className={`${GRID} border-t border-stone-100 py-2 text-sm ${correction ? "bg-amber-50/50" : ""}`}>
               <div className="text-stone-400">{correction ? "정정" : e.seq}</div>
@@ -180,13 +185,13 @@ export default function LedgerTable({ entries, closed, onDelete, onCorrect, onCh
                 {correction && <span className="block text-[11px] text-amber-800">#{entries.find((x) => x.id === e.corrects_id)?.seq ?? "?"} 정정 · {e.correction_reason}</span>}
               </div>
               <div className="text-stone-500">{e.insurance_kind ?? dash}</div>
-              <div className={NUM}>{money(e.cash, { signed: correction, red })}</div>
-              <div className={NUM}>{money(e.cash_receipt, { signed: correction, red })}</div>
-              <div className={NUM}>{money(e.card, { signed: correction, red })}</div>
+              <div className={NUM}>{money(e.cash, { signed: correction, red: reds.includes("cash") })}</div>
+              <div className={NUM}>{money(e.cash_receipt, { signed: correction, red: reds.includes("cash_receipt") })}</div>
+              <div className={NUM}>{money(e.card, { signed: correction, red: reds.includes("card") })}</div>
               <div className={`${NUM} font-bold`}>
-                {red ? (
+                {anyRed ? (
                   <span className="flex flex-col items-end leading-tight">
-                    {money(sub, { signed: correction, red: true })}
+                    {money(sub, { signed: correction, red: subRed })}
                     <span className="text-[10px] font-normal text-red-600">{e.pay_note ?? "계좌입금"}</span>
                   </span>
                 ) : correction ? money(sub, { signed: true }) : won(sub)}
@@ -233,7 +238,7 @@ export default function LedgerTable({ entries, closed, onDelete, onCorrect, onCh
           <div className={NUM}>{won(total.card)}</div>
           <div className={`${NUM} text-[#0f3d23]`}>{won(total.subtotal)}</div>
           <div className="col-span-3 pl-3 text-xs font-normal text-stone-500">
-            {total.offTotal > 0 && <span className="mr-3 text-red-700">그중 붉은 금액(계좌입금·제로페이 등) {won(total.offTotal)}</span>}
+            {total.offTotal > 0 && <span className="mr-3 text-red-700">그중 붉은 칸 금액(계좌입금·제로페이 등) {won(total.offTotal)}</span>}
             {summary.length > 0 ? summary.map((s) => `${s.name} ${s.qty}`).join(" · ") : "—"}
           </div>
         </div>

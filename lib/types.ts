@@ -166,7 +166,8 @@ export type SmsLog = {
 };
 
 /** 약장 품목. 약(medicine)·외용제(topical)·용품(supply: 핫팩·한방파스 등). */
-export type CabinetKind = "medicine" | "topical" | "supply";
+/** 재고 5칸(V15): 다담환약 · 외용제 · 용품 · 보험약(엑스제, 병원별·포) · 약침 */
+export type CabinetKind = "medicine" | "topical" | "supply" | "insured" | "yakchim";
 export type CabinetItem = {
   id: number;
   name: string;
@@ -174,6 +175,10 @@ export type CabinetItem = {
   min_stock: number;
   active: boolean;
   sort_order: number;
+  /** null = 두 병원 공통. 보험약은 병원별(V15) */
+  clinic: "S" | "N" | null;
+  /** 개 · 포(보험약) · 병(약침) 등 */
+  unit: string;
   created_at: string;
 };
 export type CabinetItemInput = Omit<CabinetItem, "id" | "created_at">;
@@ -213,12 +218,16 @@ export type LedgerCode = {
   group: LedgerGroup;
   cabinet_item_id: number | null;
   decoction_kind: DecoctionKind | null;
+  /** 엑스제: 하루 포 수(없으면 3). "오적산2일" → 2 × per_day 포 나감 (V15) */
+  per_day: number | null;
   active: boolean;
   sort_order: number;
   created_at: string;
 };
 export type LedgerCodeInput = Omit<LedgerCode, "id" | "created_at">;
 export type LedgerDay = { day: string; closed_at: string | null; closed_by: string | null; memo: string | null };
+/** 장부 금액 칸 이름 (붉은 칸 표시용) */
+export type RedField = "cash" | "cash_receipt" | "card";
 export type LedgerEntry = {
   id: number;
   day: string;
@@ -239,6 +248,8 @@ export type LedgerEntry = {
   /** 붉은 금액 표시: 제로페이·서울페이·계좌입금처럼 접수실 서랍에 돈이 없는 줄. 금액은 합계에 그대로 들어간다(2026-11-05) */
   off_total: boolean;
   pay_note: string | null;
+  /** 붉게 표시한 칸(V16, 2026-11-16). V16 SQL 전 표에는 없어서 undefined → off_total로 판단 */
+  red_fields?: RedField[] | null;
   created_at: string;
   updated_at: string;
 };
@@ -389,4 +400,29 @@ export type RecontactSettings = {
   body_once: string;
   body_reply: string;
   body_missed: string;
+};
+
+/** 물품 신청함 (V14, 2026-11-13) */
+export type SupplyCategory = "yakchim" | "treatment" | "office";
+export type SupplyStatus = "requested" | "approved" | "ordered" | "received" | "cancelled";
+export type SupplyRequest = {
+  id: number;
+  clinic: "S" | "N";
+  text: string;
+  category: SupplyCategory;
+  status: SupplyStatus;
+  requested_by: string;
+  requested_at: string;
+  price: number | null;
+  vendor: string | null;
+  price_note: string | null;
+  product_url: string | null;
+  priced_at: string | null;
+  approved_at: string | null;
+  ordered_at: string | null;
+  received_at: string | null;
+  received_by: string | null;
+  cancelled_at: string | null;
+  memo: string | null;
+  created_at: string;
 };

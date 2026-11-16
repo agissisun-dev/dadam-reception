@@ -1,3 +1,5 @@
+import { redAmount } from "./ledgerRules";
+import type { RedField } from "./types";
 import { todayISO } from "./dates";
 
 /** "2026-09-17" → "2026-09" */
@@ -146,7 +148,7 @@ export function weeklyMonth(contacts: WeeklyContactLite[], key: string): WeeklyM
   return out;
 }
 
-export type LedgerEntryLite = { day: string; cash: number; cash_receipt: number; card: number; off_total?: boolean };
+export type LedgerEntryLite = { day: string; cash: number; cash_receipt: number; card: number; off_total?: boolean; red_fields?: RedField[] | null };
 export type LedgerMonth = { cash: number; cash_receipt: number; card: number; subtotal: number; offTotal: number; expenses: number; days: number };
 
 /**
@@ -161,7 +163,7 @@ export function ledgerMonth(entries: LedgerEntryLite[], expenses: { day: string;
     out.cash += e.cash;
     out.cash_receipt += e.cash_receipt;
     out.card += e.card;
-    if (e.off_total) out.offTotal += e.cash + e.cash_receipt + e.card;
+    out.offTotal += redAmount(e);
     days.add(e.day);
   }
   out.subtotal = out.cash + out.cash_receipt + out.card;

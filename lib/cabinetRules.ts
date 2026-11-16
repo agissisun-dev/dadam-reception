@@ -79,13 +79,25 @@ export function purposeLabel(p: CabinetPurpose | null): string {
   return PURPOSES.find((x) => x.value === p)?.label ?? "";
 }
 
-/** 품목 구분: 약(초록) · 외용제(파랑) · 용품(회색, 핫팩·한방파스 등). */
-export const CABINET_KINDS: { value: CabinetKind; label: string; dot: string; order: number }[] = [
-  { value: "medicine", label: "약", dot: "bg-[#16863b]", order: 1 },
-  { value: "topical", label: "외용제", dot: "bg-blue-500", order: 11 },
-  { value: "supply", label: "용품", dot: "bg-stone-400", order: 21 },
+/** 품목 구분(재고 5칸, V15): 외용제(파랑) · 다담환약(초록) · 보험약(주황, 병원별·포) · 약침(보라) · 용품(회색, 핫팩·한방파스 등). */
+export const CABINET_KINDS: { value: CabinetKind; label: string; dot: string; order: number; unit: string; hint: string }[] = [
+  { value: "topical", label: "외용제", dot: "bg-blue-500", order: 11, unit: "개", hint: "기한 1년 안이면 판매 어려움 — 미리 확인" },
+  { value: "medicine", label: "다담환약", dot: "bg-[#16863b]", order: 1, unit: "개", hint: "공진단·경옥환·소합원·보비환" },
+  { value: "insured", label: "보험약", dot: "bg-orange-500", order: 31, unit: "포", hint: "병원별 · 장부의 엑스제(N일)에서 자동으로 뺌" },
+  { value: "yakchim", label: "약침", dot: "bg-purple-500", order: 41, unit: "병", hint: "물품 신청에서 사서 받으면 여기 입고" },
+  { value: "supply", label: "용품", dot: "bg-stone-400", order: 21, unit: "개", hint: "핫팩·한방파스" },
 ];
 
+/** 엑스제 하루 포 수 기본값(접수실 확인 전까지 3). */
+export const DEFAULT_EXTRACT_PER_DAY = 3;
+
+/** 장부 "오적산2일" → 나가는 포 수. 일수·하루 포 수가 없으면 0. */
+export function extractPacks(days: number | null, perDay: number | null): number {
+  if (!days || days <= 0) return 0;
+  const p = perDay && perDay > 0 ? perDay : DEFAULT_EXTRACT_PER_DAY;
+  return days * p;
+}
+
 export function kindInfo(kind: CabinetKind) {
-  return CABINET_KINDS.find((k) => k.value === kind) ?? CABINET_KINDS[2];
+  return CABINET_KINDS.find((k) => k.value === kind) ?? CABINET_KINDS[CABINET_KINDS.length - 1];
 }

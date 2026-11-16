@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { INSURANCE_KINDS, parseNote, parseWon, sumEntries, sumExpenses, nextSeq, won, itemSummary, isFree, itemLabel, daySummary, tallyByDay } from "./ledgerRules";
+import { INSURANCE_KINDS, allRed, redAmount, redFieldsOf, parseNote, parseWon, sumEntries, sumExpenses, nextSeq, won, itemSummary, isFree, itemLabel, daySummary, tallyByDay } from "./ledgerRules";
 import type { LedgerCode } from "./types";
 
 describe("ledger insurance categories", () => {
@@ -10,7 +10,7 @@ describe("ledger insurance categories", () => {
 });
 
 const c = (code: string, name: string, group: LedgerCode["group"], extra: Partial<LedgerCode> = {}): LedgerCode => ({
-  id: 0, code, name, group, cabinet_item_id: null, decoction_kind: null, active: true, sort_order: 0, created_at: "", ...extra,
+  id: 0, code, name, group, cabinet_item_id: null, decoction_kind: null, per_day: null, active: true, sort_order: 0, created_at: "", ...extra,
 });
 const CODES: LedgerCode[] = [
   c("전", "전침", "treatment"),
@@ -151,5 +151,28 @@ describe("합계·번호·금액", () => {
       { name: "공진단", group: "cabinet", qty: 5 },
       { name: "전침", group: "treatment", qty: 2 },
     ]);
+  });
+});
+
+describe("엑스제 하루 포 수 (V15)", () => {
+  it("약어 표의 per_day·보험약 품목이 항목에 따라온다", () => {
+    const codes = [c("오적산", "오적산", "extract", { cabinet_item_id: 7, per_day: 3 })];
+    const { items } = parseNote("오적산2일", codes);
+    expect(items[0]).toMatchObject({ code: "오적산", days: 2, per_day: 3, cabinet_item_id: 7 });
+  });
+});
+
+describe("붉은 칸 (V16, 칸마다 따로)", () => {
+  it("red_fields가 있으면 그 칸만, 없으면 off_total 줄은 금액 있는 칸 모두", () => {
+    expect(redFieldsOf({ cash: 1000, cash_receipt: 0, card: 2000, red_fields: ["cash"] })).toEqual(["cash"]);
+    expect(redFieldsOf({ cash: 1000, cash_receipt: 0, card: 2000, off_total: true })).toEqual(["cash", "card"]);
+    expect(redFieldsOf({ cash: 1000, cash_receipt: 0, card: 2000 })).toEqual([]);
+  });
+  it("붉은 칸 금액 합·소계 붉기", () => {
+    const e = { cash: 1000, cash_receipt: 0, card: 2000, red_fields: ["cash" as const] };
+    expect(redAmount(e)).toBe(1000);
+    expect(allRed(e)).toBe(false);
+    expect(allRed({ ...e, red_fields: ["cash", "card"] })).toBe(true);
+    expect(sumEntries([e]).offTotal).toBe(1000);
   });
 });

@@ -137,21 +137,7 @@ function Board() {
   const [manage, setManage] = useState(false);
   const [clinic, setClinic] = useState<ClinicCode>("S");
   const [activeKind, setActiveKind] = useState<CabinetKind | null>(null);
-  // 최근 기록: 누른 칸 것만(기본) / 전체. 사용자 2026-11-17. 이 브라우저가 기억한다.
-  const [recentAll, setRecentAll] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return localStorage.getItem("cabinet.recentAll") === "1";
-    } catch {
-      return false;
-    }
-  });
-  const chooseRecent = (all: boolean) => {
-    setRecentAll(all);
-    try {
-      localStorage.setItem("cabinet.recentAll", all ? "1" : "0");
-    } catch {}
-  };
+  const [collapsed, setCollapsed] = useState(false);
 
   const load = useCallback(() => {
     loadCabinet()
@@ -183,8 +169,10 @@ function Board() {
     };
   });
   // 처음엔 경고가 있는 칸, 없으면 품목이 있는 첫 칸을 펼친다.
-  const shownKind = activeKind ?? summaries.find((s) => s.short + s.expired + s.soon > 0)?.kind.value ?? summaries.find((s) => s.list.length > 0)?.kind.value ?? null;
-  const showAll = recentAll || !shownKind;
+  // 처음엔 경고가 있는 칸(없으면 품목 있는 첫 칸)을 펼친다. [접기]로 닫으면 아무 칸도 안 고른 상태 = 전체 기록.
+  const shownKind = collapsed ? null : (activeKind ?? summaries.find((s) => s.short + s.expired + s.soon > 0)?.kind.value ?? summaries.find((s) => s.list.length > 0)?.kind.value ?? null);
+  // 최근 기록은 누른 칸 것만(사용자 2026-11-17 "외용제 아래는 외용제 나간 것만"). 칸을 접으면 전체.
+  const showAll = !shownKind;
   const recent = [...moves].reverse().filter((m) => showAll || kindOf.get(m.item_id) === shownKind).slice(0, 30);
   const shownLabel = shownKind ? kindInfo(shownKind).label : "";
 
@@ -212,7 +200,10 @@ function Board() {
             <button
               key={k.value}
               type="button"
-              onClick={() => setActiveKind(active ? null : k.value)}
+              onClick={() => {
+                setCollapsed(active);
+                setActiveKind(active ? null : k.value);
+              }}
               aria-pressed={active}
               className={`rounded-lg border bg-white p-3 text-left ${active ? "border-stone-900 ring-2 ring-stone-900/10" : "border-stone-200 hover:border-stone-400"}`}
             >
@@ -240,7 +231,7 @@ function Board() {
               <span className={`inline-block h-2.5 w-2.5 rounded-full ${cur.kind.dot}`} />
               <h2 className="font-bold">{cur.kind.label}</h2>
               <span className="text-xs text-stone-500">{cur.kind.hint}</span>
-              <button type="button" onClick={() => setActiveKind(null)} className="ml-auto text-xs text-stone-400 underline">접기</button>
+              <button type="button" onClick={() => { setCollapsed(true); setActiveKind(null); }} className="ml-auto text-xs text-stone-400 underline">접기 (전체 기록 보기)</button>
             </div>
             {cur.list.map((s) => <CabinetRow key={s.item.id} status={s} today={today} onDone={load} />)}
             {cur.list.length === 0 && (
@@ -251,20 +242,12 @@ function Board() {
           </section>
         );
       })()}
-      {!shownKind && <p className="text-center text-xs text-stone-400">위 칸을 누르면 그 품목들이 보입니다.</p>}
+      {!shownKind && <p className="text-center text-xs text-stone-400">위 칸을 누르면 그 품목과 그 품목의 기록만 보입니다. 지금은 전체 기록입니다.</p>}
 
       <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
         <div className="mb-2 flex items-baseline justify-between">
-          <h2 className="font-bold">최근 기록</h2>
-          <span className="flex items-center gap-2 text-xs text-stone-500">
-            {shownKind && (
-              <span className="inline-flex overflow-hidden rounded border border-stone-300">
-                <button type="button" onClick={() => chooseRecent(false)} className={`px-2 py-0.5 ${!recentAll ? "bg-stone-900 text-white" : "bg-white"}`}>{shownLabel}만</button>
-                <button type="button" onClick={() => chooseRecent(true)} className={`px-2 py-0.5 ${recentAll ? "bg-stone-900 text-white" : "bg-white"}`}>전체</button>
-              </span>
-            )}
-            최근 30건 · 고치거나 지울 수 없습니다
-          </span>
+          <h2 className="font-bold">최근 기록{shownKind ? ` — ${shownLabel}` : ""}</h2>
+          <span className="text-xs text-stone-500">{shownKind ? `${shownLabel} 최근 30건` : "전체 최근 30건"} · 고치거나 지울 수 없습니다</span>
         </div>
         {recent.length === 0 && <p className="text-stone-500">{showAll ? "아직 기록이 없습니다. 각 품목의 [입고]로 지금 있는 수를 넣어 시작하세요." : `${shownLabel} 기록이 아직 없습니다.`}</p>}
         {recent.length > 0 && (

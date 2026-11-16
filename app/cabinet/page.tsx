@@ -5,7 +5,7 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import CabinetRow from "@/components/CabinetRow";
 import { createCabinetItem, listCabinetItems, loadCabinet, updateCabinetItem, type CabinetStatus } from "@/lib/cabinet";
-import { CABINET_KINDS, KIND_LABEL, kindInfo, purposeLabel } from "@/lib/cabinetRules";
+import { CABINET_KINDS, KIND_LABEL, expiryStatus, kindInfo, purposeLabel } from "@/lib/cabinetRules";
 import { clinicInfo, fetchCurrentClinic, type ClinicCode } from "@/lib/clinic";
 import { todayISO } from "@/lib/dates";
 import type { CabinetItem, CabinetKind, CabinetMove } from "@/lib/types";
@@ -136,7 +136,7 @@ function Board() {
   const [error, setError] = useState<string | null>(null);
   const [manage, setManage] = useState(false);
   const [clinic, setClinic] = useState<ClinicCode>("S");
-  const [openKinds, setOpenKinds] = useState<Record<string, boolean>>({});
+  const [activeKind, setActiveKind] = useState<CabinetKind | null>(null);
 
   const load = useCallback(() => {
     loadCabinet()
@@ -156,6 +156,19 @@ function Board() {
 
   const nameOf = new Map(statuses.map((s) => [s.item.id, s.item.name]));
   const recent = [...moves].reverse().slice(0, 30);
+  const summaries = CABINET_KINDS.map((k) => {
+    const list = statuses.filter((s) => s.item.kind === k.value);
+    const ex = list.map((s) => expiryStatus(s.nearest, today));
+    return {
+      kind: k,
+      list,
+      short: list.filter((s) => s.stock < s.item.min_stock).length,
+      expired: ex.filter((x) => x === "expired").length,
+      soon: ex.filter((x) => x === "soon30" || x === "soon60").length,
+    };
+  });
+  // 처음엔 경고가 있는 칸, 없으면 품목이 있는 첫 칸을 펼친다.
+  const shownKind = activeKind ?? summaries.find((s) => s.short + s.expired + s.soon > 0)?.kind.value ?? summaries.find((s) => s.list.length > 0)?.kind.value ?? null;
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-4">
@@ -169,31 +182,58 @@ function Board() {
         </div>
       </div>
 
-      <p className="text-xs text-stone-500">숫자는 있어야 할 수. 유통기한은 남은 것 중 가장 빠른 것. 30일 안 붉게, 60일 안 노랗게. 보험약은 {clinicInfo(clinic).short} 것만 보입니다.</p>
+      <p className="text-xs text-stone-500">칸을 누르면 그 품목만 보입니다. 숫자는 있어야 할 수, 유통기한은 남은 것 중 가장 빠른 것(30일 안 붉게, 60일 안 노랗게). 보험약은 {clinicInfo(clinic).short} 것만 보입니다.</p>
 
       {manage && <ItemManager onChanged={load} clinic={clinic} />}
 
-      {CABINET_KINDS.map((k) => {
-        const list = statuses.filter((s) => s.item.kind === k.value);
-        const short = list.filter((s) => s.stock < s.item.min_stock).length;
-        const open = openKinds[k.value] ?? true;
-        return (
-          <section key={k.value} className="space-y-2">
-            <button type="button" onClick={() => setOpenKinds((o) => ({ ...o, [k.value]: !open }))} className="flex w-full flex-wrap items-center gap-2 text-left">
-              <span className={`inline-block h-2.5 w-2.5 rounded-full ${k.dot}`} />
-              <h2 className="font-bold">{k.label}</h2>
-              <span className="text-xs text-stone-500">{list.length}개 품목{short > 0 ? ` · 부족 ${short}` : ""} · {k.hint}</span>
-              <span className="ml-auto text-xs text-stone-400">{open ? "접기" : "펼치기"}</span>
+      {/* 다섯 칸 타일: 품목 수·부족·기한 경고가 한눈에. 누른 칸의 품목만 아래에 보인다(사용자 2026-11-17 "스크롤 없이 한눈에"). */}
+      <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
+        {summaries.map(({ kind: k, list, short, expired, soon }) => {
+          const active = shownKind === k.value;
+          return (
+            <button
+              key={k.value}
+              type="button"
+              onClick={() => setActiveKind(active ? null : k.value)}
+              aria-pressed={active}
+              className={`rounded-lg border bg-white p-3 text-left ${active ? "border-stone-900 ring-2 ring-stone-900/10" : "border-stone-200 hover:border-stone-400"}`}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className={`inline-block h-2.5 w-2.5 rounded-full ${k.dot}`} />
+                <span className="font-bold">{k.label}</span>
+              </div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">{list.length}<span className="ml-0.5 text-xs font-normal text-stone-500">품목</span></div>
+              <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
+                {short > 0 && <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">부족 {short}</span>}
+                {expired > 0 && <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">기한 지남 {expired}</span>}
+                {soon > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">기한 60일 안 {soon}</span>}
+                {short + expired + soon === 0 && <span className="text-stone-400">이상 없음</span>}
+              </div>
             </button>
-            {open && list.map((s) => <CabinetRow key={s.item.id} status={s} today={today} onDone={load} />)}
-            {open && list.length === 0 && (
+          );
+        })}
+      </section>
+
+      {shownKind && (() => {
+        const cur = summaries.find((s) => s.kind.value === shownKind)!;
+        return (
+          <section className="space-y-2">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className={`inline-block h-2.5 w-2.5 rounded-full ${cur.kind.dot}`} />
+              <h2 className="font-bold">{cur.kind.label}</h2>
+              <span className="text-xs text-stone-500">{cur.kind.hint}</span>
+              <button type="button" onClick={() => setActiveKind(null)} className="ml-auto text-xs text-stone-400 underline">접기</button>
+            </div>
+            {cur.list.map((s) => <CabinetRow key={s.item.id} status={s} today={today} onDone={load} />)}
+            {cur.list.length === 0 && (
               <p className="rounded-lg border border-dashed border-stone-200 bg-white p-3 text-center text-xs text-stone-500">
-                아직 품목이 없습니다. [품목 관리]에서 {k.label} 품목을 추가하세요.
+                아직 품목이 없습니다. [품목 관리]에서 {cur.kind.label} 품목을 추가하세요.
               </p>
             )}
           </section>
         );
-      })}
+      })()}
+      {!shownKind && <p className="text-center text-xs text-stone-400">위 칸을 누르면 그 품목들이 보입니다.</p>}
 
       <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
         <div className="mb-2 flex items-baseline justify-between">

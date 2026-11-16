@@ -149,7 +149,12 @@ function Card({ j, staff, onChanged }: { j: BrewJob; staff: StaffName; onChanged
               type="button"
               className="ml-auto text-[11px] text-red-700 underline"
               onClick={() => {
-                if (window.confirm(`"${label}" 칸을 지울까요?${j.pair_id ? " 발효 짝도 같이 지워집니다." : ""} 처방·해피콜은 그대로 둡니다.`)) run(() => deleteJob(j));
+                // 약대장 칸은 일정만. 수납 취소는 오늘 장부에서 줄을 지워야 처방·해피콜·칸이 함께 지워진다(사용자 확인 2026-11-17).
+                const pairNote = j.pair_id ? " 발효 짝도 같이 지워집니다." : "";
+                const msg = j.ledger_entry_id
+                  ? `"${label}" 달이는 일정만 지울까요?${pairNote}\n수납 줄·처방·해피콜은 남습니다. 수납 자체를 취소하려면 오늘 장부에서 그 줄을 지우세요(그러면 처방·해피콜·약대장 칸이 함께 지워집니다).`
+                  : `"${label}" 칸을 지울까요?${pairNote} 이 칸만 지웁니다.`;
+                if (window.confirm(msg)) run(() => deleteJob(j));
               }}
             >
               칸 지우기

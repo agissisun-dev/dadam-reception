@@ -21,10 +21,10 @@ export function brewTitle(kind: "insurance" | "general" | "fermented" | null | u
   return "일반";
 }
 
-/** 옛 제목(탕약일반·탕약발효)을 새 이름으로 줄여 보인다. 저장된 글은 안 바꾼다. */
+/** 옛 제목(탕약일반·탕약발효·지정처방)을 짧은 이름으로 줄여 보인다(사용자 2026-11-16 "한눈에"). 저장된 글은 안 바꾼다. */
 export function displayTitle(title: string | null | undefined): string {
   if (!title) return "";
-  return title.replace(/탕약일반/g, "일반").replace(/탕약발효/g, "발효").replace(/보험\(처방\)/g, "보험");
+  return title.replace(/탕약일반/g, "일반").replace(/탕약발효/g, "발효").replace(/보험\(처방\)/g, "보험").replace(/지정처방/g, "지정");
 }
 
 function dow(iso: string): number {

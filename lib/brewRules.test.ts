@@ -30,6 +30,7 @@ describe("칸 글", () => {
     expect(jobLabel(j({}))).toBe("김하나-보험-직");
     expect(jobLabel(j({ title: "탕약일반" }))).toBe("김하나-일반-직");
     expect(jobLabel(j({ title: "탕약발효" }))).toBe("김하나-발효-직");
+    expect(jobLabel(j({ patient_name: "", title: "지정처방", kind: "batch", delivery: null }))).toBe("지정");
     expect(brewTitle("insurance")).toBe("보험");
     expect(brewTitle("fermented")).toBe("발효");
     expect(brewTitle(null)).toBe("일반");

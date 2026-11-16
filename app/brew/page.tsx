@@ -213,7 +213,7 @@ function AddJob({ defaultDay, staff, onDone, onCancel }: { defaultDay: string; s
             kind: kind === "batch" ? "batch" : "note",
             patient_id: null,
             patient_name: "",
-            title: kind === "batch" ? "지정처방" : memo.trim(),
+            title: kind === "batch" ? "지정" : memo.trim(),
             delivery: null,
             region: null,
             pouch: null,
@@ -417,7 +417,7 @@ function Board() {
                       <span className={`text-[11px] font-bold ${over ? "text-red-700" : "text-[#0f3d23]"}`}>
                         {c.brew + c.press}/{c.max}개{over ? " ↑" : ""}
                         {c.press > 0 && ` (짜기 ${c.press} 포함)`}
-                        {c.batch > 0 && ` · 지정처방 ${c.batch}`}
+                        {c.batch > 0 && ` · 지정 ${c.batch}`}
                       </span>
                     </div>
                     <div className="h-4 truncate text-[10px] text-stone-500">{[hol ? `${hol}${closed ? " 휴진" : ""}` : "", ruleOf(iso)?.note ?? ""].filter(Boolean).join(" · ") || " "}</div>

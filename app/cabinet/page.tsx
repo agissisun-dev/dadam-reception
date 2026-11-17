@@ -75,11 +75,7 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
     <datalist id="cabinet-units">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
     <p className="mb-2 text-xs text-stone-500">약침은 개·병을 선택합니다. 같은 약침을 두 단위로 관리하려면 단위별로 품목을 등록하세요. 수량은 자동 환산하지 않습니다. 약침 삭제는 양쪽 병원 현재 목록에서 숨기며, 기존 기록은 보관합니다.</p>
     <label className="mb-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={showDeleted} disabled={busy} onChange={(e) => setShowDeleted(e.target.checked)} />삭제한 약침 보기</label>
-    {deleteTarget && <div role="alert" className="mb-3 rounded border border-red-300 bg-red-50 p-3">
-      <p>“{deleteTarget.name}” 약침을 삭제할까요? 두 병원 공용이므로 양쪽 현재 목록에서 숨겨집니다. 기존 수량·입출고·장부 기록은 보관되며 [삭제한 약침 보기]에서 복구할 수 있습니다.</p>
-      <button disabled={busy} className={BTN + " mt-2 mr-2 text-red-700"} onClick={() => run(async () => { await archiveCabinetItem(deleteTarget.id); setDeleteTarget(null); }, "약침을 삭제했습니다. 기존 기록은 보관되며 복구할 수 있습니다.")}>삭제 확인</button>
-      <button disabled={busy} className={BTN} onClick={() => setDeleteTarget(null)}>취소</button>
-    </div>}
+
     <ul className="divide-y divide-stone-100">{items.filter((item) => item.kind !== "yakchim" || item.active || showDeleted).map((it) => <li key={it.id} className="flex flex-wrap items-center gap-2 py-2">
       <span className={it.active ? "" : "text-stone-400 line-through"}>{it.name}</span>
       <span className="text-xs text-stone-500">{kindInfo(it.kind).label} · {it.clinic ? clinicInfo(it.clinic).short + " 전용" : "공용"}</span>
@@ -89,6 +85,11 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
         ? <button disabled={busy || !ready} className="ml-auto text-xs text-red-700 underline" aria-label={it.name + " 삭제"} onClick={() => setDeleteTarget(it)}>삭제</button>
         : <button disabled={busy || !ready} className="ml-auto text-xs underline" aria-label={it.name + " 복구"} onClick={() => run(async () => { await updateCabinetItem(it.id, { active: true }); }, "약침을 복구했습니다.")}>복구</button>
         : <button disabled={busy} className="ml-auto text-xs underline" onClick={() => run(async () => { await updateCabinetItem(it.id, { active: !it.active }); })}>{it.active ? "사용 안 함" : "다시 사용"}</button>}
+    {deleteTarget?.id === it.id && <div role="alert" className="w-full mb-3 rounded border border-red-300 bg-red-50 p-3">
+      <p>“{deleteTarget.name}” 약침을 삭제할까요? 두 병원 공용이므로 양쪽 현재 목록에서 숨겨집니다. 기존 수량·입출고·장부 기록은 보관되며 [삭제한 약침 보기]에서 복구할 수 있습니다.</p>
+      <button disabled={busy} className={BTN + " mt-2 mr-2 text-red-700"} onClick={() => run(async () => { await archiveCabinetItem(deleteTarget.id); setDeleteTarget(null); }, "약침을 삭제했습니다. 기존 기록은 보관되며 복구할 수 있습니다.")}>삭제 확인</button>
+      <button disabled={busy} className={BTN} onClick={() => setDeleteTarget(null)}>취소</button>
+    </div>}
     </li>)}</ul>
     <div className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
       <label>새 품목<input value={name} onChange={(e) => setName(e.target.value)} disabled={busy} placeholder="이름" className={INPUT} /></label>

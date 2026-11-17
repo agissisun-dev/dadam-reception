@@ -1,7 +1,7 @@
 import { getSupabase } from "./supabaseClient";
 import { addPrescription, createPatient, findPatientByPhone } from "./patients";
-import { recordIn, recordOut, validateCabinetTargetsForLedger } from "./cabinet";
-import { extractPacks } from "./cabinetRules";
+import { getCabinetClinic, recordIn, recordOut, validateCabinetTargetsForLedger } from "./cabinet";
+import { cabinetScopeAllows, extractPacks, isPrivateSupply } from "./cabinetRules";
 import { brewTitle } from "./brewRules";
 import { daysFromPacks } from "./packs";
 import { isValidPhone } from "./phone";
@@ -15,6 +15,8 @@ function redColumns(red: RedField[] | undefined, payNote: string | null | undefi
   return { off_total: fields.length > 0, pay_note: fields.length > 0 ? payNote?.trim() || null : null, red_fields: fields };
 }
 import type {
+  CabinetItem,
+  CabinetMove,
   RedField,
   LedgerCode,
   LedgerCodeInput,
@@ -379,13 +381,10 @@ export async function deleteEntry(entry: LedgerEntryWithItems, staff: string): P
   if (list.some((p) => p.happy_calls.some((c) => c.contact_logs.length > 0))) {
     throw new Error("이 줄의 해피콜에 이미 연락 기록이 있어 지울 수 없습니다. 정정 줄로 남겨 주세요.");
   }
-  for (const i of entry.items) {
-    if (i.cabinet_move_id && (i.group === "cabinet" || i.group === "extract")) {
-      const code = i.code;
-      const itemId = await cabinetItemOfMove(i.cabinet_move_id);
-      const qty = i.group === "extract" ? await cabinetMoveQty(i.cabinet_move_id) : i.qty;
-      if (itemId && qty > 0) await recordIn({ item_id: itemId, qty, expiry: null, staff_name: staff, memo: `장부 줄 삭제 되돌림 (${entry.day} #${entry.seq} ${code})` });
-    }
+  // 모든 원본 연결을 먼저 확인한다. 뒤쪽 보관·누락 기록 때문에 앞쪽 약만 반환되면 안 된다.
+  const reversals = await preflightDeleteReversals(entry.items);
+  for (const reversal of reversals) {
+    await recordIn({ item_id: reversal.itemId, qty: reversal.qty, expiry: null, staff_name: staff, memo: `장부 줄 삭제 되돌림 (${entry.day} #${entry.seq} ${reversal.code})` });
   }
   if (list.length > 0) {
     const { error: e1 } = await sb.from("prescriptions").delete().in("id", list.map((p) => p.id));
@@ -411,14 +410,39 @@ export async function renumberAfterDelete(day: string, deletedSeq: number): Prom
   }
 }
 
-async function cabinetMoveQty(moveId: number): Promise<number> {
-  const { data } = await getSupabase().from("cabinet_moves").select("qty").eq("id", moveId).maybeSingle();
-  return (data as { qty: number } | null)?.qty ?? 0;
-}
-
-async function cabinetItemOfMove(moveId: number): Promise<number | null> {
-  const { data } = await getSupabase().from("cabinet_moves").select("item_id").eq("id", moveId).maybeSingle();
-  return (data as { item_id: number } | null)?.item_id ?? null;
+/** 약어 표의 현재 연결이 아니라 장부에 저장된 원본 나감 기록만 따라간다. 쓰기는 하지 않는다. */
+async function preflightDeleteReversals(items: LedgerItem[]): Promise<{ itemId: number; qty: number; code: string }[]> {
+  const linked = items.filter((item) => item.cabinet_move_id != null);
+  if (!linked.length) return [];
+  const sb = getSupabase();
+  const clinic = await getCabinetClinic();
+  const reversals: { itemId: number; qty: number; code: string }[] = [];
+  for (const ledgerItem of linked) {
+    const moveId = ledgerItem.cabinet_move_id!;
+    const { data: moveData, error: moveError } = await sb.from("cabinet_moves").select("id, item_id, kind, qty").eq("id", moveId).maybeSingle();
+    if (moveError) fail("원본 약장 나감 확인", moveError.message);
+    const move = moveData as Pick<CabinetMove, "id" | "item_id" | "kind" | "qty"> | null;
+    if (!move || move.id !== moveId || !move.item_id) throw new Error("원본 약장 나감 기록 또는 품목 연결을 찾을 수 없어 지울 수 없습니다. 원장 검토 후 정정해 주세요.");
+    const { data: itemData, error: itemError } = await sb.from("cabinet_items").select("id, kind, clinic, legacy_shared").eq("id", move.item_id).maybeSingle();
+    if (itemError) fail("원본 약장 품목 확인", itemError.message);
+    const item = itemData as Pick<CabinetItem, "id" | "kind" | "clinic" | "legacy_shared"> | null;
+    if (!item || item.id !== move.item_id) throw new Error("원본 약장 품목을 찾을 수 없어 지울 수 없습니다. 원장 검토 후 정정해 주세요.");
+    if (item.legacy_shared === true) throw new Error("분리 전 공용 기록은 재고 귀속 확인 후 원장 검토 정정이 필요합니다. 이 줄은 지울 수 없습니다.");
+    if (!cabinetScopeAllows(item, clinic)) throw new Error("원본 약장 품목의 병원이 맞지 않아 지울 수 없습니다. 원장 검토 후 정정해 주세요.");
+    if (move.kind !== "out" || !Number.isFinite(move.qty) || move.qty < 1) throw new Error("원본 약장 나감 수량을 확인할 수 없어 지울 수 없습니다. 원장 검토 후 정정해 주세요.");
+    // recordIn도 요구하는 초기 수량을 모든 반환 전에 확인한다.
+    if (isPrivateSupply(item)) {
+      const { data: counts, error: countError } = await sb.from("cabinet_moves").select("id").eq("item_id", item.id).eq("kind", "count").limit(1);
+      if (countError) fail("원본 용품 초기 수량 확인", countError.message);
+      if (!counts?.length) throw new Error("초기 수량 미등록. 재고현황에서 현재 수량 등록을 먼저 저장해 주세요.");
+    }
+    if (ledgerItem.group === "cabinet" || ledgerItem.group === "extract") {
+      const qty = ledgerItem.group === "extract" ? move.qty : ledgerItem.qty;
+      if (!Number.isFinite(qty) || qty < 1) throw new Error("되돌림 수량을 확인할 수 없어 지울 수 없습니다. 원장 검토 후 정정해 주세요.");
+      reversals.push({ itemId: move.item_id, qty, code: ledgerItem.code });
+    }
+  }
+  return reversals;
 }
 
 /* ---------- 지출 ---------- */

@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import LoginStorageCheck from "@/components/LoginStorageCheck";
 import type { Session } from "@supabase/supabase-js";
 import { createAuthSessionRecovery } from "@/lib/authSessionRecovery";
 import { getSupabase } from "@/lib/supabaseClient";
@@ -131,6 +132,7 @@ export default function LoginPage() {
         <button type="button" onClick={() => { setCheckingSession(true); setSessionRetry((value) => value + 1); }} className="w-full rounded border py-2">저장된 로그인 다시 확인</button>
         <button type="button" onClick={() => setManualSignIn(true)} className="w-full rounded border py-2 text-sm">직접 로그인 입력하기 (선택)</button>
         <p className="text-xs text-stone-500">직접 입력 화면을 열어도 기존 로그인 정보를 삭제하거나 로그아웃하지 않습니다.</p>
+        <LoginStorageCheck />
       </main>
     );
   }
@@ -206,6 +208,7 @@ export default function LoginPage() {
         이 PC에서는 로그아웃하기 전까지 로그인 상태가 유지됩니다.
         외부·공용 PC에서는 사용 후 반드시 로그아웃하세요.
       </p>
+      <LoginStorageCheck />
     </main>
   );
 }

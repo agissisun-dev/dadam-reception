@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { getCabinetClinic } from "@/lib/cabinet";
+import { cabinetLinkAllows } from "@/lib/cabinetRules";
 import { planHappyCalls } from "@/lib/happyCallRules";
 import { saveEntry, upsertCode } from "@/lib/ledger";
 import { GROUP_LABEL, GROUP_ORDER, INSURANCE_KINDS, PAY_NOTES, chipClass, parseNote, parseWon, won, type ParsedItem } from "@/lib/ledgerRules";
@@ -45,6 +47,8 @@ function UnknownCodeForm({
   onDone: () => void;
   onCancel: () => void;
 }) {
+  const [cabinetClinic, setCabinetClinic] = useState<"S" | "N" | null>(null);
+  useEffect(() => { let live = true; getCabinetClinic().then((c) => { if (live) setCabinetClinic(c); }).catch(() => { if (live) setCabinetClinic(null); }); return () => { live = false; }; }, []);
   const guess = raw.replace(/[\d().#*\-]+[tT알개pP일]?$/g, "").trim() || raw;
   const [code, setCode] = useState(guess);
   const [name, setName] = useState(guess);
@@ -96,7 +100,7 @@ function UnknownCodeForm({
           <span className={LABEL}>약장 품목</span>
           <select value={cabinetId} onChange={(e) => setCabinetId(e.target.value === "" ? "" : Number(e.target.value))} className="h-9 rounded border border-stone-300 px-2 text-sm">
             <option value="">(연결 안 함)</option>
-            {cabinetItems.filter((item) => item.kind !== "insured" && item.clinic == null).map((c) => (
+            {cabinetItems.filter((item) => item.active && cabinetLinkAllows(item, cabinetClinic, "cabinet")).map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>

@@ -1,0 +1,31 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { addSupplyRequests, getOwnerPin, getSupplyClinic, listAllSupplyRequests, listSupplyRequests, setOwnerPin, setSupplyCategory, setSupplyStatus } from "./supplies";
+const m = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn(), eq: vi.fn(), insert: vi.fn(), update: vi.fn(), upsert: vi.fn(), single: vi.fn(), maybeSingle: vi.fn() }));
+vi.mock("./supabaseClient", () => ({ getSupabase: () => ({ rpc: m.rpc, from: m.from }) }));
+beforeEach(() => {
+  vi.clearAllMocks();
+  m.rpc.mockResolvedValue({ data: "N", error: null });
+  m.single.mockResolvedValue({ data: { id: 1 }, error: null });
+  m.maybeSingle.mockResolvedValue({ data: { owner_pin: null }, error: null });
+  const result = Promise.resolve({ data: [], error: null });
+  const q = { select: vi.fn(), order: vi.fn(), or: vi.fn(), limit: vi.fn(), eq: m.eq, insert: m.insert, update: m.update, upsert: m.upsert, single: m.single, maybeSingle: m.maybeSingle, then: result.then.bind(result) };
+  for (const f of [q.select, q.order, q.or, q.limit, m.eq, m.insert, m.update, m.upsert]) f.mockReturnValue(q);
+  m.from.mockReturnValue(q);
+});
+describe("물품은 확인한 병원 범위에서만 처리", () => {
+  it.each(["S", "N"])("실제 %s 매핑을 사용", async (clinic) => { m.rpc.mockResolvedValue({ data: clinic, error: null }); await expect(getSupplyClinic()).resolves.toBe(clinic); });
+  it.each([null, "X", undefined])("매핑 %s이면 조회·쓰기 전에 중단", async (data) => { m.rpc.mockResolvedValue({ data, error: null }); await expect(listSupplyRequests()).rejects.toThrow("병원을 확인하지 못했습니다"); expect(m.from).not.toHaveBeenCalled(); });
+  it("연결 오류도 S 기본값으로 처리하지 않음", async () => { m.rpc.mockResolvedValue({ data: "N", error: { message: "offline" } }); await expect(addSupplyRequests("주사기 2박스", "fixture")).rejects.toThrow(); expect(m.insert).not.toHaveBeenCalled(); });
+  it("일반 목록과 빈도 목록 모두 N 조건", async () => { await listSupplyRequests(); await listAllSupplyRequests(); expect(m.eq.mock.calls.filter(c => c[0] === "clinic")).toEqual([["clinic", "N"], ["clinic", "N"]]); });
+  it("자유롭게 적은 단위·수량은 그대로 자기 병원 신청", async () => { await addSupplyRequests("주사기 2박스\n알콜솜 3통", "fixture"); const payload = m.insert.mock.calls[0][0]; expect(payload.map((r: { clinic: string }) => r.clinic)).toEqual(["N", "N"]); expect(payload.map((r: { text: string }) => r.text)).toEqual(["주사기 2박스", "알콜솜 3통"]); });
+  it("빈 신청은 저장하지 않음", async () => { await expect(addSupplyRequests(" ", "fixture")).resolves.toEqual([]); expect(m.rpc).not.toHaveBeenCalled(); });
+  it("분류·상태 수정도 해당 병원과 실제 저장 확인", async () => { await setSupplyCategory(1, "treatment"); await setSupplyStatus(1, "received", "fixture"); expect(m.eq).toHaveBeenCalledWith("clinic", "N"); expect(m.single).toHaveBeenCalledTimes(2); });
+  it("보이지 않는 신청을 성공으로 보고하지 않음", async () => { m.single.mockResolvedValueOnce({ data: null, error: { message: "not found" } }); await expect(setSupplyCategory(99, "office")).rejects.toThrow("해당 병원 신청"); });
+  it("잠금 설정도 N 전용 복합 키", async () => { await expect(getOwnerPin()).resolves.toBeNull(); await setOwnerPin(null); expect(m.eq).toHaveBeenCalledWith("clinic", "N"); expect(m.upsert.mock.calls[0][0]).toMatchObject({ clinic: "N", id: 1, owner_pin: null }); expect(m.upsert.mock.calls[0][1]).toEqual({ onConflict: "clinic,id" }); });
+  it("잠금 조회 오류를 잠금 없음으로 바꾸지 않음", async () => { m.maybeSingle.mockResolvedValueOnce({ data: null, error: { message: "offline" } }); await expect(getOwnerPin()).rejects.toThrow(); });
+  it("설정 행 누락은 잠금 없음이 아닌 구성 오류", async () => { m.maybeSingle.mockResolvedValueOnce({ data: null, error: null }); await expect(getOwnerPin()).rejects.toThrow("잠금 설정 행"); });
+  it("실제 행의 명시적 null만 잠금 없음", async () => { m.maybeSingle.mockResolvedValueOnce({ data: { owner_pin: null }, error: null }); await expect(getOwnerPin()).resolves.toBeNull(); });
+  it.each([{}, { owner_pin: undefined }, { owner_pin: "" }])("불완전한 설정 행도 잠금을 열지 않음", async (data) => { m.maybeSingle.mockResolvedValueOnce({ data, error: null }); await expect(getOwnerPin()).rejects.toThrow("잠금 설정 행"); });
+  it("잠금 조회 병원 확인 실패도 닫힘", async () => { m.rpc.mockResolvedValueOnce({ data: null, error: null }); await expect(getOwnerPin()).rejects.toThrow("병원을 확인하지 못했습니다"); expect(m.from).not.toHaveBeenCalled(); });
+  it("잘못된 잠금 입력은 쓰기 전에 거절", async () => { await expect(setOwnerPin("x")).rejects.toThrow(); expect(m.upsert).not.toHaveBeenCalled(); });
+});

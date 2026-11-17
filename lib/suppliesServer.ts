@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { clinicFromHostname } from "./clinicHosts";
 
 /**
  * 물품 신청함 API (V14, 2026-11-13) — 아사이드(병원 PC의 에이전트)가 신청 목록을 읽고 최저가·업체를 적어 넣는 길.
@@ -23,6 +24,17 @@ export function checkToken(request: Request): Response | null {
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!token || token !== expected) return reply(401, { error: "토큰이 맞지 않습니다." });
   return null;
+}
+
+export async function supplyApiClinic(sb: SupabaseClient, request: Request): Promise<"S" | "N" | Response> {
+  const url = new URL(request.url);
+  const requested = url.searchParams.get("clinic");
+  if (requested && requested !== "S" && requested !== "N") return reply(400, { error: "병원 구분이 올바르지 않습니다." });
+  const { data, error } = await sb.rpc("current_clinic");
+  if (error || (data !== "S" && data !== "N")) return reply(403, { error: "물품 API 계정의 병원을 확인하지 못했습니다." });
+  const hostClinic = clinicFromHostname(url.hostname);
+  if ((hostClinic && hostClinic !== data) || (requested && requested !== data)) return reply(403, { error: "요청한 병원과 물품 API 계정의 병원이 다릅니다. 해당 병원 계정으로 설정해 주세요." });
+  return data;
 }
 
 export async function clientForSupplies(): Promise<SupabaseClient | Response> {

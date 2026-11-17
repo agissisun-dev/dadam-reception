@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { CabinetStatus } from "@/lib/cabinet";
 import { recordCount, recordDiscard, recordIn, recordOut } from "@/lib/cabinet";
-import { KIND_LABEL, PURPOSES, countDiff, expiryStatus, kindInfo, purposeLabel } from "@/lib/cabinetRules";
+import { KIND_LABEL, PURPOSES, countDiff, expiryStatus, kindInfo, purposeLabel, cabinetInitialized, isLegacyCabinetItem } from "@/lib/cabinetRules";
 import { daysBetween } from "@/lib/dates";
 import { conditionLabel } from "@/lib/conditions";
 import { listPatients } from "@/lib/patients";
@@ -36,8 +36,12 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const pending = useRef(false);
+  const initialized = cabinetInitialized(item, moves);
+  const initialSupply = !initialized;
+  const archived = isLegacyCabinetItem(item);
   const st = expiryStatus(nearest, today);
-  const short = stock <= 0 || (item.min_stock > 0 && stock <= item.min_stock);
+  const short = initialized && (stock <= 0 || (item.min_stock > 0 && stock <= item.min_stock));
   /** 아직 기록이 하나도 없는 품목: 처음 수량을 넣는 단계라 세어 맞춤·사유를 묻지 않는다. */
   const first = moves.length === 0;
   const dot = kindInfo(item.kind).dot;
@@ -59,6 +63,8 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
   }
 
   async function run(fn: () => Promise<void>) {
+    if (pending.current || archived) return;
+    pending.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -69,6 +75,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
     } catch (e) {
       setError(`저장되지 않았습니다. ${(e as Error).message}`);
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   }
@@ -88,7 +95,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
   }
 
   function expiryText(): { text: string; cls: string } {
-    if (!nearest) return { text: stock > 0 ? "기한 미입력" : "", cls: "text-stone-400" };
+    if (!nearest) return { text: initialized && stock > 0 ? "기한 미입력" : "", cls: "text-stone-400" };
     const d = daysBetween(today, nearest);
     if (st === "expired") return { text: `${nearest} 지남 · 폐기 필요`, cls: "text-red-700 font-medium" };
     if (st === "soon30") return { text: `${nearest} (D-${d})`, cls: "text-red-700" };
@@ -102,15 +109,17 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
       <div className="flex flex-wrap items-center gap-3">
         <span className={`inline-block h-2.5 w-2.5 rounded-full ${dot}`} title={kindInfo(item.kind).label} />
         <span className="font-medium">{item.name}</span>
-        <span className={`text-lg font-semibold ${short ? "text-red-700" : ""}`}>{stock}{unit}</span>
+        <span className={`text-lg font-semibold ${short ? "text-red-700" : ""}`}>{initialSupply ? "초기 수량 미등록" : `${stock}${unit}`}</span>
         {short && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700">부족</span>}
         <span className={`text-xs ${ex.cls}`}>{ex.text}</span>
-        <span className="ml-auto flex gap-1.5">
-          <button className={PRIMARY} onClick={() => (mode === "out" ? reset() : (reset(), setMode("out")))}>
+        {!archived && <span className="ml-auto flex gap-1.5">
+          {initialSupply && <button className={PRIMARY} disabled={busy} onClick={() => { reset(); setMode("count"); setMemo("병원별 초기 재고 등록"); }}>현재 수량 등록</button>}
+          <button disabled={busy || initialSupply} className={PRIMARY} onClick={() => (mode === "out" ? reset() : (reset(), setMode("out")))}>
             나감
           </button>
           <button
             className={BTN}
+            disabled={busy || initialSupply}
             onClick={() => {
               if (mode === "in") return reset();
               reset();
@@ -126,7 +135,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
           <button className={`${BTN} text-stone-500`} onClick={() => (mode === "history" ? reset() : (reset(), setMode("history")))}>
             …
           </button>
-        </span>
+        </span>}
       </div>
 
       {mode === "out" && (
@@ -213,7 +222,8 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
                 지금 실제로 몇 {unit} 남았나요? <span className="text-stone-500">(있어야 할 수 {stock}{unit})</span>
               </p>
               <input type="number" min={0} value={counted} onChange={(e) => setCounted(e.target.value)} className="w-28 rounded border border-stone-300 px-2 py-1.5 text-sm" placeholder="센 수" />
-              {first && <p className="text-sm text-stone-600">처음 등록이라 사유 없이 저장됩니다. 유통기한까지 적으려면 [처음 수량 넣기]를 쓰세요.</p>}
+              {initialSupply && <><p className="text-sm text-amber-800">실제로 센 현재 수량을 입력하세요. 0도 저장할 수 있습니다. 저장 전에는 입고·나감·폐기를 할 수 없습니다.</p><input aria-label="초기 수량 등록 메모" value={memo} onChange={(e) => setMemo(e.target.value)} className={INPUT} /></>}
+              {first && !initialSupply && <p className="text-sm text-stone-600">처음 등록이라 사유 없이 저장됩니다. 유통기한까지 적으려면 [처음 수량 넣기]를 쓰세요.</p>}
               {!first && diff !== null && diff !== 0 && (
                 <p className="text-sm text-red-700">
                   {Math.abs(diff)}{unit} {diff > 0 ? "많습니다" : "모자랍니다"}. 사유를 적어야 저장됩니다.
@@ -227,7 +237,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
               <div className="flex gap-2">
                 <button
                   className={PRIMARY}
-                  disabled={busy || countedNum === null || (!first && diff !== 0 && !memo.trim())}
+                  disabled={busy || countedNum === null || !Number.isFinite(countedNum) || countedNum < 0 || (!first && diff !== 0 && !memo.trim())}
                   onClick={() => {
                     if (mode === "count") {
                       run(async () => {
@@ -236,7 +246,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
                           counted: countedNum!,
                           expected: stock,
                           staff_name: staff,
-                          memo: first ? "처음 수량 등록" : memo,
+                          memo: initialSupply ? (memo.trim() || "병원별 초기 재고 등록") : first ? "처음 수량 등록" : memo,
                         });
                       });
                     } else {
@@ -244,7 +254,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
                     }
                   }}
                 >
-                  {mode === "count" ? "세어 맞춤 저장" : "다음: 들어온 것 적기"}
+                  {mode === "count" ? (initialSupply ? "현재 수량 등록 저장" : "세어 맞춤 저장") : "다음: 들어온 것 적기"}
                 </button>
                 <button className={BTN} onClick={reset}>
                   취소
@@ -321,10 +331,10 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
       {mode === "history" && (
         <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
-            <button className={BTN} onClick={() => { reset(); setMode("count"); }}>
-              세어 넣기
+            <button className={BTN} disabled={busy} onClick={() => { reset(); setMode("count"); if (initialSupply) setMemo("병원별 초기 재고 등록"); }}>
+              {initialSupply ? "현재 수량 등록" : "세어 넣기"}
             </button>
-            <button className={`${BTN} text-red-700`} onClick={() => { reset(); setMode("discard"); }}>
+            <button disabled={busy || initialSupply} className={`${BTN} text-red-700`} onClick={() => { reset(); setMode("discard"); }}>
               폐기
             </button>
             {status.lots.length > 0 && (

@@ -5,9 +5,10 @@ import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import StaffSelect from "@/components/StaffSelect";
 import { loadLastStaff, saveLastStaff, STAFF_NAMES, type StaffName } from "@/lib/staff";
-import { clinicInfo } from "@/lib/clinic";
+import { clinicInfo, type ClinicCode } from "@/lib/clinic";
 import {
   addSupplyRequests,
+  getSupplyClinic,
   getOwnerPin,
   isMissingTable,
   listAllSupplyRequests,
@@ -19,6 +20,7 @@ import {
   setSupplyStatus,
 } from "@/lib/supplies";
 import { categoryInfo, frequencyTable, isValidPin, nextStatuses, parseRequestLines, STATUS_LABEL, SUPPLY_CATEGORIES } from "@/lib/supplyRules";
+import { createSupplyLoadGate } from "@/lib/supplyLoadState";
 import type { SupplyCategory, SupplyRequest, SupplyStatus } from "@/lib/types";
 
 const BTN = "rounded border border-stone-300 px-2 py-1 text-xs";
@@ -191,21 +193,16 @@ function Row({ row, owner, staff, onChanged }: { row: SupplyRequest; owner: bool
   );
 }
 
-function OwnerLock({ unlocked, onChange }: { unlocked: boolean; onChange: (v: boolean) => void }) {
-  const [pin, setPin] = useState<string | null | undefined>(undefined); // undefined = 아직 안 읽음
+function OwnerLock({ clinic, pin, unlocked, onChange, onPinSaved, onPinSaveFailed }: { clinic: ClinicCode; pin: string | null; unlocked: boolean; onChange: (v: boolean) => void; onPinSaved: (pin: string | null) => void; onPinSaveFailed: (error: Error) => void }) {
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
   const [setting, setSetting] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    getOwnerPin().then(setPin).catch(() => setPin(null));
-  }, []);
-  if (pin === undefined) return null;
   function unlock() {
     if (input === pin) {
       try {
-        sessionStorage.setItem(UNLOCK_KEY, "1");
+        sessionStorage.setItem(`${UNLOCK_KEY}.${clinic}`, "1");
       } catch {}
       onChange(true);
       setOpen(false);
@@ -215,7 +212,7 @@ function OwnerLock({ unlocked, onChange }: { unlocked: boolean; onChange: (v: bo
   }
   function lock() {
     try {
-      sessionStorage.removeItem(UNLOCK_KEY);
+      sessionStorage.removeItem(`${UNLOCK_KEY}.${clinic}`);
     } catch {}
     onChange(false);
   }
@@ -226,12 +223,12 @@ function OwnerLock({ unlocked, onChange }: { unlocked: boolean; onChange: (v: bo
     }
     try {
       await setOwnerPin(newPin || null);
-      setPin(newPin || null);
+      onPinSaved(newPin || null);
       setSetting(false);
       setNewPin("");
       setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      onPinSaveFailed(e instanceof Error ? e : new Error("잠금 번호를 저장하지 못했습니다."));
     }
   }
   const effectivelyOpen = unlocked || !pin;
@@ -287,48 +284,63 @@ function OwnerLock({ unlocked, onChange }: { unlocked: boolean; onChange: (v: bo
 }
 
 function Supplies() {
-  const [rows, setRows] = useState<SupplyRequest[] | null>(null);
+  const [loadGate] = useState(() => createSupplyLoadGate<{ clinic: ClinicCode; rows: SupplyRequest[]; pin: string | null }>());
+  const [supplyLoad, setSupplyLoad] = useState(loadGate.read);
+  const clinic = supplyLoad.status === "ready" ? supplyLoad.data.clinic : null;
+  const rows = supplyLoad.status === "ready" ? supplyLoad.data.rows : null;
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [staff, setStaff] = useState<StaffName>(() => (typeof window === "undefined" ? STAFF_NAMES[0] : loadLastStaff()));
-  const [unlocked, setUnlocked] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return sessionStorage.getItem(UNLOCK_KEY) === "1";
-    } catch {
-      return false;
-    }
+  const [unlockedByClinic, setUnlockedByClinic] = useState<Partial<Record<ClinicCode, boolean>>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return { S: sessionStorage.getItem(`${UNLOCK_KEY}.S`) === "1", N: sessionStorage.getItem(`${UNLOCK_KEY}.N`) === "1" }; } catch { return {}; }
   });
-  const [pinExists, setPinExists] = useState<boolean | null>(null);
+  const unlocked = clinic ? unlockedByClinic[clinic] === true : false;
   const [showFreq, setShowFreq] = useState(false);
   const [all, setAll] = useState<SupplyRequest[] | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(() => {
-    listSupplyRequests()
-      .then((r) => {
-        setRows(r);
-        setMissing(false);
-      })
-      .catch((e: Error) => {
-        if (isMissingTable(e)) setMissing(true);
-        else setError(e.message);
-      });
-    getOwnerPin().then((p) => setPinExists(!!p)).catch(() => setPinExists(false));
-  }, []);
-  useEffect(() => {
-    load();
-  }, [load]);
-  useEffect(() => {
-    if (showFreq && !all) listAllSupplyRequests().then(setAll).catch((e: Error) => setError(e.message));
-  }, [showFreq, all]);
+  const failLoad = useCallback((generation: number, e: Error) => {
+    const failed = loadGate.fail(generation);
+    if (!failed) return;
+    setSupplyLoad(failed);
+    setMissing(isMissingTable(e));
+    setError(e.message);
+  }, [loadGate]);
 
-  const owner = unlocked || pinExists === false;
+  const load = useCallback(() => {
+    const pending = loadGate.begin();
+    setSupplyLoad(pending);
+    setMissing(false);
+    setError(null);
+    getSupplyClinic().then(async (current) => {
+      const [r, pin] = await Promise.all([listSupplyRequests(), getOwnerPin()]);
+      const ready = loadGate.succeed(pending.generation, { clinic: current, rows: r, pin });
+      if (ready) setSupplyLoad(ready);
+    }).catch((e: Error) => failLoad(pending.generation, e));
+  }, [failLoad, loadGate]);
+  useEffect(() => {
+    let disposed = false;
+    // Initial state is already loading; publish the new generation asynchronously.
+    queueMicrotask(() => { if (!disposed) load(); });
+    return () => { disposed = true; loadGate.dispose(); };
+  }, [load, loadGate]);
+  useEffect(() => {
+    if (!showFreq || all || supplyLoad.status !== "ready") return;
+    let disposed = false;
+    const generation = supplyLoad.generation;
+    listAllSupplyRequests().then((data) => {
+      if (!disposed && loadGate.read().generation === generation) setAll(data);
+    }).catch((e: Error) => { if (!disposed) failLoad(generation, e); });
+    return () => { disposed = true; };
+  }, [showFreq, all, supplyLoad.status, supplyLoad.generation, failLoad, loadGate]);
+
+  const owner = supplyLoad.status === "ready" && !error && !missing && (unlocked || supplyLoad.data.pin === null);
   const preview = parseRequestLines(text);
 
   async function submit() {
-    if (preview.length === 0) return;
+    if (preview.length === 0 || !clinic) return;
     setSaving(true);
     setError(null);
     try {
@@ -356,25 +368,28 @@ function Supplies() {
   return (
     <main className="mx-auto max-w-3xl space-y-5 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-bold">물품 신청</h1>
-        <OwnerLock
+        <h1 className="text-xl font-bold">물품 신청{clinic ? ` · ${clinicInfo(clinic).short}` : " · 병원 확인 중"}</h1>
+        {clinic && supplyLoad.status === "ready" && !error && !missing && <OwnerLock key={`${clinic}.${supplyLoad.generation}`} clinic={clinic}
+          pin={supplyLoad.data.pin}
           unlocked={unlocked}
-          onChange={(v) => {
-            setUnlocked(v);
-            if (v) setPinExists(true);
+          onPinSaved={(pin) => {
+            const updated = loadGate.updateReady(supplyLoad.generation, (data) => ({ ...data, pin }));
+            if (updated) setSupplyLoad(updated);
           }}
-        />
+          onPinSaveFailed={(e) => failLoad(supplyLoad.generation, e)}
+          onChange={(v) => { setUnlockedByClinic((previous) => ({ ...previous, [clinic]: v })); }}
+        />}
       </div>
 
       {missing && (
         <p className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          물품 신청 표가 아직 없습니다. Supabase에서 <code>supabase/schema-v14-supplies.sql</code>을 한 번 실행하면 바로 쓸 수 있습니다.
+          병원별 물품 신청 설정이 필요합니다. 관리자에게 분리 설정을 확인해 달라고 요청해 주세요. 예전 공용 설정을 다시 실행하지 마세요.
         </p>
       )}
 
       <section className="rounded-lg border border-stone-200 bg-white p-4">
         <h2 className="font-bold">필요한 것을 한 줄에 하나씩 적어 주세요</h2>
-        <p className="mt-1 text-xs text-stone-500">예: 알콜솜 2통 / 봉약침 10개 / A4 2박스. 분류(약침·치료실 용품·병원 용품)는 앱이 나누고, 틀리면 줄에서 고칩니다.</p>
+        <p className="mt-1 text-xs text-stone-500">이 병원 신청만 저장됩니다. 단위는 개·박스·봉지·통 등 선생님이 자유롭게 적어 주세요. 예: 알콜솜 2통 / 봉약침 10병 / A4 2박스. 신청의 [받음]은 재고 수량을 자동으로 바꾸지 않습니다.</p>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -395,13 +410,13 @@ function Supplies() {
           <div className="min-w-48 flex-1">
             <StaffSelect value={staff} onChange={setStaff} />
           </div>
-          <button type="button" onClick={submit} disabled={saving || preview.length === 0 || missing} className={PRIMARY}>
+          <button type="button" onClick={submit} disabled={saving || preview.length === 0 || missing || !clinic} className={PRIMARY}>
             {saving ? "신청하는 중…" : `신청 (${preview.length}줄)`}
           </button>
         </div>
       </section>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-600">{error} <button type="button" className={BTN} onClick={load}>다시 확인</button></p>}
 
       <section>
         <h2 className="mb-2 font-bold">

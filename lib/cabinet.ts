@@ -1,5 +1,5 @@
 import { getSupabase } from "./supabaseClient";
-import { expectedStock, nearestExpiry, remainingLots, scopedCabinetRecords, cabinetLinkAllows, type Lot } from "./cabinetRules";
+import { expectedStock, nearestExpiry, remainingLots, scopedCabinetRecords, cabinetLinkAllows, cabinetScopeAllows, isLegacyCabinetItem, isPrivateSupply, normalizedCabinetUnit, type Lot } from "./cabinetRules";
 import type { ClinicCode } from "./clinic";
 import type { CabinetItem, CabinetItemInput, CabinetMove, CabinetPurpose } from "./types";
 
@@ -16,23 +16,33 @@ export async function listCabinetItems(includeInactive = false): Promise<Cabinet
 }
 
 export async function createCabinetItem(input: CabinetItemInput): Promise<CabinetItem> {
-  const { data, error } = await getSupabase().from("cabinet_items").insert(input).select().single();
-  if (error) {
-    // V15 SQL 전(clinic·unit 칸 없음): 기본 칸만 넣는다. 보험약·약침은 V15 뒤에만.
-    if (/clinic|unit/.test(error.message) && input.kind !== "insured" && input.kind !== "yakchim") {
-      const { clinic: _c, unit: _u, ...legacy } = input; // eslint-disable-line @typescript-eslint/no-unused-vars
-      const retry = await getSupabase().from("cabinet_items").insert(legacy).select().single();
-      if (!retry.error) return retry.data as CabinetItem;
-    }
-    fail("품목 추가", error.message.includes("clinic") || error.message.includes("unit") ? "재고 5칸 표(supabase/schema-v15-cabinet-kinds.sql)를 먼저 실행해 주세요." : error.message);
-  }
+  const unit = normalizedCabinetUnit(input.unit);
+  if (!input.name.trim()) throw new Error("품목 이름을 적어 주세요.");
+  const clinic = await getCabinetClinic();
+  const payload = { ...input, name: input.name.trim(), unit, clinic: input.kind === "insured" || input.kind === "supply" ? clinic : null, legacy_shared: false, legacy_source_id: null };
+  const { data, error } = await getSupabase().from("cabinet_items").insert(payload).select().single();
+  if (error) fail("품목 추가", error.message);
   return data as CabinetItem;
 }
 
 export async function updateCabinetItem(id: number, input: Partial<CabinetItemInput>): Promise<CabinetItem> {
-  const { data, error } = await getSupabase().from("cabinet_items").update(input).eq("id", id).select().single();
+  const unit = input.unit === undefined ? undefined : normalizedCabinetUnit(input.unit);
+  const clinic = await getCabinetClinic();
+  const item = (await listCabinetItems(true)).find((i) => i.id === id);
+  if (!item || !cabinetScopeAllows(item, clinic) || isLegacyCabinetItem(item)) throw new Error("수정할 수 없는 병원·보관 품목입니다.");
+  if (input.clinic !== undefined || input.kind !== undefined || input.legacy_shared !== undefined || input.legacy_source_id !== undefined) throw new Error("품목의 병원·구분·보관 연결은 변경할 수 없습니다.");
+  if (unit !== undefined && unit !== item.unit && await hasCabinetMove(id)) throw new Error("입출고 기록이 있어 단위를 바꿀 수 없습니다. 새 단위로 새 품목을 만드세요. 기존 수량은 변환되지 않습니다.");
+  const { data, error } = await getSupabase().from("cabinet_items").update({ ...input, ...(unit === undefined ? {} : { unit }) }).eq("id", id).select().single();
   if (error) fail("품목 수정", error.message);
   return data as CabinetItem;
+}
+
+async function hasCabinetMove(id: number, kind?: CabinetMove["kind"]): Promise<boolean> {
+  let query = getSupabase().from("cabinet_moves").select("id").eq("item_id", id);
+  if (kind) query = query.eq("kind", kind);
+  const { data, error } = await query.limit(1);
+  if (error) fail("품목 기록 확인", error.message);
+  return !!data?.length;
 }
 
 /** 모든 장부(오름차순). 품목 수가 적고 장부가 길지 않아 한 번에 받는다. 1,000줄 넘으면 이어서 받는다. */
@@ -90,7 +100,8 @@ export async function validateCabinetTargetsForLedger(targets: { group: string; 
   const byId = new Map(items.map((item) => [item.id, item]));
   for (const target of linked) {
     const item = byId.get(target.cabinet_item_id!);
-    if (!item || !cabinetLinkAllows(item, clinic, target.group)) throw new Error("장부와 재고 품목의 병원·구분이 맞지 않습니다. 보험약은 해당 병원 보험약에, 일반 약장 품목은 공용 재고에 연결해 주세요.");
+    if (!item || !cabinetLinkAllows(item, clinic, target.group)) throw new Error("장부와 재고 품목의 병원·구분이 맞지 않습니다. 공용 기록 보관 품목은 연결할 수 없습니다.");
+    if (isPrivateSupply(item) && !await hasCabinetMove(item.id, "count")) throw new Error(`${item.name}: 초기 수량 미등록. 재고현황에서 현재 수량 등록을 먼저 저장해 주세요.`);
   }
 }
 
@@ -116,6 +127,11 @@ type MoveInput = {
 };
 
 async function insertMove(input: MoveInput): Promise<CabinetMove> {
+  const clinic = await getCabinetClinic();
+  const item = (await listCabinetItems(true)).find((i) => i.id === input.item_id);
+  if (!item || !cabinetScopeAllows(item, clinic) || isLegacyCabinetItem(item)) throw new Error("기록할 수 없는 병원·보관 품목입니다.");
+  if (input.kind !== "count" && isPrivateSupply(item) && !await hasCabinetMove(item.id, "count")) throw new Error("초기 수량 미등록. 현재 수량 등록을 먼저 저장해 주세요.");
+  if (!Number.isFinite(input.qty) || input.qty < (input.kind === "count" ? 0 : 1)) throw new Error("올바른 수량을 적어 주세요.");
   const { data, error } = await getSupabase()
     .from("cabinet_moves")
     .insert({

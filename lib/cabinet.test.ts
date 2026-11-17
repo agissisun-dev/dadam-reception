@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getCabinetClinic, loadCabinet, validateCabinetTargetsForLedger } from "./cabinet";
+import { createCabinetItem, updateCabinetItem, recordIn, recordCount, getCabinetClinic, loadCabinet, validateCabinetTargetsForLedger } from "./cabinet";
 import { saveEntry, type SaveEntryInput } from "./ledger";
 import type { CabinetItem } from "./types";
 
@@ -59,6 +59,65 @@ describe("장부 재고 연결 사전 검증", () => {
   it("예전의 미연결 약어는 자동으로 연결하거나 차감하지 않는다", async () => {
     await expect(validateCabinetTargetsForLedger([{ group: "extract", cabinet_item_id: null }])).resolves.toBeUndefined();
     expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+});
+
+describe("용품 및 단위 쓰기 전 검증", () => {
+  const supply: CabinetItem = { ...insured, id: 8, kind: "supply", name: "핫팩", unit: "개" };
+  function storage(item: CabinetItem, moves: { id: number }[]) {
+    const insert = vi.fn().mockReturnThis();
+    const update = vi.fn().mockReturnThis();
+    mocks.from.mockImplementation((table: string) => {
+      const result = Promise.resolve({ data: table === "cabinet_items" ? [item] : moves, error: null });
+      const builder = { select: vi.fn(), order: vi.fn(), eq: vi.fn(), limit: vi.fn(), insert, update, single: vi.fn().mockResolvedValue({ data: { id: 100 }, error: null }), then: result.then.bind(result) };
+      for (const key of ["select", "order", "eq", "limit"] as const) builder[key].mockReturnValue(builder);
+      return builder;
+    });
+    return { insert, update };
+  }
+  it("미초기화 용품은 장부 저장의 환자 쓰기 이전에 거절한다", async () => {
+    const writes = storage(supply, []);
+    const input = { patient_name: "fixture", patient_id: null, items: [{ group: "cabinet", cabinet_item_id: 8, unknown: false }] } as SaveEntryInput;
+    await expect(saveEntry(input)).rejects.toThrow("초기 수량 미등록");
+    expect(writes.insert).not.toHaveBeenCalled();
+    expect(mocks.from.mock.calls.map((c) => c[0])).toEqual(["cabinet_items", "cabinet_moves"]);
+  });
+  it("COUNT 존재 시 자기 병원 용품 연결을 허용한다", async () => {
+    storage(supply, [{ id: 1 }]);
+    await expect(validateCabinetTargetsForLedger([{ group: "cabinet", cabinet_item_id: 8 }])).resolves.toBeUndefined();
+  });
+  it("입고는 초기 COUNT 없으면 쓰지 않는다", async () => {
+    const writes = storage(supply, []);
+    await expect(recordIn({ item_id: 8, qty: 10, expiry: null, staff_name: "test" })).rejects.toThrow("초기 수량 미등록");
+    expect(writes.insert).not.toHaveBeenCalled();
+  });
+  it("최초 COUNT 0도 명시적 저장으로 허용한다", async () => {
+    const writes = storage(supply, []);
+    await expect(recordCount({ item_id: 8, counted: 0, expected: 0, staff_name: "test" })).resolves.toEqual({ id: 100 });
+    expect(writes.insert).toHaveBeenCalledWith(expect.objectContaining({ kind: "count", qty: 0 }));
+  });
+  it("보관 품목은 단위·기록을 바꾸지 않는다", async () => {
+    const writes = storage({ ...supply, clinic: null, legacy_shared: true }, [{ id: 1 }]);
+    await expect(updateCabinetItem(8, { unit: "박스" })).rejects.toThrow("보관");
+    await expect(recordIn({ item_id: 8, qty: 1, expiry: null, staff_name: "test" })).rejects.toThrow("보관");
+    expect(writes.insert).not.toHaveBeenCalled(); expect(writes.update).not.toHaveBeenCalled();
+  });
+  it("이력이 있는 단위 변경은 update 전에 거절한다", async () => {
+    const writes = storage(supply, [{ id: 1 }]);
+    await expect(updateCabinetItem(8, { unit: "박스" })).rejects.toThrow("새 품목");
+    expect(writes.update).not.toHaveBeenCalled();
+  });
+  it("공백·긴 단위는 네트워크 읽기나 쓰기 전에 거절한다", async () => {
+    const { id: _id, created_at: _created, ...input } = supply;
+    await expect(createCabinetItem({ ...input, unit: " " })).rejects.toThrow("1~20자");
+    await expect(updateCabinetItem(8, { unit: "a".repeat(21) })).rejects.toThrow("1~20자");
+    expect(mocks.from).not.toHaveBeenCalled(); expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+  it("신규 용품 병원 매핑 실패는 추가를 닫는다", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: null });
+    const { id: _id, created_at: _created, ...input } = supply;
+    await expect(createCabinetItem(input)).rejects.toThrow("병원을 확인하지 못했습니다");
     expect(mocks.from).not.toHaveBeenCalled();
   });
 });

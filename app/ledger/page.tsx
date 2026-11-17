@@ -199,7 +199,7 @@ function Board() {
           entries={entries}
           closed={locked}
           onDelete={(e) => {
-            if (window.confirm(`${e.seq}번 ${e.patient_name} 줄을 지울까요? 따라온 처방·해피콜은 같이 지워지고, 약장 나감은 되돌림 입고로 남습니다.`)) {
+            if (window.confirm(`${e.seq}번 ${e.patient_name} 줄을 지울까요? 따라온 처방·해피콜은 같이 지워지고, 약장 나감은 되돌림 입고로 남습니다. 단, 분리 전 공용 기록이 포함된 줄은 삭제할 수 없으며 재고 귀속 확인 후 원장 검토 정정이 필요합니다.`)) {
               run(() => deleteEntry(e, staff));
             }
           }}

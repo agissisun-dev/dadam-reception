@@ -175,10 +175,12 @@ export type CabinetItem = {
   min_stock: number;
   active: boolean;
   sort_order: number;
-  /** null = 두 병원 공통. 보험약은 병원별(V15) */
+  /** null = 공용. 보험약·용품은 병원별. legacy_shared 용품은 읽기 전용 보관. */
   clinic: "S" | "N" | null;
   /** 개 · 포(보험약) · 병(약침) 등 */
   unit: string;
+  legacy_shared?: boolean;
+  legacy_source_id?: number | null;
   created_at: string;
 };
 export type CabinetItemInput = Omit<CabinetItem, "id" | "created_at">;

@@ -96,7 +96,7 @@ function UnknownCodeForm({
           <span className={LABEL}>약장 품목</span>
           <select value={cabinetId} onChange={(e) => setCabinetId(e.target.value === "" ? "" : Number(e.target.value))} className="h-9 rounded border border-stone-300 px-2 text-sm">
             <option value="">(연결 안 함)</option>
-            {cabinetItems.map((c) => (
+            {cabinetItems.filter((item) => item.kind !== "insured" && item.clinic == null).map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>

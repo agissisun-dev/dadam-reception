@@ -1,5 +1,6 @@
 import { getSupabase } from "./supabaseClient";
-import { expectedStock, nearestExpiry, remainingLots, type Lot } from "./cabinetRules";
+import { expectedStock, nearestExpiry, remainingLots, scopedCabinetRecords, cabinetLinkAllows, type Lot } from "./cabinetRules";
+import type { ClinicCode } from "./clinic";
 import type { CabinetItem, CabinetItemInput, CabinetMove, CabinetPurpose } from "./types";
 
 function fail(what: string, msg: string): never {
@@ -74,9 +75,31 @@ export function buildStatuses(items: CabinetItem[], moves: CabinetMove[]): Cabin
   });
 }
 
-export async function loadCabinet(): Promise<{ items: CabinetItem[]; moves: CabinetMove[]; statuses: CabinetStatus[] }> {
-  const [items, moves] = await Promise.all([listCabinetItems(), listAllCabinetMoves()]);
-  return { items, moves, statuses: buildStatuses(items, moves) };
+export async function getCabinetClinic(): Promise<ClinicCode> {
+  const { data, error } = await getSupabase().rpc("current_clinic");
+  if (error || (data !== "S" && data !== "N")) throw new Error("재고를 관리할 병원을 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.");
+  return data;
+}
+
+/** 잘못 연결한 재고는 장부·환자·입출고를 쓰기 전에 거절한다. */
+export async function validateCabinetTargetsForLedger(targets: { group: string; cabinet_item_id: number | null; unknown?: boolean }[]): Promise<void> {
+  const linked = targets.filter((target) => target.cabinet_item_id != null && !target.unknown);
+  if (!linked.length) return;
+  const clinic = await getCabinetClinic();
+  const items = await listCabinetItems(true);
+  const byId = new Map(items.map((item) => [item.id, item]));
+  for (const target of linked) {
+    const item = byId.get(target.cabinet_item_id!);
+    if (!item || !cabinetLinkAllows(item, clinic, target.group)) throw new Error("장부와 재고 품목의 병원·구분이 맞지 않습니다. 보험약은 해당 병원 보험약에, 일반 약장 품목은 공용 재고에 연결해 주세요.");
+  }
+}
+
+export async function loadCabinet(): Promise<{ clinic: ClinicCode; allItems: CabinetItem[]; items: CabinetItem[]; moves: CabinetMove[]; statuses: CabinetStatus[] }> {
+  const clinic = await getCabinetClinic();
+  const [allItems, allMoves] = await Promise.all([listCabinetItems(true), listAllCabinetMoves()]);
+  const scoped = scopedCabinetRecords(allItems, allMoves, clinic);
+  const items = scoped.items.filter((item) => item.active);
+  return { clinic, allItems: scoped.items, items, moves: scoped.moves, statuses: buildStatuses(items, scoped.moves) };
 }
 
 type MoveInput = {

@@ -1,5 +1,22 @@
 import { daysBetween } from "./dates";
-import type { CabinetKind, CabinetMove, CabinetMoveKind, CabinetPurpose } from "./types";
+import type { CabinetItem, CabinetKind, CabinetMove, CabinetMoveKind, CabinetPurpose } from "./types";
+
+/** 보험약만 병원 전용. 병원을 확인하지 못했으면 공용 자료도 열지 않는다. */
+export function cabinetScopeAllows(item: Pick<CabinetItem, "kind" | "clinic">, clinic: "S" | "N" | null): boolean {
+  if (clinic !== "S" && clinic !== "N") return false;
+  return item.kind === "insured" ? item.clinic === clinic : item.clinic == null;
+}
+
+/** 서버 RLS에 더해, 최근 기록도 확인된 품목 범위로 제한한다. 비활성 품목의 기록은 보존한다. */
+export function cabinetLinkAllows(item: Pick<CabinetItem, "kind" | "clinic">, clinic: "S" | "N" | null, group: string): boolean {
+  return cabinetScopeAllows(item, clinic) && (group === "extract" ? item.kind === "insured" : group === "cabinet" && item.kind !== "insured");
+}
+
+export function scopedCabinetRecords(items: CabinetItem[], moves: CabinetMove[], clinic: "S" | "N" | null) {
+  const scopedItems = items.filter((item) => cabinetScopeAllows(item, clinic));
+  const ids = new Set(scopedItems.map((item) => item.id));
+  return { items: scopedItems, moves: moves.filter((move) => ids.has(move.item_id)) };
+}
 
 /**
  * 있어야 할 수. 장부를 시간순으로 따라간다.
@@ -83,7 +100,7 @@ export function purposeLabel(p: CabinetPurpose | null): string {
 export const CABINET_KINDS: { value: CabinetKind; label: string; dot: string; order: number; unit: string; hint: string }[] = [
   { value: "topical", label: "외용제", dot: "bg-blue-500", order: 11, unit: "개", hint: "기한 1년 안이면 판매 어려움 — 미리 확인" },
   { value: "medicine", label: "다담환약", dot: "bg-[#16863b]", order: 1, unit: "개", hint: "공진단·경옥환·소합원·보비환" },
-  { value: "insured", label: "보험약", dot: "bg-orange-500", order: 31, unit: "포", hint: "병원별 · 장부의 엑스제(N일)에서 자동으로 뺌" },
+  { value: "insured", label: "보험약", dot: "bg-orange-500", order: 31, unit: "포", hint: "현재 병원 전용 · 약어 표에 연결한 보험약만 장부에서 포 수 차감" },
   { value: "yakchim", label: "약침", dot: "bg-purple-500", order: 41, unit: "병", hint: "물품 신청에서 사서 받으면 여기 입고" },
   { value: "supply", label: "용품", dot: "bg-stone-400", order: 21, unit: "개", hint: "핫팩·한방파스" },
 ];

@@ -6,7 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import CabinetRow from "@/components/CabinetRow";
 import { createCabinetItem, listCabinetItems, loadCabinet, updateCabinetItem, type CabinetStatus } from "@/lib/cabinet";
 import { CABINET_KINDS, KIND_LABEL, expiryStatus, kindInfo, purposeLabel } from "@/lib/cabinetRules";
-import { clinicInfo, fetchCurrentClinic, type ClinicCode } from "@/lib/clinic";
+import { clinicInfo, type ClinicCode } from "@/lib/clinic";
 import { todayISO } from "@/lib/dates";
 import type { CabinetItem, CabinetKind, CabinetMove } from "@/lib/types";
 
@@ -50,7 +50,7 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
   return (
     <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
       <h2 className="mb-2 font-bold">품목 관리</h2>
-      <p className="mb-3 text-xs text-stone-500">부족 기준 밑으로 내려가면 붉게 표시됩니다. 안 쓰는 품목은 지우지 말고 [사용 안 함]으로 두면 기록이 남습니다.</p>
+      <p className="mb-3 text-xs text-stone-500">보험약은 {clinicInfo(clinic).short} 전용으로 추가됩니다. 나머지 품목은 두 병원 공용입니다. 부족 기준 밑으로 내려가면 붉게 표시됩니다. 안 쓰는 품목은 [사용 안 함]으로 두면 기록이 남습니다.</p>
       {error && <p className="mb-2 text-red-600">{error}</p>}
       <ul className="divide-y divide-stone-100">
         {(items ?? []).map((it) => (
@@ -132,31 +132,35 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
 function Board() {
   const today = todayISO();
   const [statuses, setStatuses] = useState<CabinetStatus[] | null>(null);
+  const [allItems, setAllItems] = useState<CabinetItem[]>([]);
   const [moves, setMoves] = useState<CabinetMove[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [manage, setManage] = useState(false);
-  const [clinic, setClinic] = useState<ClinicCode>("S");
+  const [clinic, setClinic] = useState<ClinicCode | null>(null);
   const [activeKind, setActiveKind] = useState<CabinetKind | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
   const load = useCallback(() => {
     loadCabinet()
       .then((d) => {
+        setClinic(d.clinic);
+        setAllItems(d.allItems);
         setStatuses(d.statuses);
         setMoves(d.moves);
+        setError(null);
       })
       .catch((e: Error) => setError(e.message));
   }, []);
   useEffect(() => {
     load();
-    fetchCurrentClinic().then(setClinic).catch(() => undefined);
   }, [load]);
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
-  if (!statuses) return <p className="p-6 text-stone-500">불러오는 중…</p>;
+  if (!statuses || !clinic) return <p className="p-6 text-stone-500">병원과 재고를 확인하는 중…</p>;
 
-  const nameOf = new Map(statuses.map((s) => [s.item.id, s.item.name]));
-  const kindOf = new Map(statuses.map((s) => [s.item.id, s.item.kind]));
+  const nameOf = new Map(allItems.map((item) => [item.id, item.name]));
+  const kindOf = new Map(allItems.map((item) => [item.id, item.kind]));
+  const unitOf = new Map(allItems.map((item) => [item.id, item.unit || (item.kind === "insured" ? "포" : "개")]));
   const summaries = CABINET_KINDS.map((k) => {
     const list = statuses.filter((s) => s.item.kind === k.value);
     const ex = list.map((s) => expiryStatus(s.nearest, today));
@@ -188,7 +192,7 @@ function Board() {
         </div>
       </div>
 
-      <p className="text-xs text-stone-500">칸을 누르면 그 품목만 보입니다. 숫자는 있어야 할 수, 유통기한은 남은 것 중 가장 빠른 것(30일 안 붉게, 60일 안 노랗게). 보험약은 {clinicInfo(clinic).short} 것만 보입니다.</p>
+      <p className="text-xs text-stone-500">칸을 누르면 그 품목만 보입니다. 숫자는 있어야 할 수, 유통기한은 남은 것 중 가장 빠른 것(30일 안 붉게, 60일 안 노랗게). 보험약의 품목·수량·입출고 기록은 {clinicInfo(clinic).short} 전용입니다. 나머지 네 칸은 두 병원 공용입니다.</p>
 
       {manage && <ItemManager onChanged={load} clinic={clinic} />}
 
@@ -211,6 +215,7 @@ function Board() {
                 <span className={`inline-block h-2.5 w-2.5 rounded-full ${k.dot}`} />
                 <span className="font-bold">{k.label}</span>
               </div>
+              <div className="mt-1 text-[11px] text-stone-500">{k.value === "insured" ? `${clinicInfo(clinic).short} 전용` : "두 병원 공용"}</div>
               <div className="mt-1 text-2xl font-semibold tabular-nums">{list.length}<span className="ml-0.5 text-xs font-normal text-stone-500">품목</span></div>
               <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
                 {short > 0 && <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">부족 {short}</span>}
@@ -264,12 +269,13 @@ function Board() {
             <tbody>
               {recent.map((m) => {
                 const bad = m.kind === "count" && !!m.diff;
+                const unit = unitOf.get(m.item_id) ?? "개";
                 return (
                   <tr key={m.id} className={`border-t border-stone-100 ${bad ? "text-red-700" : ""}`}>
                     <td className="px-2 py-1.5 whitespace-nowrap">{whenKo(m.created_at)}</td>
                     <td className="px-2 py-1.5">{nameOf.get(m.item_id) ?? m.item_id}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
-                      {KIND_LABEL[m.kind]} {m.kind === "count" ? `${m.qty}개로${m.diff ? ` (${m.diff > 0 ? "+" : ""}${m.diff})` : ""}` : `${m.qty}개`}
+                      {KIND_LABEL[m.kind]} {m.kind === "count" ? `${m.qty}${unit}로${m.diff ? ` (${m.diff > 0 ? "+" : ""}${m.diff})` : ""}` : `${m.qty}${unit}`}
                       {m.expiry ? ` · 기한 ${m.expiry}` : ""}
                     </td>
                     <td className="px-2 py-1.5">

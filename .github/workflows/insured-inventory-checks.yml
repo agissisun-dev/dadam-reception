@@ -1,0 +1,38 @@
+name: Insured inventory isolation checks
+on:
+  pull_request:
+    paths:
+      - app/cabinet/**
+      - components/LedgerEntryForm.tsx
+      - lib/cabinet*
+      - lib/ledger.ts
+      - supabase/schema-v17-insured-inventory-scope.sql
+      - scripts/test-insured-inventory.mjs
+      - .github/workflows/insured-inventory-checks.yml
+  push:
+    branches: ["aside/insured-inventory-*"]
+permissions:
+  contents: read
+concurrency:
+  group: insured-inventory-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Inventory scope and arithmetic tests
+        run: npx vitest run lib/cabinetRules.test.ts lib/cabinetScope.test.ts lib/cabinet.test.ts
+      - name: Isolated PostgreSQL insurance boundary tests
+        run: |
+          npm install --prefix "$RUNNER_TEMP/insured-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.16
+          PGLITE_MODULE="file://$RUNNER_TEMP/insured-db/node_modules/@electric-sql/pglite/dist/index.js" node scripts/test-insured-inventory.mjs
+      - name: Inventory file lint
+        run: npx eslint app/cabinet/page.tsx components/LedgerEntryForm.tsx lib/cabinet.ts lib/cabinetRules.ts lib/cabinetScope.test.ts lib/cabinet.test.ts lib/ledger.ts scripts/test-insured-inventory.mjs
+      - name: TypeScript
+        run: npx tsc --noEmit

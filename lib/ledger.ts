@@ -1,6 +1,6 @@
 import { getSupabase } from "./supabaseClient";
 import { addPrescription, createPatient, findPatientByPhone } from "./patients";
-import { recordIn, recordOut } from "./cabinet";
+import { recordIn, recordOut, validateCabinetTargetsForLedger } from "./cabinet";
 import { extractPacks } from "./cabinetRules";
 import { brewTitle } from "./brewRules";
 import { daysFromPacks } from "./packs";
@@ -183,6 +183,7 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
   const sb = getSupabase();
   const name = input.patient_name.trim();
   if (!name) throw new Error("성함을 적어 주세요.");
+  await validateCabinetTargetsForLedger(input.items);
   let patientId = input.patient_id;
   const decoctionItems = input.items.filter((i) => i.group === "decoction" && !i.unknown);
 

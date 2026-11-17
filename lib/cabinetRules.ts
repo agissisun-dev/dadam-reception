@@ -16,6 +16,12 @@ export function normalizedCabinetUnit(unit: string): string {
   if (!value || value.length > 20) throw new Error("단위는 공백을 제외한 1~20자로 적어 주세요.");
   return value;
 }
+export const YAKCHIM_UNITS = ["개", "병"] as const;
+export function normalizedCabinetItemUnit(kind: CabinetKind, unit: string): string {
+  const value = normalizedCabinetUnit(unit);
+  if (kind === "yakchim" && !YAKCHIM_UNITS.some((option) => option === value)) throw new Error("약침 단위는 개 또는 병으로 선택해 주세요.");
+  return value;
+}
 export function cabinetScopeAllows(item: ScopedItem, clinic: "S" | "N" | null): boolean {
   if (clinic !== "S" && clinic !== "N") return false;
   if (isLegacyCabinetItem(item)) return item.clinic == null;
@@ -114,7 +120,7 @@ export const CABINET_KINDS: { value: CabinetKind; label: string; dot: string; or
   { value: "topical", label: "외용제", dot: "bg-blue-500", order: 11, unit: "개", hint: "기한 1년 안이면 판매 어려움 — 미리 확인" },
   { value: "medicine", label: "다담환약", dot: "bg-[#16863b]", order: 1, unit: "개", hint: "공진단·경옥환·소합원·보비환" },
   { value: "insured", label: "보험약", dot: "bg-orange-500", order: 31, unit: "포", hint: "현재 병원 전용 · 약어 표에 연결한 보험약만 장부에서 포 수 차감" },
-  { value: "yakchim", label: "약침", dot: "bg-purple-500", order: 41, unit: "병", hint: "물품 신청에서 사서 받으면 여기 입고" },
+  { value: "yakchim", label: "약침", dot: "bg-purple-500", order: 41, unit: "병", hint: "개·병 중 선택 · 단위별 별도 품목, 자동 환산 없음" },
   { value: "supply", label: "용품", dot: "bg-stone-400", order: 21, unit: "개", hint: "현재 병원 전용 · 사용 전 현재 수량 등록" },
 ];
 

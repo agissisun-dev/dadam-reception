@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createCabinetItem, updateCabinetItem, recordIn, recordCount, getCabinetClinic, loadCabinet, validateCabinetTargetsForLedger } from "./cabinet";
+import { createCabinetItem, updateCabinetItem, archiveCabinetItem, recordIn, recordCount, getCabinetClinic, loadCabinet, validateCabinetTargetsForLedger } from "./cabinet";
 import { saveEntry, type SaveEntryInput } from "./ledger";
 import type { CabinetItem } from "./types";
 
@@ -120,4 +120,58 @@ describe("용품 및 단위 쓰기 전 검증", () => {
     await expect(createCabinetItem(input)).rejects.toThrow("병원을 확인하지 못했습니다");
     expect(mocks.from).not.toHaveBeenCalled();
   });
+});
+
+
+describe("약침 단위 선택과 기록 보존형 삭제", () => {
+  const yakchim: CabinetItem = { ...insured, id: 15, name: "약침 fixture", kind: "yakchim", clinic: null, unit: "병" };
+  function store(item: CabinetItem, moves: { id: number }[] = []) {
+    const update = vi.fn().mockReturnThis();
+    mocks.from.mockImplementation((table: string) => {
+      const result = Promise.resolve({ data: table === "cabinet_items" ? [item] : moves, error: null });
+      const builder = { select: vi.fn(), order: vi.fn(), eq: vi.fn(), limit: vi.fn(), update, single: vi.fn().mockResolvedValue({ data: { ...item, active: false }, error: null }), then: result.then.bind(result) };
+      for (const key of ["select", "order", "eq", "limit"] as const) builder[key].mockReturnValue(builder);
+      return builder;
+    });
+    return update;
+  }
+  it.each(["개", "병"])("새 약침은 %s 단위로 등록할 수 있다", async (unit) => {
+    const insert = vi.fn().mockReturnThis();
+    mocks.from.mockReturnValue({ insert, select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: { ...yakchim, unit }, error: null }) });
+    await expect(createCabinetItem({ name: yakchim.name, kind: "yakchim", clinic: null, unit, min_stock: 0, active: true, sort_order: 41 })).resolves.toMatchObject({ unit });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ kind: "yakchim", clinic: null, unit }));
+  });
+  it("개·병 이외의 새 약침 단위는 읽기·쓰기 전에 거절한다", async () => {
+    await expect(createCabinetItem({ name: yakchim.name, kind: "yakchim", unit: "박스", min_stock: 0, active: true, sort_order: 41, clinic: null })).rejects.toThrow("개 또는 병");
+    expect(mocks.from).not.toHaveBeenCalled(); expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+  it("기록 없는 약침은 개로 바꾸되 재고를 환산하거나 쓰지 않는다", async () => {
+    const update = store(yakchim); await updateCabinetItem(15, { unit: "개" });
+    expect(update).toHaveBeenCalledWith({ unit: "개" });
+    expect(mocks.from.mock.calls.map((call) => call[0])).toEqual(["cabinet_items", "cabinet_moves", "cabinet_items"]);
+  });
+  it("기존 약침도 잘못된 단위 저장을 막는다", async () => {
+    const update = store(yakchim); await expect(updateCabinetItem(15, { unit: "통" })).rejects.toThrow("개 또는 병"); expect(update).not.toHaveBeenCalled();
+  });
+  it("이력이 있는 약침의 개·병 변경은 막아 기존 수량을 보호한다", async () => {
+    const update = store(yakchim, [{ id: 1 }]); await expect(updateCabinetItem(15, { unit: "개" })).rejects.toThrow("새 품목"); expect(update).not.toHaveBeenCalled();
+  });
+  it("이력이 있어도 삭제는 active=false만 저장하고 장부·수량은 건드리지 않는다", async () => {
+    const update = store(yakchim, [{ id: 1 }]); await archiveCabinetItem(15);
+    expect(update).toHaveBeenCalledWith({ active: false });
+    expect(mocks.from.mock.calls.map((call) => call[0])).toEqual(["cabinet_items", "cabinet_items"]);
+  });
+  it("복구는 active=true만 저장한다", async () => {
+    const update = store({ ...yakchim, active: false }); await updateCabinetItem(15, { active: true }); expect(update).toHaveBeenCalledWith({ active: true });
+  });
+  it("병원 확인 실패는 삭제도 막는다", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: null }); await expect(archiveCabinetItem(15)).rejects.toThrow("병원을 확인하지 못했습니다"); expect(mocks.from).not.toHaveBeenCalled();
+  });
+});
+
+
+it("삭제한 약침은 새 장부 저장 전에 복구를 요구한다", async () => {
+  rows([{ ...insured, id: 15, kind: "yakchim", clinic: null, active: false }]);
+  await expect(validateCabinetTargetsForLedger([{ group: "cabinet", cabinet_item_id: 15 }])).rejects.toThrow("복구");
+  expect(mocks.from.mock.calls.map((call) => call[0])).toEqual(["cabinet_items"]);
 });

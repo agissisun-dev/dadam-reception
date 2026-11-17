@@ -1,5 +1,5 @@
 import { getSupabase } from "./supabaseClient";
-import { expectedStock, nearestExpiry, remainingLots, scopedCabinetRecords, cabinetLinkAllows, cabinetScopeAllows, isLegacyCabinetItem, isPrivateSupply, normalizedCabinetUnit, type Lot } from "./cabinetRules";
+import { expectedStock, nearestExpiry, remainingLots, scopedCabinetRecords, cabinetLinkAllows, cabinetScopeAllows, isLegacyCabinetItem, isPrivateSupply, normalizedCabinetUnit, normalizedCabinetItemUnit, type Lot } from "./cabinetRules";
 import type { ClinicCode } from "./clinic";
 import type { CabinetItem, CabinetItemInput, CabinetMove, CabinetPurpose } from "./types";
 
@@ -16,7 +16,7 @@ export async function listCabinetItems(includeInactive = false): Promise<Cabinet
 }
 
 export async function createCabinetItem(input: CabinetItemInput): Promise<CabinetItem> {
-  const unit = normalizedCabinetUnit(input.unit);
+  const unit = normalizedCabinetItemUnit(input.kind, input.unit);
   if (!input.name.trim()) throw new Error("품목 이름을 적어 주세요.");
   const clinic = await getCabinetClinic();
   const payload = { ...input, name: input.name.trim(), unit, clinic: input.kind === "insured" || input.kind === "supply" ? clinic : null, legacy_shared: false, legacy_source_id: null };
@@ -31,10 +31,16 @@ export async function updateCabinetItem(id: number, input: Partial<CabinetItemIn
   const item = (await listCabinetItems(true)).find((i) => i.id === id);
   if (!item || !cabinetScopeAllows(item, clinic) || isLegacyCabinetItem(item)) throw new Error("수정할 수 없는 병원·보관 품목입니다.");
   if (input.clinic !== undefined || input.kind !== undefined || input.legacy_shared !== undefined || input.legacy_source_id !== undefined) throw new Error("품목의 병원·구분·보관 연결은 변경할 수 없습니다.");
+  if (unit !== undefined) normalizedCabinetItemUnit(item.kind, unit);
   if (unit !== undefined && unit !== item.unit && await hasCabinetMove(id)) throw new Error("입출고 기록이 있어 단위를 바꿀 수 없습니다. 새 단위로 새 품목을 만드세요. 기존 수량은 변환되지 않습니다.");
   const { data, error } = await getSupabase().from("cabinet_items").update({ ...input, ...(unit === undefined ? {} : { unit }) }).eq("id", id).select().single();
   if (error) fail("품목 수정", error.message);
   return data as CabinetItem;
+}
+
+/** UI 삭제는 현재 목록에서 숨기기만 한다. 재고·장부 이력과 연결은 그대로 보존한다. */
+export function archiveCabinetItem(id: number): Promise<CabinetItem> {
+  return updateCabinetItem(id, { active: false });
 }
 
 async function hasCabinetMove(id: number, kind?: CabinetMove["kind"]): Promise<boolean> {
@@ -100,6 +106,7 @@ export async function validateCabinetTargetsForLedger(targets: { group: string; 
   const byId = new Map(items.map((item) => [item.id, item]));
   for (const target of linked) {
     const item = byId.get(target.cabinet_item_id!);
+    if (item && !item.active) throw new Error(`${item.name}: 삭제·사용 안 함 품목입니다. 품목 관리에서 복구한 뒤 사용해 주세요.`);
     if (!item || !cabinetLinkAllows(item, clinic, target.group)) throw new Error("장부와 재고 품목의 병원·구분이 맞지 않습니다. 공용 기록 보관 품목은 연결할 수 없습니다.");
     if (isPrivateSupply(item) && !await hasCabinetMove(item.id, "count")) throw new Error(`${item.name}: 초기 수량 미등록. 재고현황에서 현재 수량 등록을 먼저 저장해 주세요.`);
   }

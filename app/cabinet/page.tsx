@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import CabinetRow from "@/components/CabinetRow";
-import { buildStatuses, createCabinetItem, loadCabinet, updateCabinetItem, type CabinetStatus } from "@/lib/cabinet";
-import { CABINET_KINDS, KIND_LABEL, expiryStatus, kindInfo, purposeLabel, cabinetInitialized, isLegacyCabinetItem, normalizedCabinetUnit } from "@/lib/cabinetRules";
+import { buildStatuses, createCabinetItem, loadCabinet, updateCabinetItem, archiveCabinetItem, type CabinetStatus } from "@/lib/cabinet";
+import { CABINET_KINDS, KIND_LABEL, expiryStatus, kindInfo, purposeLabel, cabinetInitialized, isLegacyCabinetItem, normalizedCabinetItemUnit, YAKCHIM_UNITS } from "@/lib/cabinetRules";
 import { clinicInfo, type ClinicCode } from "@/lib/clinic";
 import { todayISO } from "@/lib/dates";
 import type { CabinetItem, CabinetKind, CabinetMove } from "@/lib/types";
@@ -24,7 +24,10 @@ const UNITS = ["개", "박스", "봉지", "팩", "통", "병", "포", "장"];
 function UnitEditor({ item, locked, busy, save }: { item: CabinetItem; locked: boolean; busy: boolean; save: (unit: string) => void }) {
   const [value, setValue] = useState(item.unit);
   return <span className="flex items-center gap-1 text-xs">
-    <input aria-label={item.name + " 단위"} list="cabinet-units" value={value} maxLength={20} disabled={locked || busy} onChange={(e) => setValue(e.target.value)} className="w-20 rounded border px-1 py-0.5" />
+    {item.kind === "yakchim" ? <select aria-label={item.name + " 단위"} value={value} disabled={locked || busy} onChange={(e) => setValue(e.target.value)} className="w-20 rounded border px-1 py-0.5">
+      {!YAKCHIM_UNITS.some((option) => option === item.unit) && <option value={item.unit} disabled>{item.unit}（기존 단위）</option>}
+      {YAKCHIM_UNITS.map((option) => <option key={option} value={option}>{option}</option>)}
+    </select> : <input aria-label={item.name + " 단위"} list="cabinet-units" value={value} maxLength={20} disabled={locked || busy} onChange={(e) => setValue(e.target.value)} className="w-20 rounded border px-1 py-0.5" />}
     {!locked && <button disabled={busy || value.trim() === item.unit} onClick={() => save(value)} className="underline disabled:opacity-40">단위 저장</button>}
     {locked && <span className="text-stone-500">기록 있음: 단위 변경 불가. 다른 단위는 새 품목으로 등록 (기존 수량 변환 안 됨)</span>}
   </span>;
@@ -33,6 +36,8 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
   const [items, setItems] = useState<CabinetItem[]>([]);
   const [history, setHistory] = useState<Set<number>>(new Set());
   const [ready, setReady] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<CabinetItem | null>(null);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<CabinetKind>("medicine");
   const [unit, setUnit] = useState("개");
@@ -68,20 +73,30 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
     <h2 className="mb-2 font-bold">품목 관리</h2>
     <p className="mb-3 text-xs text-stone-500">보험약·용품은 {clinicInfo(clinic).short} 전용, 나머지는 공용입니다. 용품 추가 후 실제 수량을 직접 세어 [현재 수량 등록]을 저장하세요. 추가만으로 수량은 기록되지 않습니다.</p>
     <datalist id="cabinet-units">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
-    <ul className="divide-y divide-stone-100">{items.map((it) => <li key={it.id} className="flex flex-wrap items-center gap-2 py-2">
+    <p className="mb-2 text-xs text-stone-500">약침은 개·병을 선택합니다. 같은 약침을 두 단위로 관리하려면 단위별로 품목을 등록하세요. 수량은 자동 환산하지 않습니다. 약침 삭제는 양쪽 병원 현재 목록에서 숨기며, 기존 기록은 보관합니다.</p>
+    <label className="mb-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={showDeleted} disabled={busy} onChange={(e) => setShowDeleted(e.target.checked)} />삭제한 약침 보기</label>
+    {deleteTarget && <div role="alert" className="mb-3 rounded border border-red-300 bg-red-50 p-3">
+      <p>“{deleteTarget.name}” 약침을 삭제할까요? 두 병원 공용이므로 양쪽 현재 목록에서 숨겨집니다. 기존 수량·입출고·장부 기록은 보관되며 [삭제한 약침 보기]에서 복구할 수 있습니다.</p>
+      <button disabled={busy} className={BTN + " mt-2 mr-2 text-red-700"} onClick={() => run(async () => { await archiveCabinetItem(deleteTarget.id); setDeleteTarget(null); }, "약침을 삭제했습니다. 기존 기록은 보관되며 복구할 수 있습니다.")}>삭제 확인</button>
+      <button disabled={busy} className={BTN} onClick={() => setDeleteTarget(null)}>취소</button>
+    </div>}
+    <ul className="divide-y divide-stone-100">{items.filter((item) => item.kind !== "yakchim" || item.active || showDeleted).map((it) => <li key={it.id} className="flex flex-wrap items-center gap-2 py-2">
       <span className={it.active ? "" : "text-stone-400 line-through"}>{it.name}</span>
       <span className="text-xs text-stone-500">{kindInfo(it.kind).label} · {it.clinic ? clinicInfo(it.clinic).short + " 전용" : "공용"}</span>
       <UnitEditor key={`${it.id}:${it.unit}`} item={it} locked={!ready || history.has(it.id)} busy={busy} save={(value) => run(async () => { await updateCabinetItem(it.id, { unit: value }); })} />
       <label className="text-xs">부족 기준 <input type="number" min={0} defaultValue={it.min_stock} disabled={busy} onBlur={(e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v >= 0 && v !== it.min_stock) run(async () => { await updateCabinetItem(it.id, { min_stock: v }); }); }} className="w-16 rounded border px-1" /></label>
-      <button disabled={busy} className="ml-auto text-xs underline" onClick={() => run(async () => { await updateCabinetItem(it.id, { active: !it.active }); })}>{it.active ? "사용 안 함" : "다시 사용"}</button>
+      {it.kind === "yakchim" ? it.active
+        ? <button disabled={busy || !ready} className="ml-auto text-xs text-red-700 underline" aria-label={it.name + " 삭제"} onClick={() => setDeleteTarget(it)}>삭제</button>
+        : <button disabled={busy || !ready} className="ml-auto text-xs underline" aria-label={it.name + " 복구"} onClick={() => run(async () => { await updateCabinetItem(it.id, { active: true }); }, "약침을 복구했습니다.")}>복구</button>
+        : <button disabled={busy} className="ml-auto text-xs underline" onClick={() => run(async () => { await updateCabinetItem(it.id, { active: !it.active }); })}>{it.active ? "사용 안 함" : "다시 사용"}</button>}
     </li>)}</ul>
     <div className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
       <label>새 품목<input value={name} onChange={(e) => setName(e.target.value)} disabled={busy} placeholder="이름" className={INPUT} /></label>
       <label>구분<select value={kind} disabled={busy} onChange={(e) => { const k = e.target.value as CabinetKind; setKind(k); setUnit(kindInfo(k).unit); }} className={INPUT}>{CABINET_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</select></label>
-      <label>단위<input list="cabinet-units" value={unit} maxLength={20} disabled={busy} onChange={(e) => setUnit(e.target.value)} className={INPUT + " w-20"} /></label>
+      <label>단위{kind === "yakchim" ? <select value={unit} disabled={busy} onChange={(e) => setUnit(e.target.value)} className={INPUT + " w-20"}>{YAKCHIM_UNITS.map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input list="cabinet-units" value={unit} maxLength={20} disabled={busy} onChange={(e) => setUnit(e.target.value)} className={INPUT + " w-20"} />}</label>
       <label>부족 기준<input type="number" min={0} value={minStock} disabled={busy} onChange={(e) => setMinStock(Math.max(0, Number(e.target.value)))} className={INPUT + " w-20"} /></label>
       <button className={PRIMARY} disabled={busy || !ready || !name.trim()} onClick={() => run(async () => {
-        const validUnit = normalizedCabinetUnit(unit);
+        const validUnit = normalizedCabinetItemUnit(kind, unit);
         const order = items.filter((i) => i.kind === kind).length + kindInfo(kind).order;
         await createCabinetItem({ name: name.trim(), kind, unit: validUnit, min_stock: minStock, active: true, sort_order: order, clinic: kind === "insured" || kind === "supply" ? clinic : null });
         setName(""); setMinStock(0);

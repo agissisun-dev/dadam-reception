@@ -2,14 +2,17 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getSupabase } from "@/lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
+import { clinicAccess, createAuthSessionRecovery } from "@/lib/authSessionRecovery";
 import { forgetClinic, type ClinicCode } from "@/lib/clinic";
 import { CLINIC_TITLES, CLINIC_URLS, clinicFromHostname } from "@/lib/clinicHosts";
 
 type Props = { children: (email: string) => ReactNode };
 type AccessState =
   | { status: "checking" }
+  | { status: "recovering" }
   | { status: "ready"; email: string }
   | { status: "blocked"; message: string; actualClinic?: ClinicCode };
 
@@ -32,95 +35,65 @@ export default function AuthGate({ children }: Props) {
     if (configError) return;
     const supabase = getSupabase();
     const expectedClinic = clinicFromHostname(window.location.hostname);
-    let active = true;
-    let revision = 0;
     let verifiedUserId: string | null = null;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     let request: AbortController | undefined;
-    const isCurrent = (version: number) => active && revision === version;
     const lookupFailure = () => {
       verifiedUserId = null;
-      setAccess({
-        status: "blocked",
-        message: "계정의 병원을 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요. 계속되면 원장님께 계정 확인을 요청해 주세요.",
-      });
+      setAccess({ status: "blocked", message: "계정의 병원을 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요. 계속되면 원장님께 계정 확인을 요청해 주세요." });
     };
-
-    async function validateSession(session: Session | null, version: number) {
-      if (!isCurrent(version)) return;
-      const email = session?.user.email;
-      if (!email) {
-        router.replace("/login");
-        return;
-      }
-      const controller = new AbortController();
-      request = controller;
-      try {
-        // 캐시나 S 기본값이 아니라 로그인한 계정의 실제 병원을 확인한다.
-        const { data, error } = await supabase.rpc("current_clinic").abortSignal(controller.signal);
-        if (!isCurrent(version)) return;
-        const actualClinic: ClinicCode | null = data === "S" || data === "N" ? data : null;
-        if (error) {
-          lookupFailure();
-        } else if (!actualClinic) {
+    const recovery = createAuthSessionRecovery<Session>({
+      getSession: () => supabase.auth.getSession(),
+      onPending(session) {
+        request?.abort();
+        // Preserve mounted input only for a valid same-user refresh, not uncertainty.
+        if (!session || session.user.id !== verifiedUserId) {
           verifiedUserId = null;
-          setAccess({
-            status: "blocked",
-            message: "이 계정에 연결된 병원이 없습니다. 원장님께 계정의 병원 연결을 확인해 달라고 요청해 주세요.",
-          });
-        } else if (expectedClinic && actualClinic !== expectedClinic) {
-          verifiedUserId = null;
-          setAccess({
-            status: "blocked",
-            message: `이 주소는 ${CLINIC_TITLES[expectedClinic]} 전용입니다. 현재 계정은 ${CLINIC_TITLES[actualClinic]} 계정입니다. 아래 주소로 이동하거나, 이 탭에서 로그아웃한 뒤 알맞은 계정으로 로그인해 주세요.`,
-            actualClinic,
-          });
-        } else {
-          verifiedUserId = session?.user.id ?? null;
-          setAccess({ status: "ready", email });
+          forgetClinic();
+          setAccess({ status: "checking" });
         }
-      } catch {
-        if (isCurrent(version)) lookupFailure();
-      }
-    }
-
-    function scheduleValidation(session: Session | null) {
-      if (!active) return;
-      const version = ++revision;
-      clearTimeout(timer);
-      request?.abort();
-      const userId = session?.user.id ?? null;
-      // 같은 계정의 토큰 갱신·탭 복귀는 본문을 유지하며 뒤에서 재확인한다.
-      // 매번 본문을 내리면 작성 중인 접수실 입력이 사라질 수 있다.
-      if (!userId || userId !== verifiedUserId) {
+      },
+      onNoSession() { forgetClinic(); router.replace("/login"); },
+      onRecovery() {
+        request?.abort();
         verifiedUserId = null;
         forgetClinic();
-        setAccess({ status: "checking" });
-      }
-      // auth 콜백 안에서 Supabase를 await하면 내부 잠금과 교착할 수 있다.
-      timer = setTimeout(() => { void validateSession(session, version); }, 0);
-    }
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      scheduleValidation(session);
+        setAccess({ status: "recovering" });
+      },
+      async onSession(session, current) {
+        if (!session.user.email) { lookupFailure(); return; }
+        const controller = new AbortController();
+        request = controller;
+        try {
+          // Always authorize against the actual account RPC, never cached/default S.
+          const { data, error } = await supabase.rpc("current_clinic").abortSignal(controller.signal);
+          if (!current()) return;
+          const result = clinicAccess(data, error, expectedClinic);
+          if (result.status === "error") lookupFailure();
+          else if (result.status === "unmapped") {
+            verifiedUserId = null;
+            setAccess({ status: "blocked", message: "이 계정에 연결된 병원이 없습니다. 원장님께 계정의 병원 연결을 확인해 달라고 요청해 주세요." });
+          } else if (result.status === "mismatch") {
+            verifiedUserId = null;
+            setAccess({ status: "blocked", actualClinic: result.actual, message: "이 주소는 " + CLINIC_TITLES[expectedClinic!] + " 전용입니다. 현재 계정은 " + CLINIC_TITLES[result.actual] + " 계정입니다. 아래 주소로 이동하거나, 이 탭에서 로그아웃한 뒤 알맞은 계정으로 로그인해 주세요." });
+          } else {
+            verifiedUserId = session.user.id;
+            setAccess({ status: "ready", email: session.user.email });
+          }
+        } catch { if (current()) lookupFailure(); }
+      },
     });
-
-    const initialRevision = revision;
-    void supabase.auth.getSession().then(({ data, error }) => {
-      // 그 사이 도착한 auth 변경보다 오래된 초기 결과는 버린다.
-      if (!isCurrent(initialRevision)) return;
-      if (error) lookupFailure();
-      else scheduleValidation(data.session);
-    }).catch(() => {
-      if (isCurrent(initialRevision)) lookupFailure();
-    });
-
+    const { data: sub } = supabase.auth.onAuthStateChange(recovery.onAuthStateChange);
+    recovery.start();
+    const retryOnline = () => { if (navigator.onLine) recovery.retry(true); };
+    const retryVisible = () => { if (document.visibilityState === "visible") retryOnline(); };
+    window.addEventListener("online", retryOnline);
+    document.addEventListener("visibilitychange", retryVisible);
     return () => {
-      active = false;
-      ++revision;
-      clearTimeout(timer);
+      recovery.dispose();
       request?.abort();
       sub.subscription.unsubscribe();
+      window.removeEventListener("online", retryOnline);
+      document.removeEventListener("visibilitychange", retryVisible);
     };
   }, [router, configError, retry]);
 
@@ -143,6 +116,16 @@ export default function AuthGate({ children }: Props) {
     return (
       <main className="p-6 text-red-700">
         연결 설정 오류: {configError}
+      </main>
+    );
+  }
+  if (access.status === "recovering") {
+    return (
+      <main className="mx-auto mt-16 max-w-lg space-y-4 p-6">
+        <h1 className="text-xl font-bold">로그인 연결 복구가 필요합니다</h1>
+        <p role="alert" className="text-sm leading-6 text-stone-700">연결 문제로 저장된 로그인 상태를 확인하지 못했습니다. 로그아웃된 것으로 처리하지 않았습니다. 연결을 확인하고 다시 시도해 주세요.</p>
+        <button type="button" onClick={() => { setAccess({ status: "checking" }); setRetry((value) => value + 1); }} className="rounded border px-3 py-2 text-sm">다시 확인</button>
+        <Link href="/login" className="block text-sm text-blue-700 underline">로그인 확인 화면 열기</Link>
       </main>
     );
   }

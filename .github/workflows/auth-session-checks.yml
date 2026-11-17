@@ -1,0 +1,35 @@
+name: Auth session recovery checks
+on:
+  pull_request:
+    paths:
+      - components/AuthGate.tsx
+      - app/login/page.tsx
+      - lib/authSessionRecovery*
+      - lib/clinic.ts
+      - lib/clinicHosts.ts
+      - .github/workflows/auth-session-checks.yml
+  push:
+    branches: ["aside/auth-session-recovery-*"]
+permissions:
+  contents: read
+concurrency:
+  group: auth-session-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Auth recovery regression tests
+        run: npx vitest run lib/authSessionRecovery.test.ts
+      - name: Actual-module native regression tests
+        run: node --experimental-strip-types --test lib/authSessionRecovery.native-check.mjs
+      - name: Auth file lint
+        run: npx eslint components/AuthGate.tsx app/login/page.tsx lib/authSessionRecovery.ts lib/authSessionRecovery.test.ts lib/authSessionRecovery.native-check.mjs
+      - name: TypeScript
+        run: npx tsc --noEmit

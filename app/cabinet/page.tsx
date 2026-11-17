@@ -23,7 +23,6 @@ function whenKo(ts: string): string {
 const UNITS = ["개", "박스", "봉지", "팩", "통", "병", "포", "장"];
 function UnitEditor({ item, locked, busy, save }: { item: CabinetItem; locked: boolean; busy: boolean; save: (unit: string) => void }) {
   const [value, setValue] = useState(item.unit);
-  useEffect(() => setValue(item.unit), [item.unit]);
   return <span className="flex items-center gap-1 text-xs">
     <input aria-label={item.name + " 단위"} list="cabinet-units" value={value} maxLength={20} disabled={locked || busy} onChange={(e) => setValue(e.target.value)} className="w-20 rounded border px-1 py-0.5" />
     {!locked && <button disabled={busy || value.trim() === item.unit} onClick={() => save(value)} className="underline disabled:opacity-40">단위 저장</button>}
@@ -48,7 +47,16 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
     setHistory(new Set(data.moves.map((m) => m.item_id)));
     setReady(true);
   }, []);
-  useEffect(() => { load().catch((e: Error) => setError(e.message)); }, [load]);
+  useEffect(() => {
+    let active = true;
+    loadCabinet().then((data) => {
+      if (!active) return;
+      setItems(data.allItems.filter((item) => !isLegacyCabinetItem(item)));
+      setHistory(new Set(data.moves.map((move) => move.item_id)));
+      setReady(true);
+    }).catch((e: Error) => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, []);
   async function run(fn: () => Promise<void>, message = "저장했습니다.") {
     if (pending.current) return;
     pending.current = true; setBusy(true); setError(null); setNotice("저장 중…");
@@ -63,7 +71,7 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
     <ul className="divide-y divide-stone-100">{items.map((it) => <li key={it.id} className="flex flex-wrap items-center gap-2 py-2">
       <span className={it.active ? "" : "text-stone-400 line-through"}>{it.name}</span>
       <span className="text-xs text-stone-500">{kindInfo(it.kind).label} · {it.clinic ? clinicInfo(it.clinic).short + " 전용" : "공용"}</span>
-      <UnitEditor item={it} locked={!ready || history.has(it.id)} busy={busy} save={(value) => run(async () => { await updateCabinetItem(it.id, { unit: value }); })} />
+      <UnitEditor key={`${it.id}:${it.unit}`} item={it} locked={!ready || history.has(it.id)} busy={busy} save={(value) => run(async () => { await updateCabinetItem(it.id, { unit: value }); })} />
       <label className="text-xs">부족 기준 <input type="number" min={0} defaultValue={it.min_stock} disabled={busy} onBlur={(e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v >= 0 && v !== it.min_stock) run(async () => { await updateCabinetItem(it.id, { min_stock: v }); }); }} className="w-16 rounded border px-1" /></label>
       <button disabled={busy} className="ml-auto text-xs underline" onClick={() => run(async () => { await updateCabinetItem(it.id, { active: !it.active }); })}>{it.active ? "사용 안 함" : "다시 사용"}</button>
     </li>)}</ul>

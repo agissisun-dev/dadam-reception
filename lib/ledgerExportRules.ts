@@ -9,7 +9,7 @@ export type DayBlockInput = {
   day: string; // YYYY-MM-DD
   entries: {
     seq: number;
-    kind: "normal" | "correction";
+    kind: "normal" | "correction" | "refund";
     patient_name: string;
     insurance_kind: string | null;
     cash: number;
@@ -55,13 +55,13 @@ export function dayBlock(input: DayBlockInput): DayBlock {
     const row: Cell[] = [i + 1, null, null, null, null, null, null, null, x ? x.title : null, x ? x.amount : null];
     if (e) {
       const sub = e.cash + e.cash_receipt + e.card;
-      row[1] = e.kind === "correction" ? `${e.patient_name} (정정)` : e.patient_name;
+      row[1] = e.kind === "correction" ? `${e.patient_name} (정정)` : e.kind === "refund" ? `${e.patient_name} (환불)` : e.patient_name;
       row[2] = e.insurance_kind;
       row[3] = n(e.cash);
       row[4] = n(e.cash_receipt);
       row[5] = n(e.card);
       row[6] = n(sub); // 붉은 줄도 금액 그대로(합계에 들어감), 사유는 기타 칸 끝에
-      const note = e.kind === "correction" ? `정정: ${e.correction_reason ?? ""}` : e.note_raw || "";
+      const note = e.kind === "correction" ? `정정: ${e.correction_reason ?? ""}` : e.kind === "refund" ? `${e.note_raw || "환불"}: ${e.correction_reason ?? ""}` : e.note_raw || "";
       row[7] = (e.off_total ? [note, e.pay_note || "계좌입금"].filter(Boolean).join(" · ") : note) || null;
       for (const f of redFieldsOf(e)) redCells.push([rows.length, RED_COL[f]]);
       if (allRed(e)) redCells.push([rows.length, 6]);

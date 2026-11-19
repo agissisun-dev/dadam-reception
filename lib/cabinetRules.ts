@@ -88,7 +88,7 @@ export const CABINET_KINDS: {
   dateLabel?: string;
 }[] = [
   { value: "topical", label: "외용제", dot: "bg-blue-500", order: 11, unit: "개", hint: "기한 1년 안이면 판매 어려움 — 미리 확인" },
-  { value: "medicine", label: "다담공용 탕약·환약", dot: "bg-[#16863b]", order: 1, unit: "개", hint: "공진단·경옥환·소합원·보비환·해수환" },
+  { value: "medicine", label: "공용 탕약·환약", dot: "bg-[#16863b]", order: 1, unit: "개", hint: "공진단·경옥환·소합원·보비환·해수환" },
   { value: "insured", label: "보험약", dot: "bg-orange-500", order: 31, unit: "포", hint: "병원별 · 장부의 엑스제(N일)에서 자동으로 뺌", perClinic: true },
   { value: "yakchim", label: "약침", dot: "bg-purple-500", order: 41, unit: "병", hint: "날짜는 조제일자 · 장부에 적으면 자동으로 뺌", dateLabel: "조제일자" },
   { value: "treatment", label: "치료실 용품", dot: "bg-sky-400", order: 51, unit: "개", hint: "병원별 · 알콜솜·거즈·부항컵", perClinic: true },

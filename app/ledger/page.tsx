@@ -13,6 +13,7 @@ import { listCabinetItems } from "@/lib/cabinet";
 import { addDays, todayISO, weekdayKo } from "@/lib/dates";
 import {
   addCorrection,
+  addRefund,
   addExpense,
   closeDay,
   deleteEntry,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/ledger";
 import { downloadDayExcel, downloadMonthExcel, downloadRangeExcel } from "@/lib/ledgerExport";
 import LedgerCalendar from "@/components/LedgerCalendar";
+import RefundBox from "@/components/RefundBox";
 import { daySummary, nextSeq, parseWon, won } from "@/lib/ledgerRules";
 import { listPatients } from "@/lib/patients";
 import { STAFF_NAMES, loadLastStaff, saveLastStaff, type StaffName } from "@/lib/staff";
@@ -71,6 +73,7 @@ function Board() {
   const [dCashReceipt, setDCashReceipt] = useState("");
   const [dCard, setDCard] = useState("");
   const [dReason, setDReason] = useState("");
+  const [refunding, setRefunding] = useState<LedgerEntryWithItems | null>(null);
   const [exporting, setExporting] = useState(false);
   /** 엑셀로 내려받을 달(YYYY-MM). 처음엔 보고 있는 달. */
   const [exportMonth, setExportMonth] = useState(() => todayISO().slice(0, 7));
@@ -210,7 +213,22 @@ function Board() {
             setDCard("");
             setDReason("");
           }}
+          onRefund={(e) => setRefunding(e)}
           onChanged={load}
+        />
+      )}
+
+      {refunding && (
+        <RefundBox
+          original={refunding}
+          staff={staff}
+          onSave={async (input) => {
+            await addRefund(input);
+            setRefunding(null);
+            if (input.day === day) load();
+            else setDay(input.day); // 돌려준 날(오늘) 장부로 옮겨 보여 준다
+          }}
+          onCancel={() => setRefunding(null)}
         />
       )}
 

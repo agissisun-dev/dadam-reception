@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CabinetStatus } from "@/lib/cabinet";
 import { recordCount, recordDiscard, recordIn, recordOut } from "@/lib/cabinet";
+import { backfillFromLedger } from "@/lib/cabinetBackfill";
 import { KIND_LABEL, PURPOSES, countDiff, dateLabelOf, expiryStatus, kindInfo, purposeLabel } from "@/lib/cabinetRules";
 import { daysBetween } from "@/lib/dates";
 import { conditionLabel } from "@/lib/conditions";
@@ -34,6 +35,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
   const [memo, setMemo] = useState("");
   const [inStep, setInStep] = useState<1 | 2>(1);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const isYakchim = item.kind === "yakchim";
@@ -284,6 +286,11 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
                         await recordCount({ item_id: item.id, counted: countedNum!, expected: stock, staff_name: staff, memo: diff !== 0 ? memo : undefined });
                       }
                       await recordIn({ item_id: item.id, qty, expiry: expiry || null, staff_name: staff, memo: first ? "처음 수량 등록" : undefined });
+                      if (first) {
+                        // 처음 수량을 넣은 날부터 장부에 적힌 같은 이름 항목을 소급해 뺀다(사용자 2026-11-19)
+                        const r = await backfillFromLedger(item, today, staff);
+                        if (r.applied > 0) setNotice(`오늘 장부에 이미 적힌 ${r.applied}건(${r.qty}${unit})을 소급해서 뺐습니다.`);
+                      }
                     })
                   }
                 >
@@ -331,6 +338,20 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
             <button className={`${BTN} text-red-700`} onClick={() => { reset(); setMode("discard"); }}>
               폐기
             </button>
+            <button
+              className={BTN}
+              title="재고와 아직 안 이어진 장부 항목 중 이 품목 이름과 같은 것을 찾아 소급해서 뺍니다"
+              onClick={() => {
+                const from = window.prompt("어느 날부터 장부를 다시 맞출까요? (YYYY-MM-DD)", moves[0]?.created_at.slice(0, 10) ?? today);
+                if (!from || !/^\d{4}-\d{2}-\d{2}$/.test(from)) return;
+                run(async () => {
+                  const r = await backfillFromLedger(item, from, staff);
+                  setNotice(r.applied > 0 ? `${from}부터 장부 ${r.applied}건(${r.qty}${unit})을 소급해서 뺐습니다.` : "소급할 장부 항목이 없습니다.");
+                });
+              }}
+            >
+              장부 소급 맞추기
+            </button>
             {status.lots.length > 0 && (
               <span className="ml-auto text-xs text-stone-500">
                 남은 묶음: {status.lots.map((l) => `${l.expiry ?? `${dateLabel} 없음`} ${l.qty}${unit}`).join(" · ")}
@@ -356,6 +377,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
       )}
 
       {error && <p className="mt-2 rounded border border-red-300 bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+      {notice && <p className="mt-2 rounded border border-[#16863b] bg-[#f0f7f3] p-2 text-xs text-[#0f3d23]">{notice}</p>}
     </div>
   );
 }

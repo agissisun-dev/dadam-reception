@@ -21,11 +21,11 @@ function whenKo(ts: string): string {
 }
 
 /** 품목 관리: 이름·구분·부족 기준 추가·수정, 사용 안 함. */
-function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: ClinicCode }) {
+function ItemManager({ onChanged, clinic, initialKind, compact }: { onChanged: () => void; clinic: ClinicCode; initialKind?: CabinetKind; compact?: boolean }) {
   const [items, setItems] = useState<CabinetItem[] | null>(null);
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<CabinetKind>("medicine");
-  const [unit, setUnit] = useState("개");
+  const [kind, setKind] = useState<CabinetKind>(initialKind ?? "medicine");
+  const [unit, setUnit] = useState(kindInfo(initialKind ?? "medicine").unit);
   const [minStock, setMinStock] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,10 +49,11 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
 
   return (
     <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
-      <h2 className="mb-2 font-bold">품목 관리</h2>
-      <p className="mb-3 text-xs text-stone-500">부족 기준 밑으로 내려가면 붉게 표시됩니다. 기록이 없는 품목은 [지우기]로 지울 수 있고, 기록이 있는 품목은 [사용 안 함]으로 두면 목록에서 빠지고 기록은 남습니다.</p>
+      {compact && <p className="mb-2 text-xs text-stone-500">새 품목을 넣고 [입고]로 지금 있는 수량을 적으면, 그날부터 장부에 적힌 같은 이름의 항목이 재고에서 소급해 빠집니다.</p>}
+      {!compact && <h2 className="mb-2 font-bold">품목 관리</h2>}
+      {!compact && <p className="mb-3 text-xs text-stone-500">부족 기준 밑으로 내려가면 붉게 표시됩니다. 기록이 없는 품목은 [지우기]로 지울 수 있고, 기록이 있는 품목은 [사용 안 함]으로 두면 목록에서 빠지고 기록은 남습니다.</p>}
       {error && <p className="mb-2 text-red-600">{error}</p>}
-      <ul className="divide-y divide-stone-100">
+      <ul className={`divide-y divide-stone-100 ${compact ? "hidden" : ""}`}>
         {(items ?? []).map((it) => (
           <li key={it.id} className="flex flex-wrap items-center gap-2 py-1.5">
             <span className={`inline-block h-2.5 w-2.5 rounded-full ${kindInfo(it.kind).dot}`} />
@@ -86,7 +87,7 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
           </li>
         ))}
       </ul>
-      <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-stone-100 pt-3">
+      <div className={`flex flex-wrap items-end gap-2 ${compact ? "" : "mt-3 border-t border-stone-100 pt-3"}`}>
         <label className="block">
           <span className="text-xs text-stone-500">새 품목</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름" className={`mt-1 ${INPUT}`} />
@@ -146,6 +147,7 @@ function Board() {
   const [clinic, setClinic] = useState<ClinicCode>("S");
   const [activeKind, setActiveKind] = useState<CabinetKind | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [quickAdd, setQuickAdd] = useState<CabinetKind | null>(null);
 
   const load = useCallback(() => {
     loadCabinet()
@@ -239,8 +241,12 @@ function Board() {
               <span className={`inline-block h-2.5 w-2.5 rounded-full ${cur.kind.dot}`} />
               <h2 className="font-bold">{cur.kind.label}</h2>
               <span className="text-xs text-stone-500">{cur.kind.hint}</span>
-              <button type="button" onClick={() => { setCollapsed(true); setActiveKind(null); }} className="ml-auto text-xs text-stone-400 underline">접기 (전체 기록 보기)</button>
+              <button type="button" onClick={() => setQuickAdd((q) => (q === cur.kind.value ? null : cur.kind.value))} className={`ml-auto ${BTN}`}>+ 품목 추가</button>
+              <button type="button" onClick={() => { setCollapsed(true); setActiveKind(null); }} className="text-xs text-stone-400 underline">접기 (전체 기록 보기)</button>
             </div>
+            {quickAdd === cur.kind.value && (
+              <ItemManager key={cur.kind.value} compact initialKind={cur.kind.value} clinic={clinic} onChanged={() => { setQuickAdd(null); load(); }} />
+            )}
             {cur.list.map((s) => <CabinetRow key={s.item.id} status={s} today={today} onDone={load} />)}
             {cur.list.length === 0 && (
               <p className="rounded-lg border border-dashed border-stone-200 bg-white p-3 text-center text-xs text-stone-500">

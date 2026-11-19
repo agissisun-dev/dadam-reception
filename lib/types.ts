@@ -241,7 +241,8 @@ export type LedgerEntry = {
   note_raw: string;
   memo: string | null;
   staff_name: string;
-  kind: "normal" | "correction";
+  /** normal · correction(마감 뒤 정정) · refund(환불, V18: 돌려준 날 장부에 마이너스) */
+  kind: "normal" | "correction" | "refund";
   corrects_id: number | null;
   correction_reason: string | null;
   packs_missing: boolean;

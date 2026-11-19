@@ -28,14 +28,18 @@ function toRow(input: PatientInput) {
   };
 }
 
-export async function findPatientByPhone(phone: string): Promise<Patient | null> {
-  const { data, error } = await getSupabase()
-    .from("patients")
-    .select("*")
-    .eq("phone", normalizePhone(phone))
-    .maybeSingle();
+/** 같은 연락처의 환자들(가족이 번호를 나눠 쓸 수 있다, V18 2026-11-19). 이름순. */
+export async function findPatientsByPhone(phone: string): Promise<Patient[]> {
+  const { data, error } = await getSupabase().from("patients").select("*").eq("phone", normalizePhone(phone)).order("name");
   if (error) fail("환자 조회", error.message);
-  return (data as Patient | null) ?? null;
+  return (data ?? []) as Patient[];
+}
+
+/** 연락처로 한 명 찾기. 이름을 주면 그 이름, 없으면 첫 사람(옛 호출 호환). */
+export async function findPatientByPhone(phone: string, name?: string): Promise<Patient | null> {
+  const list = await findPatientsByPhone(phone);
+  if (name?.trim()) return list.find((p) => p.name === name.trim()) ?? null;
+  return list[0] ?? null;
 }
 
 export async function listPatients(
@@ -62,7 +66,13 @@ export async function getPatient(id: number): Promise<Patient | null> {
 
 export async function createPatient(input: PatientInput): Promise<Patient> {
   const { data, error } = await getSupabase().from("patients").insert(toRow(input)).select("*").single();
-  if (error) fail("환자 등록", error.message);
+  if (error) {
+    if (/duplicate|unique/i.test(error.message)) {
+      // V18 전: 같은 연락처면 막힘. V18 뒤: 같은 연락처·같은 이름만 막힘.
+      fail("환자 등록", /phone_name/.test(error.message) ? "같은 연락처·같은 이름의 환자가 이미 있습니다." : "같은 연락처의 환자가 이미 있습니다. 가족이 번호를 나눠 쓰려면 supabase/schema-v18-family-phone-refund.sql을 먼저 실행해 주세요.");
+    }
+    fail("환자 등록", error.message);
+  }
   return data as Patient;
 }
 

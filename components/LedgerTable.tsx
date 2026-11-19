@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import MoneyInput from "@/components/MoneyInput";
 import { updateEntryMoney } from "@/lib/ledger";
+import { extractPacks } from "@/lib/cabinetRules";
 import { INSURANCE_KINDS, PAY_NOTES, allRed, chipClass, itemLabel, itemSummary, parseWon, redFieldsOf, sumEntries, won } from "@/lib/ledgerRules";
 import type { LedgerEntryWithItems, RedField } from "@/lib/types";
 
@@ -12,6 +13,7 @@ type Props = {
   closed: boolean;
   onDelete: (e: LedgerEntryWithItems) => void;
   onCorrect: (e: LedgerEntryWithItems) => void;
+  onRefund: (e: LedgerEntryWithItems) => void;
   onChanged: () => void;
 };
 
@@ -38,11 +40,15 @@ function Followed({ e }: { e: LedgerEntryWithItems }) {
       </span>,
     );
   }
-  const cab = e.items.filter((i) => i.group === "cabinet" && i.cabinet_move_id);
+  if (e.kind === "refund") {
+    const back = e.items.filter((i) => i.cabinet_move_id);
+    return back.length > 0 ? <span className="text-xs text-[#06366f]">반품 입고 {back.map((i) => `${i.name} +${i.qty}`).join(", ")}</span> : dash;
+  }
+  const cab = e.items.filter((i) => (i.group === "cabinet" || i.group === "extract") && i.cabinet_move_id);
   if (cab.length > 0) {
     out.push(
       <span key="cab" className="text-[#06366f]">
-        약장 {cab.map((i) => `${i.name} −${i.qty}`).join(", ")}
+        재고 {cab.map((i) => `${i.name} −${i.group === "extract" ? `${extractPacks(i.days, null)}포` : i.qty}`).join(", ")}
       </span>,
     );
   }
@@ -135,7 +141,7 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
   );
 }
 
-export default function LedgerTable({ entries, closed, onDelete, onCorrect, onChanged }: Props) {
+export default function LedgerTable({ entries, closed, onDelete, onCorrect, onRefund, onChanged }: Props) {
   const [editing, setEditing] = useState<number | null>(null);
   const total = sumEntries(entries);
   const normal = entries.filter((e) => e.kind === "normal");
@@ -172,17 +178,19 @@ export default function LedgerTable({ entries, closed, onDelete, onCorrect, onCh
               />
             );
           }
-          const correction = e.kind === "correction";
+          const refund = e.kind === "refund";
+          const correction = e.kind === "correction" || refund; // 둘 다 부호 붙여 보이는 조정 줄
           const sub = e.cash + e.cash_receipt + e.card;
           const reds = redFieldsOf(e);
           const anyRed = reds.length > 0;
           const subRed = allRed(e);
           return (
-            <div key={e.id} className={`${GRID} border-t border-stone-100 py-2 text-sm ${correction ? "bg-amber-50/50" : ""}`}>
-              <div className="text-stone-400">{correction ? "정정" : e.seq}</div>
+            <div key={e.id} className={`${GRID} border-t border-stone-100 py-2 text-sm ${refund ? "bg-red-50/50" : correction ? "bg-amber-50/50" : ""}`}>
+              <div className={refund ? "text-red-700" : "text-stone-400"}>{refund ? "환불" : correction ? "정정" : e.seq}</div>
               <div className="truncate">
                 {e.patient_name}
-                {correction && <span className="block text-[11px] text-amber-800">#{entries.find((x) => x.id === e.corrects_id)?.seq ?? "?"} 정정 · {e.correction_reason}</span>}
+                {refund && <span className="block text-[11px] text-red-700">{e.correction_reason}</span>}
+                {correction && !refund && <span className="block text-[11px] text-amber-800">#{entries.find((x) => x.id === e.corrects_id)?.seq ?? "?"} 정정 · {e.correction_reason}</span>}
               </div>
               <div className="text-stone-500">{e.insurance_kind ?? dash}</div>
               <div className={NUM}>{money(e.cash, { signed: correction, red: reds.includes("cash") })}</div>
@@ -214,6 +222,9 @@ export default function LedgerTable({ entries, closed, onDelete, onCorrect, onCh
                     <button type="button" onClick={() => onDelete(e)} className="underline">지우기</button>
                   </span>
                 )}
+                {!closed && refund && (
+                  <button type="button" onClick={() => onDelete(e)} className="mt-0.5 block text-[11px] text-stone-500 underline">지우기</button>
+                )}
                 {!correction && (
                   <Link
                     href={`/appointments?for=${e.patient_id ?? ""}&name=${encodeURIComponent(e.patient_name)}&entry=${e.id}`}
@@ -224,6 +235,9 @@ export default function LedgerTable({ entries, closed, onDelete, onCorrect, onCh
                 )}
                 {closed && !correction && (
                   <button type="button" onClick={() => onCorrect(e)} className="mt-0.5 block text-[11px] text-stone-500 underline">정정</button>
+                )}
+                {!correction && (
+                  <button type="button" onClick={() => onRefund(e)} className="mt-0.5 block text-[11px] text-red-700 underline">환불</button>
                 )}
               </div>
             </div>

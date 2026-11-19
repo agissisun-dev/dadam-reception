@@ -7,7 +7,7 @@ import { daysFromPacks } from "./packs";
 import { isValidPhone } from "./phone";
 import { createJobs, deleteJobsOfEntry } from "./brew";
 import { planJobsFromLedger } from "./brewRules";
-import { tallyByDay, type ParsedItem } from "./ledgerRules";
+import { nextSeq, tallyByDay, type ParsedItem } from "./ledgerRules";
 
 /** 붉은 칸 저장값: off_total(하나라도 붉음)·pay_note·red_fields */
 function redColumns(red: RedField[] | undefined, payNote: string | null | undefined) {
@@ -123,7 +123,7 @@ export async function listMonthTally(monthKey: string): Promise<Map<string, { co
   if (e.error) fail("장부 달력", e.error.message);
   if (d.error) fail("장부 달력", d.error.message);
   return tallyByDay(
-    (e.data ?? []) as { day: string; kind: "normal" | "correction"; cash: number; cash_receipt: number; card: number; off_total?: boolean }[],
+    (e.data ?? []) as { day: string; kind: "normal" | "correction" | "refund"; cash: number; cash_receipt: number; card: number; off_total?: boolean }[],
     (d.data ?? []) as { day: string; closed_at: string | null }[],
   );
 }
@@ -189,7 +189,8 @@ export async function saveEntry(input: SaveEntryInput): Promise<LedgerEntryWithI
   if (!patientId && decoctionItems.length > 0 && input.new_patient_phone?.trim()) {
     const phone = input.new_patient_phone.trim();
     if (!isValidPhone(phone)) throw new Error("연락처는 숫자 11자리로 적어 주세요.");
-    const found = await findPatientByPhone(phone);
+    // 같은 번호에 같은 이름이면 그 분, 다른 이름이면 가족으로 새로 등록(V18)
+    const found = await findPatientByPhone(phone, name);
     patientId = found
       ? found.id
       : (await createPatient({ name, phone, family_phone: "", family_note: "", condition: "general", memo: "", source: input.new_patient_source ?? "", source_note: input.new_patient_source_note ?? "" })).id;
@@ -379,6 +380,13 @@ export async function deleteEntry(entry: LedgerEntryWithItems, staff: string): P
     throw new Error("이 줄의 해피콜에 이미 연락 기록이 있어 지울 수 없습니다. 정정 줄로 남겨 주세요.");
   }
   for (const i of entry.items) {
+    if (entry.kind === "refund" && i.cabinet_move_id) {
+      // 환불 줄을 지우면 반품 입고를 되돌린다(다시 나감)
+      const itemId = await cabinetItemOfMove(i.cabinet_move_id);
+      const qty = await cabinetMoveQty(i.cabinet_move_id);
+      if (itemId && qty > 0) await recordOut({ item_id: itemId, qty, purpose: "other", patient_id: entry.patient_id, patient_name: entry.patient_name, staff_name: staff, memo: `환불 줄 삭제 되돌림 (${entry.day} #${entry.seq})` });
+      continue;
+    }
     if (i.cabinet_move_id && (i.group === "cabinet" || i.group === "extract")) {
       const code = i.code;
       const itemId = await cabinetItemOfMove(i.cabinet_move_id);
@@ -476,6 +484,76 @@ export async function addCorrection(p: {
     correction_reason: p.reason.trim(),
   });
   if (error) fail("정정 줄", error.message);
+}
+
+/**
+ * 환불 줄 (V18, 2026-11-19 사용자 "환불줄을 하나 만들어 놓는게 좋을 거 같아").
+ * 돌려준 날(오늘) 장부에 kind='refund'로 마이너스 금액을 넣고, 반품한 항목은 재고에 입고로 되돌린다.
+ * 원래 줄은 그대로 둔다(그날 서랍 돈과 맞아야 하므로). 전체 취소면 처방·해피콜도 끝낸다.
+ */
+export type RefundInput = {
+  day: string; // 돌려준 날(보통 오늘)
+  original: LedgerEntryWithItems;
+  money: { cash: number; cash_receipt: number; card: number }; // 돌려주는 금액(양수로 받아 마이너스로 저장)
+  items: { item: LedgerItem; qty: number }[]; // 반품 항목과 수량(0이면 제외)
+  reason: string;
+  closePrescription: boolean; // 탕약 전체 취소: 처방·해피콜 끝내기
+  staff: string;
+};
+
+export async function addRefund(p: RefundInput): Promise<void> {
+  if (!p.reason.trim()) throw new Error("환불 사유를 적어 주세요.");
+  const money = { cash: Math.abs(p.money.cash), cash_receipt: Math.abs(p.money.cash_receipt), card: Math.abs(p.money.card) };
+  const back = p.items.filter((x) => x.qty > 0);
+  if (money.cash + money.cash_receipt + money.card === 0 && back.length === 0) throw new Error("돌려주는 금액이나 반품 항목이 있어야 합니다.");
+  const sb = getSupabase();
+  const { data: seqRows, error: e0 } = await sb.from("ledger_entries").select("seq").eq("day", p.day);
+  if (e0) fail("환불 줄 번호", e0.message);
+  const seq = nextSeq((seqRows ?? []) as { seq: number }[]);
+  const { data: e, error } = await sb
+    .from("ledger_entries")
+    .insert({
+      day: p.day,
+      seq,
+      patient_id: p.original.patient_id,
+      patient_name: p.original.patient_name,
+      insurance_kind: p.original.insurance_kind,
+      cash: -money.cash,
+      cash_receipt: -money.cash_receipt,
+      card: -money.card,
+      note_raw: back.length > 0 ? `환불 ${back.map((x) => `${x.item.name}${x.qty > 1 ? x.qty : ""}`).join(",")}` : "환불",
+      memo: null,
+      staff_name: p.staff,
+      kind: "refund",
+      corrects_id: p.original.id,
+      correction_reason: p.reason.trim(),
+    })
+    .select("*")
+    .single();
+  if (error) fail("환불 줄", /kind_check/.test(error.message) ? "환불 줄 표 설정(supabase/schema-v18-family-phone-refund.sql)을 먼저 실행해 주세요." : error.message);
+  const entry = e as LedgerEntry;
+  const rows = [];
+  for (const x of back) {
+    let moveId: number | null = null;
+    const itemId = x.item.cabinet_move_id ? await cabinetItemOfMove(x.item.cabinet_move_id) : null;
+    if (itemId) {
+      const mv = await recordIn({ item_id: itemId, qty: x.qty, expiry: null, staff_name: p.staff, memo: `환불 반품 ${p.day} #${seq} ${p.original.patient_name}` });
+      moveId = mv.id;
+    }
+    rows.push({ entry_id: entry.id, code: x.item.code, name: x.item.name, group: x.item.group, qty: x.qty, amount: null, days: null, split: null, raw: `환불 ${x.item.raw}`, prescription_id: null, cabinet_move_id: moveId });
+  }
+  if (rows.length > 0) {
+    const { error: e2 } = await sb.from("ledger_items").insert(rows);
+    if (e2) fail("환불 항목", e2.message);
+  }
+  if (p.closePrescription) {
+    const { data: presc } = await sb.from("prescriptions").select("id").eq("ledger_entry_id", p.original.id);
+    const ids = ((presc ?? []) as { id: number }[]).map((r) => r.id);
+    if (ids.length > 0) {
+      await sb.from("prescriptions").update({ status: "closed" }).in("id", ids);
+      await sb.from("happy_calls").update({ status: "closed" }).in("prescription_id", ids).eq("status", "pending");
+    }
+  }
 }
 
 /** 환자의 최종 내원일(장부에 적힌 마지막 날). 없으면 null. 환자 찾기 요약용. */

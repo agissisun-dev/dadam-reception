@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import PrescriptionForm from "@/components/PrescriptionForm";
-import { addPrescription, createPatient, findPatientByPhone } from "@/lib/patients";
+import { addPrescription, createPatient, findPatientsByPhone } from "@/lib/patients";
 import { isValidPhone, formatPhone, normalizePhone } from "@/lib/phone";
 import { DEFAULT_PER_DAY } from "@/lib/packs";
 import { CONDITIONS, conditionLabel } from "@/lib/conditions";
@@ -44,7 +44,10 @@ function NewPatient() {
   const [success, setSuccess] = useState<Patient | null>(null);
   const [prescriptionWarning, setPrescriptionWarning] = useState<Patient | null>(null);
   const [phone, setPhone] = useState(initialPhone);
-  const [checked, setChecked] = useState<null | { existing: Patient | null; phone: string }>(null);
+  // existing: 같은 번호의 환자들(가족이 번호를 나눠 쓸 수 있다, V18). family: 그 번호로 다른 분을 새로 등록하는 중
+  const [checked, setChecked] = useState<null | { existing: Patient[]; phone: string }>(null);
+  const [familyNew, setFamilyNew] = useState(false);
+  const [chosen, setChosen] = useState<Patient | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<PatientInput>(emptyPatient);
 
@@ -79,9 +82,11 @@ function NewPatient() {
       return;
     }
     try {
-      const existing = await findPatientByPhone(value);
+      const existing = await findPatientsByPhone(value);
       if (revision !== phoneRevision.current) return;
       setChecked({ existing, phone: normalizePhone(value) });
+      setFamilyNew(false);
+      setChosen(existing.length === 1 ? existing[0] : null);
       setForm((f) => ({ ...f, phone: value }));
     } catch (e) {
       if (revision !== phoneRevision.current) return;
@@ -99,6 +104,8 @@ function NewPatient() {
     setForm(emptyPatient());
     setPhone("");
     setChecked(null);
+    setFamilyNew(false);
+    setChosen(null);
     setError(null);
     // Remount PrescriptionForm so its fields, error and busy state all reset.
     setRegistration((n) => n + 1);
@@ -130,10 +137,11 @@ function NewPatient() {
 
   function saveNew(p: PrescriptionInput): Promise<void> {
     return saveOnce(async () => {
-      if (!checked || checked.existing || checked.phone !== normalizePhone(phone) || checked.phone !== normalizePhone(form.phone)) {
+      if (!checked || (checked.existing.length > 0 && !familyNew) || checked.phone !== normalizePhone(phone) || checked.phone !== normalizePhone(form.phone)) {
         throw new Error("현재 연락처를 다시 확인하세요");
       }
       if (!form.name.trim()) throw new Error("이름을 입력하세요");
+      if (checked.existing.some((e) => e.name === form.name.trim())) throw new Error("같은 연락처·같은 이름의 환자가 이미 있습니다. 위 목록에서 그분을 고르세요.");
       if (form.family_phone && !isValidPhone(form.family_phone)) throw new Error("가족 연락처 형식을 확인하세요");
       const input = JSON.stringify(form);
       if (partialPatient.current && partialPatient.current.input !== input) {
@@ -152,7 +160,7 @@ function NewPatient() {
 
   function saveExisting(p: PrescriptionInput): Promise<void> {
     return saveOnce(async () => {
-      const patient = checked?.existing;
+      const patient = chosen;
       if (!checked || !patient || checked.phone !== normalizePhone(phone)) {
         throw new Error("현재 연락처를 다시 확인하세요");
       }
@@ -255,28 +263,45 @@ function NewPatient() {
           {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
         </fieldset>
 
-        {checked?.existing && (
+        {checked && checked.existing.length > 0 && !familyNew && (
           <section className="rounded-lg border border-amber-300 bg-amber-50 p-4">
-            <p className="font-medium">
-              이미 등록된 환자: {checked.existing.name} ({conditionLabel(checked.existing.condition)}) ·{" "}
-              {formatPhone(checked.existing.phone)}
-            </p>
-            <p className="mt-1 text-sm text-stone-600">
-              이 환자에 처방을 추가합니다. 정보 수정은{" "}
-              <Link href={`/patients/${checked.existing.id}`} className="underline">
-                환자 상세
-              </Link>
-              에서.
-            </p>
-            <div className="mt-4">
-              <PrescriptionForm key={registration} initial={firstPrescription} onSubmit={saveExisting} submitLabel="처방 저장 후 다음 환자" />
+            <p className="font-medium">이 번호로 등록된 분 {checked.existing.length}명 · {formatPhone(checked.phone)}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {checked.existing.map((e) => (
+                <button
+                  key={e.id}
+                  type="button"
+                  onClick={() => setChosen(e)}
+                  className={`rounded border px-3 py-1.5 text-sm ${chosen?.id === e.id ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 bg-white"}`}
+                >
+                  {e.name} <span className="text-xs opacity-70">({conditionLabel(e.condition)})</span>
+                </button>
+              ))}
+              <button type="button" onClick={() => { setFamilyNew(true); setChosen(null); }} className="rounded border border-dashed border-stone-400 bg-white px-3 py-1.5 text-sm">
+                + 같은 번호로 다른 분 등록 (가족)
+              </button>
             </div>
+            {chosen && (
+              <>
+                <p className="mt-3 text-sm text-stone-600">
+                  <b>{chosen.name}</b>님께 처방을 추가합니다. 정보 수정은{" "}
+                  <Link href={`/patients/${chosen.id}`} className="underline">
+                    환자 상세
+                  </Link>
+                  에서.
+                </p>
+                <div className="mt-4">
+                  <PrescriptionForm key={`${registration}-${chosen.id}`} initial={firstPrescription} onSubmit={saveExisting} submitLabel="처방 저장 후 다음 환자" />
+                </div>
+              </>
+            )}
+            {!chosen && <p className="mt-3 text-sm text-stone-600">누구인지 고르거나, 아이처럼 같은 번호를 쓰는 다른 분이면 [같은 번호로 다른 분 등록]을 누르세요.</p>}
           </section>
         )}
 
-        {checked && !checked.existing && (
+        {checked && (checked.existing.length === 0 || familyNew) && (
           <section className="space-y-4 rounded-lg border border-stone-200 bg-white p-4">
-            <p className="text-sm text-green-700">새 환자입니다. 아래를 채워 주세요.</p>
+            <p className="text-sm text-green-700">{familyNew ? `${formatPhone(checked.phone)} 번호를 같이 쓰는 다른 분을 등록합니다. 이름을 다르게 적어 주세요.` : "새 환자입니다. 아래를 채워 주세요."}</p>
             <fieldset disabled={!!pendingPatient} className="min-w-0 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">

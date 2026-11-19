@@ -231,7 +231,7 @@ export function daySummary(entries: Parameters<typeof sumEntries>[0], expenses: 
  * 장부 제목을 누르면 뜨는 달력에 쓴다(사용자 2026-11-04, 하루씩 넘기지 않고 바로 가게).
  */
 export function tallyByDay(
-  entries: { day: string; kind: "normal" | "correction"; cash: number; cash_receipt: number; card: number; off_total?: boolean }[],
+  entries: { day: string; kind: "normal" | "correction" | "refund"; cash: number; cash_receipt: number; card: number; off_total?: boolean }[],
   days: { day: string; closed_at: string | null }[],
 ): Map<string, { count: number; subtotal: number; closed: boolean }> {
   const out = new Map<string, { count: number; subtotal: number; closed: boolean }>();

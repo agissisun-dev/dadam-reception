@@ -3,6 +3,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import LoginStorageCheck from "@/components/LoginStorageCheck";
+import type { Session } from "@supabase/supabase-js";
+import { createAuthSessionRecovery } from "@/lib/authSessionRecovery";
 import { getSupabase } from "@/lib/supabaseClient";
 import { clinicInfo, type ClinicCode } from "@/lib/clinic";
 import { CLINIC_TITLES, clinicFromHostname } from "@/lib/clinicHosts";
@@ -15,45 +18,45 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [sessionRecovery, setSessionRecovery] = useState(false);
+  const [manualSignIn, setManualSignIn] = useState(false);
+  const [sessionRetry, setSessionRetry] = useState(0);
   const [expectedClinic, setExpectedClinic] = useState<ClinicCode | null>(null);
 
   useEffect(() => {
-    let active = true;
     let navigating = false;
-    const goHome = () => {
-      if (active && !navigating) {
-        navigating = true;
-        router.replace("/");
-      }
-    };
     const expected = clinicFromHostname(window.location.hostname);
-
-    async function checkSession() {
-      try {
-        const { data, error } = await getSupabase().auth.getSession();
-        if (!active) return;
-        if (!error && data.session) {
-          goHome();
-          return;
-        }
-      } catch {
-        // 세션 확인에 실패해도 로그인 화면을 사용할 수 있게 한다.
-      }
-      if (active) {
+    const supabase = getSupabase();
+    const recovery = createAuthSessionRecovery<Session>({
+      getSession: () => supabase.auth.getSession(),
+      onPending() {},
+      onSession(_session, current) {
+        if (current() && !navigating) { navigating = true; router.replace("/"); }
+      },
+      onNoSession() {
         setExpectedClinic(expected);
+        setSessionRecovery(false);
         setCheckingSession(false);
-      }
-    }
-
-    const { data: listener } = getSupabase().auth.onAuthStateChange((_event, session) => {
-      if (session) goHome();
+      },
+      onRecovery() {
+        setExpectedClinic(expected);
+        setSessionRecovery(true);
+        setCheckingSession(false);
+      },
     });
-    void checkSession();
+    const { data: listener } = supabase.auth.onAuthStateChange(recovery.onAuthStateChange);
+    recovery.start();
+    const retryOnline = () => { if (navigator.onLine) recovery.retry(true); };
+    const retryVisible = () => { if (document.visibilityState === "visible") retryOnline(); };
+    window.addEventListener("online", retryOnline);
+    document.addEventListener("visibilitychange", retryVisible);
     return () => {
-      active = false;
+      recovery.dispose();
       listener.subscription.unsubscribe();
+      window.removeEventListener("online", retryOnline);
+      document.removeEventListener("visibilitychange", retryVisible);
     };
-  }, [router]);
+  }, [router, sessionRetry]);
 
   useEffect(() => {
     if (!checkingSession) {
@@ -121,6 +124,19 @@ export default function LoginPage() {
     );
   }
 
+  if (sessionRecovery && !manualSignIn) {
+    return (
+      <main className="mx-auto mt-16 max-w-sm space-y-4 p-6">
+        <h1 className="text-xl font-bold">로그인 연결 확인</h1>
+        <p role="alert" className="text-sm text-stone-700">연결 문제로 저장된 로그인 상태를 확인하지 못했습니다. 로그아웃된 것으로 처리하지 않았습니다. 먼저 연결을 확인하고 다시 시도해 주세요.</p>
+        <button type="button" onClick={() => { setCheckingSession(true); setSessionRetry((value) => value + 1); }} className="w-full rounded border py-2">저장된 로그인 다시 확인</button>
+        <button type="button" onClick={() => setManualSignIn(true)} className="w-full rounded border py-2 text-sm">직접 로그인 입력하기 (선택)</button>
+        <p className="text-xs text-stone-500">직접 입력 화면을 열어도 기존 로그인 정보를 삭제하거나 로그아웃하지 않습니다.</p>
+        <LoginStorageCheck />
+      </main>
+    );
+  }
+
   const info = expectedClinic ? clinicInfo(expectedClinic) : null;
   const isNowon = expectedClinic === "N";
 
@@ -139,6 +155,7 @@ export default function LoginPage() {
             : `${CLINIC_TITLES[expectedClinic]} 계정으로 로그인해 주세요. 다른 병원 주소와 로그인 상태가 따로 유지됩니다.`
           : "병원 계정으로 로그인해 주세요. 이 주소에는 병원이 고정되어 있지 않습니다."}
       </p>
+      {sessionRecovery && <p role="alert" className="mb-4 text-sm text-amber-800">저장된 로그인 확인에 실패한 상태입니다. 직접 로그인은 선택 사항입니다. <button type="button" onClick={() => { setManualSignIn(false); setCheckingSession(true); setSessionRetry((value) => value + 1); }} className="underline">저장된 로그인 다시 확인</button></p>}
       <form onSubmit={onSubmit} className="space-y-4">
         <label className="block">
           <span className="text-sm text-stone-600">이메일</span>
@@ -191,6 +208,7 @@ export default function LoginPage() {
         이 PC에서는 로그아웃하기 전까지 로그인 상태가 유지됩니다.
         외부·공용 PC에서는 사용 후 반드시 로그아웃하세요.
       </p>
+      <LoginStorageCheck />
     </main>
   );
 }

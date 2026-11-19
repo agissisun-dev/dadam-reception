@@ -1,0 +1,48 @@
+name: Materials clinic checks
+on:
+  pull_request:
+    paths:
+      - app/cabinet/**
+      - app/supplies/**
+      - app/ledger/page.tsx
+      - app/login/page.tsx
+      - components/LoginStorageCheck.tsx
+      - lib/ledger.ts
+      - lib/ledgerArchive.test.ts
+      - lib/loginStorageCheck*
+      - app/api/supplies/**
+      - components/CabinetRow.tsx
+      - components/LedgerEntryForm.tsx
+      - lib/cabinet*
+      - lib/suppl*
+      - lib/types.ts
+      - supabase/schema-v18-materials-clinic.sql
+      - scripts/test-materials-clinic.mjs
+      - .github/workflows/materials-clinic-checks.yml
+  push:
+    branches: ["aside/materials-clinic-*"]
+permissions:
+  contents: read
+concurrency:
+  group: materials-clinic-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Unit and integration regressions
+        run: npm test
+      - name: Actual SQL isolated regressions
+        run: |
+          npm install --prefix "$RUNNER_TEMP/materials-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.16
+          PGLITE_MODULE="file://$RUNNER_TEMP/materials-db/node_modules/@electric-sql/pglite/dist/index.js" node scripts/test-materials-clinic.mjs
+      - name: Changed file lint
+        run: npx eslint app/cabinet/page.tsx app/supplies/page.tsx app/api/supplies/route.ts 'app/api/supplies/[id]/route.ts' components/CabinetRow.tsx components/LedgerEntryForm.tsx lib/cabinet.ts lib/cabinetRules.ts lib/cabinetScope.test.ts lib/cabinet.test.ts lib/types.ts lib/supplies.ts lib/supplies.test.ts lib/suppliesServer.ts lib/suppliesServer.test.ts lib/supplyLoadState.ts lib/supplyLoadState.test.ts lib/ledger.ts lib/ledgerArchive.test.ts app/ledger/page.tsx app/login/page.tsx components/LoginStorageCheck.tsx lib/loginStorageCheck.ts lib/loginStorageCheck.test.ts scripts/test-materials-clinic.mjs
+      - name: TypeScript
+        run: npx tsc --noEmit

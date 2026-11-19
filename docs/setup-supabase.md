@@ -115,3 +115,8 @@
 - `supabase/schema-v16-ledger-red-cells.sql`: `ledger_entries.red_fields`(붉게 표시한 칸 이름 배열: cash·cash_receipt·card). 옛 붉은 줄(off_total)은 금액 있는 칸 모두 붉게 옮긴다. `off_total`은 "붉은 칸이 하나라도 있음"으로 계속 같이 저장.
 - 실행 전에도 돌아간다(앱이 red_fields 칸이 없으면 빼고 다시 저장, 그때는 옛 방식처럼 줄 전체가 붉음). 실행 뒤부터 현금·현영·카드 칸을 따로 붉게 둘 수 있다.
 
+## 26. V17 재고현황 칸 손질 (2026-11-19, 아직 실행 전)
+- `supabase/schema-v17-cabinet-kinds-2.sql`: `cabinet_items.kind`에 `treatment`(치료실 용품, 병원별)·`brewroom`(탕전실 용품, 공통) 허용. 병원별 칸(보험약·치료실 용품)은 clinic 필수. 이름 변경(코드 그대로): medicine = 다담공용 탕약·환약, supply = 공동용품. 약침의 날짜 칸은 조제일자로 읽는다(칸은 expiry 그대로).
+- 실행 전에는 치료실 용품·탕전실 용품 품목 추가가 kind 조건에 걸려 실패한다. 다른 칸은 그대로.
+- 장부 → 재고 자동 차감은 이제 **품목 이름으로도** 된다(`parseNote(raw, codes, cabinetItems)`): 약어 표에 없거나 재고에 안 이어져 있어도 "삼소음2일"·"해수환3T"처럼 재고 품목 이름과 같으면 그 품목에서 뺀다. 폼 칩에 "재고 −6포"로 미리 보인다.
+

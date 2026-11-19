@@ -146,3 +146,12 @@ export function recordDiscard(p: { item_id: number; qty: number; staff_name: str
   if (!p.memo.trim()) throw new Error("폐기 사유를 적어야 합니다.");
   return insertMove({ ...p, kind: "discard", memo: p.memo.trim() });
 }
+
+/** 품목 지우기. 기록(cabinet_moves)이 있으면 못 지운다 — [사용 안 함]으로 두라고 안내. */
+export async function deleteCabinetItem(id: number): Promise<void> {
+  const { count, error: e0 } = await getSupabase().from("cabinet_moves").select("id", { count: "exact", head: true }).eq("item_id", id);
+  if (e0) fail("품목 기록 확인", e0.message);
+  if ((count ?? 0) > 0) throw new Error("이 품목은 입출고 기록이 있어 지울 수 없습니다. [사용 안 함]으로 두면 목록에서 빠지고 기록은 남습니다.");
+  const { error } = await getSupabase().from("cabinet_items").delete().eq("id", id);
+  if (error) fail("품목 지우기", error.message);
+}

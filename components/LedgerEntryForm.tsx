@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, type FormEvent } from "react";
 import { planHappyCalls } from "@/lib/happyCallRules";
 import { saveEntry, upsertCode } from "@/lib/ledger";
 import { GROUP_LABEL, GROUP_ORDER, INSURANCE_KINDS, PAY_NOTES, chipClass, parseNote, parseWon, won, type ParsedItem } from "@/lib/ledgerRules";
+import { extractPacks } from "@/lib/cabinetRules";
 import { DEFAULT_PER_DAY, PACK_PRESETS, daysFromPacks } from "@/lib/packs";
 import { maskPhone } from "@/lib/phone";
 import { SOURCES, sourceHint } from "@/lib/sources";
@@ -147,7 +148,7 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
   const [fixing, setFixing] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  const parsed = useMemo(() => parseNote(note, codes), [note, codes]);
+  const parsed = useMemo(() => parseNote(note, codes, cabinetItems), [note, codes, cabinetItems]);
   const decoction = parsed.items.filter((i) => i.group === "decoction" && !i.unknown);
   const hasDecoction = decoction.length > 0;
   const packsN = Number(packs);
@@ -433,7 +434,18 @@ export default function LedgerEntryForm({ day, seq, codes, patients, cabinetItem
 function ItemChip({ item, onFix }: { item: ParsedItem; onFix: () => void }) {
   const text = item.unknown
     ? `"${item.raw}" 모르는 말 — 눌러서 정하기`
-    : [item.name, item.qty > 1 ? item.qty : "", item.days ? `${item.days}일` : "", item.amount ? `${item.amount / 10000}만원` : "", item.split ? `${item.split}회 분할` : "", item.free ? "무상 → 약장 사유 서비스" : ""]
+    : [
+        item.name,
+        item.qty > 1 ? item.qty : "",
+        item.days ? `${item.days}일` : "",
+        item.amount ? `${item.amount / 10000}만원` : "",
+        item.split ? `${item.split}회 분할` : "",
+        item.free ? "무상 → 약장 사유 서비스" : "",
+        // 저장하면 재고에서 얼마나 빠지는지 미리 보여 준다(사용자 2026-11-19)
+        item.cabinet_item_id && item.group === "extract" && extractPacks(item.days, item.per_day) > 0 ? `· 재고 −${extractPacks(item.days, item.per_day)}포` : "",
+        item.cabinet_item_id && item.group === "cabinet" ? `· 재고 −${item.qty}` : "",
+        !item.cabinet_item_id && item.group === "extract" ? "· 재고 연결 없음" : "",
+      ]
         .filter(Boolean)
         .join(" ");
   if (item.unknown) {

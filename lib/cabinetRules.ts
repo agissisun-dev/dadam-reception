@@ -80,13 +80,30 @@ export function purposeLabel(p: CabinetPurpose | null): string {
 }
 
 /** 품목 구분(재고 5칸, V15): 외용제(파랑) · 다담환약(초록) · 보험약(주황, 병원별·포) · 약침(보라) · 용품(회색, 핫팩·한방파스 등). */
-export const CABINET_KINDS: { value: CabinetKind; label: string; dot: string; order: number; unit: string; hint: string }[] = [
+export const CABINET_KINDS: {
+  value: CabinetKind; label: string; dot: string; order: number; unit: string; hint: string;
+  /** 병원별 칸(보험약·치료실 용품). 품목에 clinic이 꼭 붙는다 */
+  perClinic?: boolean;
+  /** 날짜 칸 이름. 약침은 유통기한이 아니라 조제일자(사용자 2026-11-19) */
+  dateLabel?: string;
+}[] = [
   { value: "topical", label: "외용제", dot: "bg-blue-500", order: 11, unit: "개", hint: "기한 1년 안이면 판매 어려움 — 미리 확인" },
-  { value: "medicine", label: "다담환약", dot: "bg-[#16863b]", order: 1, unit: "개", hint: "공진단·경옥환·소합원·보비환" },
-  { value: "insured", label: "보험약", dot: "bg-orange-500", order: 31, unit: "포", hint: "병원별 · 장부의 엑스제(N일)에서 자동으로 뺌" },
-  { value: "yakchim", label: "약침", dot: "bg-purple-500", order: 41, unit: "병", hint: "물품 신청에서 사서 받으면 여기 입고" },
-  { value: "supply", label: "용품", dot: "bg-stone-400", order: 21, unit: "개", hint: "핫팩·한방파스" },
+  { value: "medicine", label: "다담공용 탕약·환약", dot: "bg-[#16863b]", order: 1, unit: "개", hint: "공진단·경옥환·소합원·보비환·해수환" },
+  { value: "insured", label: "보험약", dot: "bg-orange-500", order: 31, unit: "포", hint: "병원별 · 장부의 엑스제(N일)에서 자동으로 뺌", perClinic: true },
+  { value: "yakchim", label: "약침", dot: "bg-purple-500", order: 41, unit: "병", hint: "날짜는 조제일자 · 장부에 적으면 자동으로 뺌", dateLabel: "조제일자" },
+  { value: "treatment", label: "치료실 용품", dot: "bg-sky-400", order: 51, unit: "개", hint: "병원별 · 알콜솜·거즈·부항컵", perClinic: true },
+  { value: "brewroom", label: "탕전실 용품", dot: "bg-amber-600", order: 61, unit: "개", hint: "파우치·약봉투 등 두 병원 공통" },
+  { value: "supply", label: "공동용품", dot: "bg-stone-400", order: 21, unit: "개", hint: "핫팩·한방파스·물티슈·핸드타올·습자지" },
 ];
+
+export function isPerClinicKind(kind: CabinetKind): boolean {
+  return !!kindInfo(kind).perClinic;
+}
+
+/** 날짜 칸 이름: 약침은 "조제일자", 나머지는 "유통기한" */
+export function dateLabelOf(kind: CabinetKind): string {
+  return kindInfo(kind).dateLabel ?? "유통기한";
+}
 
 /** 엑스제 하루 포 수 기본값(접수실 확인 전까지 3). */
 export const DEFAULT_EXTRACT_PER_DAY = 3;

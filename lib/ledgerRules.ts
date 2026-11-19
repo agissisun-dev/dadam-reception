@@ -1,4 +1,4 @@
-import type { DecoctionKind, LedgerCode, LedgerGroup, RedField } from "./types";
+import type { CabinetItem, DecoctionKind, LedgerCode, LedgerGroup, RedField } from "./types";
 
 /** 묶음 이름(화면용) */
 export const GROUP_LABEL: Record<LedgerGroup, string> = {
@@ -67,9 +67,31 @@ const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
  * 괄호 숫자는 만원 금액, #N은 분할 횟수, 숫자(T·알·개)는 수량, N일은 엑스제 일수.
  * "리뷰"는 항목이 아니라 표시(review)로 돌려준다. 모르는 말은 unknown으로 남긴다.
  */
-export function parseNote(raw: string, codes: LedgerCode[]): { items: ParsedItem[]; review: boolean } {
+export function parseNote(raw: string, codes: LedgerCode[], cabinetItems: CabinetItem[] = []): { items: ParsedItem[]; review: boolean } {
   const byCode = new Map<string, LedgerCode>();
   for (const c of codes) if (c.active) byCode.set(norm(c.code), c);
+  // 재고 품목 이름으로도 찾는다(사용자 2026-11-19 "장부에 적으면 자동으로 재고에 반영"): 약어 표에 없거나 약어가 재고에 연결 안 돼 있어도
+  // 품목 이름(삼소음·해수환·대보공진단…)이 같으면 그 품목에서 뺀다. 보험약은 엑스제(N일 × 하루 포 수), 나머지는 개수.
+  const byItem = new Map<string, CabinetItem>();
+  for (const it of cabinetItems) if (it.active) byItem.set(norm(it.name), it);
+  const fromItem = (key: string): LedgerCode | undefined => {
+    const it = byItem.get(key);
+    if (!it) return undefined;
+    return {
+      id: -it.id, code: it.name, name: it.name, group: it.kind === "insured" ? "extract" : "cabinet",
+      cabinet_item_id: it.id, decoction_kind: null, per_day: null, active: true, sort_order: 0, created_at: "",
+    };
+  };
+  const lookup = (key: string): LedgerCode | undefined => {
+    const c = byCode.get(key);
+    if (!c) return fromItem(key);
+    // 약어는 있는데 재고에 안 이어져 있으면 이름이 같은 품목에 잇는다
+    if ((c.group === "cabinet" || c.group === "extract") && !c.cabinet_item_id) {
+      const it = byItem.get(norm(c.name)) ?? byItem.get(norm(c.code));
+      if (it) return { ...c, cabinet_item_id: it.id, group: it.kind === "insured" ? "extract" : "cabinet" };
+    }
+    return c;
+  };
   const items: ParsedItem[] = [];
   let review = false;
 
@@ -81,7 +103,7 @@ export function parseNote(raw: string, codes: LedgerCode[]): { items: ParsedItem
       review = true;
       continue;
     }
-    const whole = byCode.get(t);
+    const whole = lookup(t);
     if (whole) {
       items.push(make(token, whole, { qty: 1 }));
       continue;
@@ -106,7 +128,7 @@ export function parseNote(raw: string, codes: LedgerCode[]): { items: ParsedItem
     if (m) {
       qty = Number(m[1]);
       rest = rest.slice(0, -m[0].length);
-      const again = byCode.get(rest);
+      const again = lookup(rest);
       if (again) {
         items.push(make(token, again, { qty, free }));
         continue;
@@ -137,7 +159,7 @@ export function parseNote(raw: string, codes: LedgerCode[]): { items: ParsedItem
       rest = rest.slice(0, -m[0].length);
     }
 
-    const found = byCode.get(rest);
+    const found = lookup(rest);
     if (!found) {
       items.push({
         raw: token, code: token, name: token, group: "other", qty: 1,

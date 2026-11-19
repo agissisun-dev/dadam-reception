@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import CabinetRow from "@/components/CabinetRow";
-import { createCabinetItem, listCabinetItems, loadCabinet, updateCabinetItem, type CabinetStatus } from "@/lib/cabinet";
-import { CABINET_KINDS, KIND_LABEL, expiryStatus, kindInfo, purposeLabel } from "@/lib/cabinetRules";
+import { createCabinetItem, deleteCabinetItem, listCabinetItems, loadCabinet, updateCabinetItem, type CabinetStatus } from "@/lib/cabinet";
+import { CABINET_KINDS, KIND_LABEL, expiryStatus, isPerClinicKind, kindInfo, purposeLabel } from "@/lib/cabinetRules";
 import { clinicInfo, fetchCurrentClinic, type ClinicCode } from "@/lib/clinic";
 import { todayISO } from "@/lib/dates";
 import type { CabinetItem, CabinetKind, CabinetMove } from "@/lib/types";
@@ -50,7 +50,7 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
   return (
     <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
       <h2 className="mb-2 font-bold">품목 관리</h2>
-      <p className="mb-3 text-xs text-stone-500">부족 기준 밑으로 내려가면 붉게 표시됩니다. 안 쓰는 품목은 지우지 말고 [사용 안 함]으로 두면 기록이 남습니다.</p>
+      <p className="mb-3 text-xs text-stone-500">부족 기준 밑으로 내려가면 붉게 표시됩니다. 기록이 없는 품목은 [지우기]로 지울 수 있고, 기록이 있는 품목은 [사용 안 함]으로 두면 목록에서 빠지고 기록은 남습니다.</p>
       {error && <p className="mb-2 text-red-600">{error}</p>}
       <ul className="divide-y divide-stone-100">
         {(items ?? []).map((it) => (
@@ -74,6 +74,14 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
             </label>
             <button className="ml-auto text-xs underline" onClick={() => run(async () => { await updateCabinetItem(it.id, { active: !it.active }); })}>
               {it.active ? "사용 안 함" : "다시 사용"}
+            </button>
+            <button
+              className="text-xs text-red-700 underline"
+              onClick={() => {
+                if (window.confirm(`"${it.name}" 품목을 지울까요? 입출고 기록이 있으면 지워지지 않습니다.`)) run(async () => { await deleteCabinetItem(it.id); });
+              }}
+            >
+              지우기
             </button>
           </li>
         ))}
@@ -101,9 +109,9 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
           <span className="text-xs text-stone-500">단위</span>
           <input value={unit} onChange={(e) => setUnit(e.target.value)} className={`mt-1 w-16 ${INPUT}`} />
         </label>
-        {kind === "insured" && (
+        {isPerClinicKind(kind) && (
           <span className="rounded px-2 py-1 text-xs" style={{ background: clinicInfo(clinic).bg, color: clinicInfo(clinic).text }}>
-            {clinicInfo(clinic).short} 보험약 (병원별)
+            {clinicInfo(clinic).short} {kindInfo(kind).label} (병원별)
           </span>
         )}
         <label className="block">
@@ -116,7 +124,7 @@ function ItemManager({ onChanged, clinic }: { onChanged: () => void; clinic: Cli
           onClick={() =>
             run(async () => {
               const order = (items ?? []).filter((i) => i.kind === kind).length + kindInfo(kind).order;
-              await createCabinetItem({ name: name.trim(), kind, min_stock: minStock, active: true, sort_order: order, clinic: kind === "insured" ? clinic : null, unit: unit.trim() || kindInfo(kind).unit });
+              await createCabinetItem({ name: name.trim(), kind, min_stock: minStock, active: true, sort_order: order, clinic: isPerClinicKind(kind) ? clinic : null, unit: unit.trim() || kindInfo(kind).unit });
               setName("");
               setMinStock(0);
             })
@@ -159,7 +167,7 @@ function Board() {
   const kindOf = new Map(statuses.map((s) => [s.item.id, s.item.kind]));
   const summaries = CABINET_KINDS.map((k) => {
     const list = statuses.filter((s) => s.item.kind === k.value);
-    const ex = list.map((s) => expiryStatus(s.nearest, today));
+    const ex = k.value === "yakchim" ? [] : list.map((s) => expiryStatus(s.nearest, today));
     return {
       kind: k,
       list,
@@ -188,12 +196,12 @@ function Board() {
         </div>
       </div>
 
-      <p className="text-xs text-stone-500">칸을 누르면 그 품목만 보입니다. 숫자는 있어야 할 수, 유통기한은 남은 것 중 가장 빠른 것(30일 안 붉게, 60일 안 노랗게). 보험약은 {clinicInfo(clinic).short} 것만 보입니다.</p>
+      <p className="text-xs text-stone-500">칸을 누르면 그 품목만 보입니다. 숫자는 있어야 할 수, 유통기한은 남은 것 중 가장 빠른 것(30일 안 붉게, 60일 안 노랗게). 보험약·치료실 용품은 {clinicInfo(clinic).short} 것만 보입니다.</p>
 
       {manage && <ItemManager onChanged={load} clinic={clinic} />}
 
       {/* 다섯 칸 타일: 품목 수·부족·기한 경고가 한눈에. 누른 칸의 품목만 아래에 보인다(사용자 2026-11-17 "스크롤 없이 한눈에"). */}
-      <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
+      <section className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
         {summaries.map(({ kind: k, list, short, expired, soon }) => {
           const active = shownKind === k.value;
           return (
@@ -209,9 +217,9 @@ function Board() {
             >
               <div className="flex items-center gap-1.5">
                 <span className={`inline-block h-2.5 w-2.5 rounded-full ${k.dot}`} />
-                <span className="font-bold">{k.label}</span>
+                <span className="text-sm font-bold leading-tight">{k.label}</span>
               </div>
-              <div className="mt-1 text-2xl font-semibold tabular-nums">{list.length}<span className="ml-0.5 text-xs font-normal text-stone-500">품목</span></div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">{list.length}<span className="ml-0.5 text-xs font-normal text-stone-500">품목</span></div>
               <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
                 {short > 0 && <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">부족 {short}</span>}
                 {expired > 0 && <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">기한 지남 {expired}</span>}

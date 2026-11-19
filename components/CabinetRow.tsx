@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { CabinetStatus } from "@/lib/cabinet";
 import { recordCount, recordDiscard, recordIn, recordOut } from "@/lib/cabinet";
-import { KIND_LABEL, PURPOSES, countDiff, expiryStatus, kindInfo, purposeLabel } from "@/lib/cabinetRules";
+import { KIND_LABEL, PURPOSES, countDiff, dateLabelOf, expiryStatus, kindInfo, purposeLabel } from "@/lib/cabinetRules";
 import { daysBetween } from "@/lib/dates";
 import { conditionLabel } from "@/lib/conditions";
 import { listPatients } from "@/lib/patients";
@@ -36,7 +36,10 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const st = expiryStatus(nearest, today);
+  const isYakchim = item.kind === "yakchim";
+  const dateLabel = dateLabelOf(item.kind);
+  // 약침은 조제일자라 지남·임박 경고를 안 띄운다
+  const st = isYakchim ? null : expiryStatus(nearest, today);
   const short = stock <= 0 || (item.min_stock > 0 && stock <= item.min_stock);
   /** 아직 기록이 하나도 없는 품목: 처음 수량을 넣는 단계라 세어 맞춤·사유를 묻지 않는다. */
   const first = moves.length === 0;
@@ -88,7 +91,8 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
   }
 
   function expiryText(): { text: string; cls: string } {
-    if (!nearest) return { text: stock > 0 ? "기한 미입력" : "", cls: "text-stone-400" };
+    if (!nearest) return { text: stock > 0 ? `${dateLabel} 미입력` : "", cls: "text-stone-400" };
+    if (isYakchim) return { text: `조제 ${nearest} (${Math.max(0, daysBetween(nearest, today))}일째)`, cls: "text-stone-500" };
     const d = daysBetween(today, nearest);
     if (st === "expired") return { text: `${nearest} 지남 · 폐기 필요`, cls: "text-red-700 font-medium" };
     if (st === "soon30") return { text: `${nearest} (D-${d})`, cls: "text-red-700" };
@@ -213,7 +217,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
                 지금 실제로 몇 {unit} 남았나요? <span className="text-stone-500">(있어야 할 수 {stock}{unit})</span>
               </p>
               <input type="number" min={0} value={counted} onChange={(e) => setCounted(e.target.value)} className="w-28 rounded border border-stone-300 px-2 py-1.5 text-sm" placeholder="센 수" />
-              {first && <p className="text-sm text-stone-600">처음 등록이라 사유 없이 저장됩니다. 유통기한까지 적으려면 [처음 수량 넣기]를 쓰세요.</p>}
+              {first && <p className="text-sm text-stone-600">처음 등록이라 사유 없이 저장됩니다. {dateLabel}까지 적으려면 [처음 수량 넣기]를 쓰세요.</p>}
               {!first && diff !== null && diff !== 0 && (
                 <p className="text-sm text-red-700">
                   {Math.abs(diff)}{unit} {diff > 0 ? "많습니다" : "모자랍니다"}. 사유를 적어야 저장됩니다.
@@ -256,7 +260,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
             <>
               <p className="text-sm text-stone-600">
                 {first
-                  ? "처음이라 지금 약장에 있는 수량과 유통기한을 그대로 적습니다. 기한이 다른 묶음이 섞여 있으면 묶음마다 따로 넣으세요."
+                  ? "처음이라 지금 약장에 있는 수량과 {dateLabel}을 그대로 적습니다. 기한이 다른 묶음이 섞여 있으면 묶음마다 따로 넣으세요."
                   : `센 수 ${countedNum}${unit}${diff !== 0 ? ` (차이 ${diff! > 0 ? "+" : ""}${diff}, 사유: ${memo})` : ""} 기록 뒤, 새로 들어온 것을 적습니다.`}
               </p>
               <div className="grid grid-cols-2 gap-3">
@@ -265,7 +269,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
                   <input type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value)))} className={`mt-1 ${INPUT}`} />
                 </label>
                 <label className="block">
-                  <span className="text-sm text-stone-600">유통기한</span>
+                  <span className="text-sm text-stone-600">{dateLabel}</span>
                   <input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} className={`mt-1 ${INPUT}`} />
                 </label>
               </div>
@@ -329,7 +333,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
             </button>
             {status.lots.length > 0 && (
               <span className="ml-auto text-xs text-stone-500">
-                남은 묶음: {status.lots.map((l) => `${l.expiry ?? "기한 없음"} ${l.qty}${unit}`).join(" · ")}
+                남은 묶음: {status.lots.map((l) => `${l.expiry ?? `${dateLabel} 없음`} ${l.qty}${unit}`).join(" · ")}
               </span>
             )}
           </div>
@@ -341,7 +345,7 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
                 <span>{m.kind === "count" ? `${m.qty}${unit}로 맞춤${m.diff ? ` (${m.diff > 0 ? "+" : ""}${m.diff})` : ""}` : `${m.qty}${unit}`}</span>
                 {m.purpose && <span>{purposeLabel(m.purpose)}</span>}
                 {m.patient_name && <span>{m.patient_name}</span>}
-                {m.expiry && <span>기한 {m.expiry}</span>}
+                {m.expiry && <span>{isYakchim ? "조제" : "기한"} {m.expiry}</span>}
                 <span>{m.staff_name}</span>
                 {m.memo && <span className="text-stone-500">{m.memo}</span>}
               </li>

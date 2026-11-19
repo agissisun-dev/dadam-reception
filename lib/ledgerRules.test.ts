@@ -176,3 +176,23 @@ describe("붉은 칸 (V16, 칸마다 따로)", () => {
     expect(sumEntries([e]).offTotal).toBe(1000);
   });
 });
+
+describe("재고 품목 이름으로 읽기 (V17, 장부 → 재고 자동)", () => {
+  const items = [
+    { id: 7, name: "삼소음", kind: "insured" as const, min_stock: 0, active: true, sort_order: 0, clinic: "S" as const, unit: "포", created_at: "" },
+    { id: 8, name: "해수환", kind: "medicine" as const, min_stock: 0, active: true, sort_order: 0, clinic: null, unit: "개", created_at: "" },
+  ];
+  it("약어 표에 없어도 품목 이름이면 보험약은 엑스제, 나머지는 약장 품목", () => {
+    const { items: r } = parseNote("삼소음2일,해수환3T", [], items);
+    expect(r[0]).toMatchObject({ name: "삼소음", group: "extract", days: 2, cabinet_item_id: 7, unknown: false });
+    expect(r[1]).toMatchObject({ name: "해수환", group: "cabinet", qty: 3, cabinet_item_id: 8, unknown: false });
+  });
+  it("약어는 있는데 재고에 안 이어져 있으면 이름으로 잇는다", () => {
+    const codes = [c("삼소음", "삼소음", "extract")];
+    const { items: r } = parseNote("삼소음2일", codes, items);
+    expect(r[0]).toMatchObject({ group: "extract", cabinet_item_id: 7, days: 2 });
+  });
+  it("재고 품목이 없으면 그대로 모르는 말", () => {
+    expect(parseNote("향사평위2일", [], items).items[0].unknown).toBe(true);
+  });
+});

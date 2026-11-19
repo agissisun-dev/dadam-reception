@@ -167,7 +167,7 @@ export type SmsLog = {
 
 /** 약장 품목. 약(medicine)·외용제(topical)·용품(supply: 핫팩·한방파스 등). */
 /** 재고 5칸(V15): 다담환약 · 외용제 · 용품 · 보험약(엑스제, 병원별·포) · 약침 */
-export type CabinetKind = "medicine" | "topical" | "supply" | "insured" | "yakchim";
+export type CabinetKind = "medicine" | "topical" | "supply" | "insured" | "yakchim" | "treatment" | "brewroom";
 export type CabinetItem = {
   id: number;
   name: string;

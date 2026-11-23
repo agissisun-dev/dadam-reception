@@ -16,15 +16,7 @@ export async function listCabinetItems(includeInactive = false): Promise<Cabinet
 
 export async function createCabinetItem(input: CabinetItemInput): Promise<CabinetItem> {
   const { data, error } = await getSupabase().from("cabinet_items").insert(input).select().single();
-  if (error) {
-    // V15 SQL 전(clinic·unit 칸 없음): 기본 칸만 넣는다. 보험약·약침은 V15 뒤에만.
-    if (/clinic|unit/.test(error.message) && input.kind !== "insured" && input.kind !== "yakchim") {
-      const { clinic: _c, unit: _u, ...legacy } = input; // eslint-disable-line @typescript-eslint/no-unused-vars
-      const retry = await getSupabase().from("cabinet_items").insert(legacy).select().single();
-      if (!retry.error) return retry.data as CabinetItem;
-    }
-    fail("품목 추가", error.message.includes("clinic") || error.message.includes("unit") ? "재고 5칸 표(supabase/schema-v15-cabinet-kinds.sql)를 먼저 실행해 주세요." : error.message);
-  }
+  if (error) fail("품목 추가", error.code === "23505" ? "같은 이름의 품목이 이미 있습니다. 품목 관리에서 기존 품목이나 삭제된 품목을 확인해 주세요." : error.message);
   return data as CabinetItem;
 }
 
@@ -75,8 +67,9 @@ export function buildStatuses(items: CabinetItem[], moves: CabinetMove[]): Cabin
 }
 
 export async function loadCabinet(): Promise<{ items: CabinetItem[]; moves: CabinetMove[]; statuses: CabinetStatus[] }> {
-  const [items, moves] = await Promise.all([listCabinetItems(), listAllCabinetMoves()]);
-  return { items, moves, statuses: buildStatuses(items, moves) };
+  const [items, moves] = await Promise.all([listCabinetItems(true), listAllCabinetMoves()]);
+  // 삭제된 품목의 이름·분류도 기록 조회에 보존한다. 현재 재고판에서만 숨긴다.
+  return { items, moves, statuses: buildStatuses(items.filter((item) => item.active), moves) };
 }
 
 type MoveInput = {
@@ -147,11 +140,16 @@ export function recordDiscard(p: { item_id: number; qty: number; staff_name: str
   return insertMove({ ...p, kind: "discard", memo: p.memo.trim() });
 }
 
-/** 품목 지우기. 기록(cabinet_moves)이 있으면 못 지운다 — [사용 안 함]으로 두라고 안내. */
+/** 품목 삭제는 목록에서 숨김이다. 수량·입출고·폐기·장부 연결은 그대로 둔다. */
+export async function archiveCabinetItem(id: number): Promise<void> {
+  await updateCabinetItem(id, { active: false });
+}
+
+export async function restoreCabinetItem(id: number): Promise<void> {
+  await updateCabinetItem(id, { active: true });
+}
+
+/** 이전 호출도 영구 삭제하지 않도록 호환 유지. */
 export async function deleteCabinetItem(id: number): Promise<void> {
-  const { count, error: e0 } = await getSupabase().from("cabinet_moves").select("id", { count: "exact", head: true }).eq("item_id", id);
-  if (e0) fail("품목 기록 확인", e0.message);
-  if ((count ?? 0) > 0) throw new Error("이 품목은 입출고 기록이 있어 지울 수 없습니다. [사용 안 함]으로 두면 목록에서 빠지고 기록은 남습니다.");
-  const { error } = await getSupabase().from("cabinet_items").delete().eq("id", id);
-  if (error) fail("품목 지우기", error.message);
+  await archiveCabinetItem(id);
 }

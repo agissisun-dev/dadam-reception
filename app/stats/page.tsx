@@ -279,19 +279,20 @@ function LedgerSummary({ thisKey }: { thisKey: string }) {
 
 /** 약장 요약: 이번 달 나간 수(품목·사유별), 세어 맞춤 차이, 기한 30일 안 품목. */
 function CabinetSummary({ today, thisKey }: { today: string; thisKey: string }) {
-  const [data, setData] = useState<{ statuses: CabinetStatus[]; moves: CabinetMove[] } | null>(null);
+  const [data, setData] = useState<{ items: CabinetStatus["item"][]; statuses: CabinetStatus[]; moves: CabinetMove[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadCabinet()
-      .then((d) => setData({ statuses: d.statuses, moves: d.moves }))
+      .then((d) => setData({ items: d.items, statuses: d.statuses, moves: d.moves }))
       .catch((e: Error) => setError(e.message));
   }, []);
 
   if (error) return <p className="text-sm text-red-600">약장: {error}</p>;
   if (!data) return null;
 
-  const nameOf = new Map(data.statuses.map((s) => [s.item.id, s.item.name]));
+  const nameOf = new Map(data.items.map((item) => [item.id, item.name]));
+  const unitOf = new Map(data.items.map((item) => [item.id, item.unit || "개"]));
   const monthMoves = data.moves.filter((m) => monthKey(m.created_at.slice(0, 10)) === thisKey);
   const outs = monthMoves.filter((m) => m.kind === "out");
   const byItem = new Map<number, { total: number; review: number }>();
@@ -315,7 +316,7 @@ function CabinetSummary({ today, thisKey }: { today: string; thisKey: string }) 
           <ul>
             {[...byItem.entries()].map(([id, c]) => (
               <li key={id}>
-                {nameOf.get(id) ?? id} {c.total}개{c.review > 0 ? ` (리뷰 ${c.review})` : ""}
+                {nameOf.get(id) ?? id} {c.total}{unitOf.get(id) || "개"}{c.review > 0 ? ` (리뷰 ${c.review})` : ""}
               </li>
             ))}
           </ul>

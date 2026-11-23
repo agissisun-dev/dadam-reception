@@ -28,6 +28,8 @@ export async function backfillFromLedger(item: CabinetItem, fromDay: string, sta
   const key = norm(item.name);
   const matches = ((data ?? []) as Row[]).filter((r) => {
     if (r.entry.kind !== "normal") return false;
+    // 같은 이름이라도 다른 장부 묶음은 재고 판매로 연결하지 않는다.
+    if (r.group !== (item.kind === "insured" ? "extract" : "cabinet")) return false;
     if (r.cabinet_move_id) return false;
     const code = codes.find((c) => c.code === r.code);
     if (code?.cabinet_item_id && code.cabinet_item_id !== item.id) return false; // 다른 품목에 이어진 약어

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import AuthGate from "@/components/AuthGate";
 import AppHeader from "@/components/AppHeader";
 import CabinetRow from "@/components/CabinetRow";
-import { createCabinetItem, deleteCabinetItem, listCabinetItems, loadCabinet, updateCabinetItem, type CabinetStatus } from "@/lib/cabinet";
+import { archiveCabinetItem, createCabinetItem, restoreCabinetItem, listCabinetItems, loadCabinet, updateCabinetItem, type CabinetStatus } from "@/lib/cabinet";
 import { CABINET_KINDS, KIND_LABEL, expiryStatus, isPerClinicKind, kindInfo, purposeLabel } from "@/lib/cabinetRules";
 import { clinicInfo, fetchCurrentClinic, type ClinicCode } from "@/lib/clinic";
 import { todayISO } from "@/lib/dates";
@@ -23,6 +23,8 @@ function whenKo(ts: string): string {
 /** 품목 관리: 이름·구분·부족 기준 추가·수정, 사용 안 함. */
 function ItemManager({ onChanged, clinic, initialKind, compact }: { onChanged: () => void; clinic: ClinicCode; initialKind?: CabinetKind; compact?: boolean }) {
   const [items, setItems] = useState<CabinetItem[] | null>(null);
+  const [archiveId, setArchiveId] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<CabinetKind>(initialKind ?? "medicine");
   const [unit, setUnit] = useState(kindInfo(initialKind ?? "medicine").unit);
@@ -38,12 +40,15 @@ function ItemManager({ onChanged, clinic, initialKind, compact }: { onChanged: (
 
   async function run(fn: () => Promise<void>) {
     setError(null);
+    setBusy(true);
     try {
       await fn();
       load();
       onChanged();
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -51,7 +56,7 @@ function ItemManager({ onChanged, clinic, initialKind, compact }: { onChanged: (
     <section className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
       {compact && <p className="mb-2 text-xs text-stone-500">새 품목을 넣고 [입고]로 지금 있는 수량을 적으면, 그날부터 장부에 적힌 같은 이름의 항목이 재고에서 소급해 빠집니다.</p>}
       {!compact && <h2 className="mb-2 font-bold">품목 관리</h2>}
-      {!compact && <p className="mb-3 text-xs text-stone-500">부족 기준 밑으로 내려가면 붉게 표시됩니다. 기록이 없는 품목은 [지우기]로 지울 수 있고, 기록이 있는 품목은 [사용 안 함]으로 두면 목록에서 빠지고 기록은 남습니다.</p>}
+      {!compact && <p className="mb-3 text-xs text-stone-500">[품목 삭제]는 현재 목록에서만 숨깁니다. 수량과 입출고·폐기·장부 기록은 남고, 여기에서 [복원]할 수 있습니다. 공용 품목은 두 병원 목록에 함께 적용됩니다.</p>}
       {error && <p className="mb-2 text-red-600">{error}</p>}
       <ul className={`divide-y divide-stone-100 ${compact ? "hidden" : ""}`}>
         {(items ?? []).map((it) => (
@@ -73,17 +78,19 @@ function ItemManager({ onChanged, clinic, initialKind, compact }: { onChanged: (
                 className="w-16 rounded border border-stone-300 px-1.5 py-0.5 text-xs"
               />
             </label>
-            <button className="ml-auto text-xs underline" onClick={() => run(async () => { await updateCabinetItem(it.id, { active: !it.active }); })}>
-              {it.active ? "사용 안 함" : "다시 사용"}
-            </button>
-            <button
-              className="text-xs text-red-700 underline"
-              onClick={() => {
-                if (window.confirm(`"${it.name}" 품목을 지울까요? 입출고 기록이 있으면 지워지지 않습니다.`)) run(async () => { await deleteCabinetItem(it.id); });
-              }}
-            >
-              지우기
-            </button>
+            {it.active ? (
+              <button type="button" disabled={busy} className="ml-auto text-xs text-red-700 underline" onClick={() => setArchiveId(it.id)}>품목 삭제</button>
+            ) : (
+              <button type="button" disabled={busy} className="ml-auto text-xs underline" onClick={() => run(async () => { await restoreCabinetItem(it.id); })}>복원</button>
+            )}
+            {archiveId === it.id && (
+              <div role="alert" className="w-full space-y-2 rounded border border-red-200 bg-red-50 p-3">
+                <p><strong>{it.name}</strong> 품목을 현재 목록에서 삭제할까요?</p>
+                <p className="text-xs">재고 수량과 입출고·폐기·장부 기록은 그대로 보관됩니다. 실물 재고 폐기는 [폐기]에서 별도로 기록하세요. {it.clinic !== null ? "이 병원 목록에만 적용됩니다." : "공용 품목이므로 두 병원 목록에서 함께 숨겨집니다."}</p>
+                <button type="button" disabled={busy} className={PRIMARY} onClick={() => run(async () => { await archiveCabinetItem(it.id); setArchiveId(null); })}>품목 삭제 확인</button>{" "}
+                <button type="button" disabled={busy} className={BTN} onClick={() => setArchiveId(null)}>취소</button>
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -121,7 +128,7 @@ function ItemManager({ onChanged, clinic, initialKind, compact }: { onChanged: (
         </label>
         <button
           className={PRIMARY}
-          disabled={!name.trim()}
+          disabled={busy || !name.trim()}
           onClick={() =>
             run(async () => {
               const order = (items ?? []).filter((i) => i.kind === kind).length + kindInfo(kind).order;
@@ -131,7 +138,7 @@ function ItemManager({ onChanged, clinic, initialKind, compact }: { onChanged: (
             })
           }
         >
-          추가
+          {busy ? "저장 중…" : "추가"}
         </button>
       </div>
     </section>
@@ -141,10 +148,11 @@ function ItemManager({ onChanged, clinic, initialKind, compact }: { onChanged: (
 function Board() {
   const today = todayISO();
   const [statuses, setStatuses] = useState<CabinetStatus[] | null>(null);
+  const [allItems, setAllItems] = useState<CabinetItem[]>([]);
   const [moves, setMoves] = useState<CabinetMove[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [manage, setManage] = useState(false);
-  const [clinic, setClinic] = useState<ClinicCode>("S");
+  const [clinic, setClinic] = useState<ClinicCode | null>(null);
   const [activeKind, setActiveKind] = useState<CabinetKind | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [quickAdd, setQuickAdd] = useState<CabinetKind | null>(null);
@@ -153,20 +161,22 @@ function Board() {
     loadCabinet()
       .then((d) => {
         setStatuses(d.statuses);
+        setAllItems(d.items);
         setMoves(d.moves);
       })
       .catch((e: Error) => setError(e.message));
   }, []);
   useEffect(() => {
     load();
-    fetchCurrentClinic().then(setClinic).catch(() => undefined);
+    fetchCurrentClinic().then(setClinic).catch((e: Error) => setError(`병원 정보를 확인하지 못했습니다. 새로고침 후 다시 시도해 주세요. ${e.message}`));
   }, [load]);
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
   if (!statuses) return <p className="p-6 text-stone-500">불러오는 중…</p>;
 
-  const nameOf = new Map(statuses.map((s) => [s.item.id, s.item.name]));
-  const kindOf = new Map(statuses.map((s) => [s.item.id, s.item.kind]));
+  const nameOf = new Map(allItems.map((item) => [item.id, item.name]));
+  const kindOf = new Map(allItems.map((item) => [item.id, item.kind]));
+  const unitOf = new Map(allItems.map((item) => [item.id, item.unit || "개"]));
   const summaries = CABINET_KINDS.map((k) => {
     const list = statuses.filter((s) => s.item.kind === k.value);
     const ex = k.value === "yakchim" ? [] : list.map((s) => expiryStatus(s.nearest, today));
@@ -191,16 +201,16 @@ function Board() {
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-xl font-bold">재고현황 <span className="text-sm font-normal text-stone-500">(약장)</span></h1>
         <div className="flex items-baseline gap-3">
-          <button className={BTN} onClick={() => setManage((v) => !v)}>
+          <button className={BTN} disabled={!clinic} onClick={() => setManage((v) => !v)}>
             {manage ? "품목 관리 닫기" : "품목 관리"}
           </button>
           <p className="text-sm text-stone-500">{today}</p>
         </div>
       </div>
 
-      <p className="text-xs text-stone-500">칸을 누르면 그 품목만 보입니다. 숫자는 있어야 할 수, 유통기한은 남은 것 중 가장 빠른 것(30일 안 붉게, 60일 안 노랗게). 보험약·치료실 용품은 {clinicInfo(clinic).short} 것만 보입니다.</p>
+      <p className="text-xs text-stone-500">칸을 누르면 그 품목만 보입니다. 숫자는 있어야 할 수, 유통기한은 남은 것 중 가장 빠른 것(30일 안 붉게, 60일 안 노랗게). 보험약·치료실 용품은 {clinic ? clinicInfo(clinic).short : "병원 확인 중"} 것만 보입니다.</p>
 
-      {manage && <ItemManager onChanged={load} clinic={clinic} />}
+      {manage && clinic && <ItemManager onChanged={load} clinic={clinic} />}
 
       {/* 다섯 칸 타일: 품목 수·부족·기한 경고가 한눈에. 누른 칸의 품목만 아래에 보인다(사용자 2026-11-17 "스크롤 없이 한눈에"). */}
       <section className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
@@ -241,10 +251,10 @@ function Board() {
               <span className={`inline-block h-2.5 w-2.5 rounded-full ${cur.kind.dot}`} />
               <h2 className="font-bold">{cur.kind.label}</h2>
               <span className="text-xs text-stone-500">{cur.kind.hint}</span>
-              <button type="button" onClick={() => setQuickAdd((q) => (q === cur.kind.value ? null : cur.kind.value))} className={`ml-auto ${BTN}`}>+ 품목 추가</button>
+              <button type="button" disabled={!clinic} onClick={() => setQuickAdd((q) => (q === cur.kind.value ? null : cur.kind.value))} className={`ml-auto ${BTN}`}>+ 품목 추가</button>
               <button type="button" onClick={() => { setCollapsed(true); setActiveKind(null); }} className="text-xs text-stone-400 underline">접기 (전체 기록 보기)</button>
             </div>
-            {quickAdd === cur.kind.value && (
+            {clinic && quickAdd === cur.kind.value && (
               <ItemManager key={cur.kind.value} compact initialKind={cur.kind.value} clinic={clinic} onChanged={() => { setQuickAdd(null); load(); }} />
             )}
             {cur.list.map((s) => <CabinetRow key={s.item.id} status={s} today={today} onDone={load} />)}
@@ -283,7 +293,7 @@ function Board() {
                     <td className="px-2 py-1.5 whitespace-nowrap">{whenKo(m.created_at)}</td>
                     <td className="px-2 py-1.5">{nameOf.get(m.item_id) ?? m.item_id}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
-                      {KIND_LABEL[m.kind]} {m.kind === "count" ? `${m.qty}개로${m.diff ? ` (${m.diff > 0 ? "+" : ""}${m.diff})` : ""}` : `${m.qty}개`}
+                      {KIND_LABEL[m.kind]} {m.kind === "count" ? `${m.qty}${unitOf.get(m.item_id) || "개"}로${m.diff ? ` (${m.diff > 0 ? "+" : ""}${m.diff})` : ""}` : `${m.qty}${unitOf.get(m.item_id) || "개"}`}
                       {m.expiry ? ` · 기한 ${m.expiry}` : ""}
                     </td>
                     <td className="px-2 py-1.5">

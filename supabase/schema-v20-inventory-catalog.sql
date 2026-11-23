@@ -40,7 +40,7 @@ $$;
 
 -- 장부 연결도 동일한 7분류 경계를 사용한다. 기존 legacy 연결 보호는 유지한다.
 create or replace function public.materials_link_guard_v18() returns trigger
-language plpgsql security definer set search_path='' as $
+language plpgsql security definer set search_path='' as $$
 declare i public.cabinet_items%rowtype; ec text;
 begin
  if tg_table_name='ledger_codes' then
@@ -64,7 +64,7 @@ begin
     (i.kind in ('supply','treatment') and i.clinic=ec)))),false) then
   raise exception 'INVENTORY_LINK_SCOPE_MISMATCH' using errcode='23514'; end if;
  return new;
-end $;
+end $$;
 
 -- 앱의 품목 삭제는 active=false. 향후 잘못된 물리 DELETE도 차단한다.
 drop policy if exists cabinet_items_no_delete_v20 on public.cabinet_items;

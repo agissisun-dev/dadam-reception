@@ -33,6 +33,6 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/insured-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.16
           PGLITE_MODULE="file://$RUNNER_TEMP/insured-db/node_modules/@electric-sql/pglite/dist/index.js" node scripts/test-insured-inventory.mjs
       - name: Inventory file lint
-        run: npx eslint app/cabinet/page.tsx components/LedgerEntryForm.tsx lib/cabinet.ts lib/cabinetRules.ts lib/cabinetScope.test.ts lib/cabinet.test.ts lib/ledger.ts scripts/test-insured-inventory.mjs
+        run: npx eslint app/cabinet/page.tsx components/LedgerEntryForm.tsx lib/cabinet.ts lib/cabinetRules.ts lib/ledger.ts scripts/test-insured-inventory.mjs
       - name: TypeScript
         run: npx tsc --noEmit

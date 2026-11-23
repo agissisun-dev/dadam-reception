@@ -5,7 +5,7 @@ on:
       - app/cabinet/page.tsx
       - app/stats/page.tsx
       - components/CabinetRow.tsx
-      - lib/cabinet.ts
+      - lib/cabinet*
       - lib/cabinetArchive.test.ts
       - supabase/schema-v20-inventory-catalog.sql
       - scripts/test-inventory-catalog.mjs
@@ -30,7 +30,7 @@ jobs:
       - name: Unit and integration tests
         run: npm test
       - name: Changed app lint
-        run: npx eslint app/cabinet/page.tsx app/stats/page.tsx components/CabinetRow.tsx lib/cabinet.ts lib/cabinetArchive.test.ts
+        run: npx eslint app/cabinet/page.tsx app/stats/page.tsx components/CabinetRow.tsx lib/cabinet.ts lib/cabinetArchive.test.ts lib/cabinetBackfill.ts lib/cabinetBackfill.test.ts
       - name: TypeScript
         run: npx tsc --noEmit
       - name: Actual SQL isolated regressions

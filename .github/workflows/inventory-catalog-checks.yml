@@ -1,0 +1,39 @@
+name: Inventory catalog checks
+on:
+  pull_request:
+    paths:
+      - app/cabinet/page.tsx
+      - app/stats/page.tsx
+      - components/CabinetRow.tsx
+      - lib/cabinet.ts
+      - lib/cabinetArchive.test.ts
+      - supabase/schema-v20-inventory-catalog.sql
+      - scripts/test-inventory-catalog.mjs
+      - .github/workflows/inventory-catalog-checks.yml
+  push:
+    branches: ["aside/inventory-catalog-*"]
+permissions:
+  contents: read
+concurrency:
+  group: inventory-catalog-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Unit and integration tests
+        run: npm test
+      - name: Changed app lint
+        run: npx eslint app/cabinet/page.tsx app/stats/page.tsx components/CabinetRow.tsx lib/cabinet.ts lib/cabinetArchive.test.ts
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Actual SQL isolated regressions
+        run: |
+          npm install --prefix "$RUNNER_TEMP/inventory-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.16
+          PGLITE_MODULE="file://$RUNNER_TEMP/inventory-db/node_modules/@electric-sql/pglite/dist/index.js" node scripts/test-inventory-catalog.mjs

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { CabinetStatus } from "@/lib/cabinet";
-import { recordCount, recordDiscard, recordIn, recordOut } from "@/lib/cabinet";
+import { archiveCabinetItem, recordCount, recordDiscard, recordIn, recordOut } from "@/lib/cabinet";
 import { backfillFromLedger } from "@/lib/cabinetBackfill";
 import { KIND_LABEL, PURPOSES, countDiff, dateLabelOf, expiryStatus, kindInfo, purposeLabel } from "@/lib/cabinetRules";
 import { daysBetween } from "@/lib/dates";
@@ -16,7 +16,7 @@ const BTN = "rounded border border-stone-300 px-3 py-1.5 text-sm";
 const PRIMARY = "rounded bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-50";
 const INPUT = "w-full rounded border border-stone-300 px-3 py-2 text-sm";
 
-type Mode = null | "out" | "in" | "count" | "discard" | "history";
+type Mode = null | "out" | "in" | "count" | "discard" | "history" | "archive";
 
 const REVIEW_HINT = "리뷰 증정 기준: 소화기 환자는 소합원 3개 · 일반 환자는 한방파스 1장 · 피부 환자는 사진까지 올리면 외용제 1개";
 
@@ -132,8 +132,19 @@ export default function CabinetRow({ status, today, onDone }: { status: CabinetS
           <button className={`${BTN} text-stone-500`} onClick={() => (mode === "history" ? reset() : (reset(), setMode("history")))}>
             …
           </button>
+          <button type="button" className={`${BTN} text-red-700`} aria-label={`${item.name} 품목 삭제`} disabled={busy} onClick={() => (mode === "archive" ? reset() : (reset(), setMode("archive")))}>품목 삭제</button>
         </span>
       </div>
+
+      {mode === "archive" && (
+        <div role="alert" className="mt-3 space-y-2 rounded border border-red-200 bg-red-50 p-3 text-sm">
+          <p><strong>{item.name}</strong> 품목을 현재 목록에서 삭제할까요?</p>
+          <p className="text-xs">현재 재고 {stock}{unit}와 과거 입출고·폐기·장부 기록은 그대로 보관됩니다. 실물 폐기가 아니며 수량을 0으로 바꾸지 않습니다.</p>
+          <p className="text-xs">{item.clinic !== null ? "이 병원 목록에서만 숨깁니다." : "공용 품목이므로 두 병원 목록에서 함께 숨깁니다."} [품목 관리]에서 복원할 수 있습니다.</p>
+          <button type="button" className={PRIMARY} disabled={busy} onClick={() => run(async () => { await archiveCabinetItem(item.id); })}>{busy ? "저장 중…" : "품목 삭제 확인"}</button>{" "}
+          <button type="button" className={BTN} disabled={busy} onClick={reset}>취소</button>
+        </div>
+      )}
 
       {mode === "out" && (
         <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">

@@ -2,6 +2,13 @@ name: Inventory catalog checks
 on:
   pull_request:
     paths:
+      - app/ledger/page.tsx
+      - app/patients/new/page.tsx
+      - components/LedgerTable.tsx
+      - lib/ledger*
+      - supabase/schema-v21-ledger-edit-inventory.sql
+      - scripts/test-patient-only.mjs
+      - scripts/ledger-edit-regressions.mjs
       - app/cabinet/page.tsx
       - app/stats/page.tsx
       - components/CabinetRow.tsx
@@ -30,7 +37,9 @@ jobs:
       - name: Unit and integration tests
         run: npm test
       - name: Changed app lint
-        run: npx eslint app/cabinet/page.tsx app/stats/page.tsx components/CabinetRow.tsx lib/cabinet.ts lib/cabinetArchive.test.ts lib/cabinetBackfill.ts lib/cabinetBackfill.test.ts
+        run: npx eslint app/ledger/page.tsx app/patients/new/page.tsx components/LedgerTable.tsx lib/ledger.ts lib/ledgerRules.ts lib/ledgerEditRules.ts lib/ledgerEditRules.test.ts app/cabinet/page.tsx app/stats/page.tsx components/CabinetRow.tsx lib/cabinet.ts lib/cabinetArchive.test.ts lib/cabinetBackfill.ts lib/cabinetBackfill.test.ts
+      - name: Patient-only registration regressions
+        run: node scripts/test-patient-only.mjs
       - name: TypeScript
         run: npx tsc --noEmit
       - name: Actual SQL isolated regressions

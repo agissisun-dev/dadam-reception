@@ -42,7 +42,9 @@ function NewPatient() {
   const [saving, setSaving] = useState(false);
   const [registration, setRegistration] = useState(0);
   const [success, setSuccess] = useState<Patient | null>(null);
+  const [successWithPrescription, setSuccessWithPrescription] = useState(true);
   const [prescriptionWarning, setPrescriptionWarning] = useState<Patient | null>(null);
+  const prescriptionUncertain = useRef<Patient | null>(null);
   const [phone, setPhone] = useState(initialPhone);
   // existing: 같은 번호의 환자들(가족이 번호를 나눠 쓸 수 있다, V18). family: 그 번호로 다른 분을 새로 등록하는 중
   const [checked, setChecked] = useState<null | { existing: Patient[]; phone: string }>(null);
@@ -94,7 +96,9 @@ function NewPatient() {
     }
   }
 
-  function finish(patient: Patient) {
+  function finish(patient: Patient, withPrescription = true) {
+    setSuccessWithPrescription(withPrescription);
+    prescriptionUncertain.current = null;
     phoneRevision.current += 1;
     partialPatient.current = null;
     setPendingPatient(null);
@@ -125,17 +129,19 @@ function NewPatient() {
   }
 
   async function savePrescription(patient: Patient, p: PrescriptionInput) {
+    if (prescriptionUncertain.current) throw new Error("처방 저장 결과가 불확실합니다. 환자 상세에서 확인한 뒤 진행하세요. 중복 저장하지 않습니다.");
     try {
       await addPrescription(patient.id, p);
     } catch (e) {
       // The API can fail after inserting the prescription but before happy calls.
       // Do not retry automatically or clear any entered data.
+      prescriptionUncertain.current = patient;
       setPrescriptionWarning(patient);
       throw e;
     }
   }
 
-  function saveNew(p: PrescriptionInput): Promise<void> {
+  function saveNew(p?: PrescriptionInput): Promise<void> {
     return saveOnce(async () => {
       if (!checked || (checked.existing.length > 0 && !familyNew) || checked.phone !== normalizePhone(phone) || checked.phone !== normalizePhone(form.phone)) {
         throw new Error("현재 연락처를 다시 확인하세요");
@@ -143,6 +149,7 @@ function NewPatient() {
       if (!form.name.trim()) throw new Error("이름을 입력하세요");
       if (checked.existing.some((e) => e.name === form.name.trim())) throw new Error("같은 연락처·같은 이름의 환자가 이미 있습니다. 위 목록에서 그분을 고르세요.");
       if (form.family_phone && !isValidPhone(form.family_phone)) throw new Error("가족 연락처 형식을 확인하세요");
+      if (!p && partialPatient.current) throw new Error("이미 등록된 환자는 상세에서 처방 저장 결과를 확인해 주세요");
       const input = JSON.stringify(form);
       if (partialPatient.current && partialPatient.current.input !== input) {
         throw new Error("이미 등록된 환자 정보와 다릅니다. 환자 상세에서 확인하세요");
@@ -153,8 +160,8 @@ function NewPatient() {
         partialPatient.current = { patient, input };
         setPendingPatient(patient);
       }
-      await savePrescription(patient, p);
-      finish(patient);
+      if (p) await savePrescription(patient, p);
+      finish(patient, !!p);
     });
   }
 
@@ -191,7 +198,7 @@ function NewPatient() {
       <div role="status" aria-live="polite" aria-atomic="true">
         {success && (
           <p className="rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-            {success.name}님의 환자·처방 정보가 저장되었습니다. 다음 환자를 입력하세요.{" "}
+            {success.name}님의 {successWithPrescription ? "환자·처방 정보가" : "환자 정보만"} 저장되었습니다. 다음 환자를 입력하세요.{" "}
             <Link href={`/patients/${success.id}`} className="underline">저장한 환자 상세</Link>
           </p>
         )}
@@ -302,6 +309,7 @@ function NewPatient() {
         {checked && (checked.existing.length === 0 || familyNew) && (
           <section className="space-y-4 rounded-lg border border-stone-200 bg-white p-4">
             <p className="text-sm text-green-700">{familyNew ? `${formatPhone(checked.phone)} 번호를 같이 쓰는 다른 분을 등록합니다. 이름을 다르게 적어 주세요.` : "새 환자입니다. 아래를 채워 주세요."}</p>
+            <div className="rounded border border-sky-200 bg-sky-50 p-3"><p className="mb-2 text-sm">탕약을 처방하지 않는 환자도 이름과 연락처만으로 등록할 수 있습니다. 아래 추가 정보와 첫 처방은 선택입니다.</p><button type="button" disabled={saving || !!pendingPatient || !!prescriptionWarning || !form.name.trim()} onClick={()=>{setError(null);saveNew().catch(e=>setError((e as Error).message));}} className="rounded bg-stone-900 px-4 py-2 text-sm text-white disabled:opacity-50">환자만 등록 (탕약 없이)</button></div>
             <fieldset disabled={!!pendingPatient} className="min-w-0 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">

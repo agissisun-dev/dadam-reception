@@ -3,13 +3,17 @@
 import { useState } from "react";
 import Link from "next/link";
 import MoneyInput from "@/components/MoneyInput";
-import { updateEntryMoney } from "@/lib/ledger";
+import { updateEntryWithStock } from "@/lib/ledger";
 import { extractPacks } from "@/lib/cabinetRules";
-import { INSURANCE_KINDS, PAY_NOTES, allRed, chipClass, itemLabel, itemSummary, parseWon, redFieldsOf, sumEntries, won } from "@/lib/ledgerRules";
-import type { LedgerEntryWithItems, RedField } from "@/lib/types";
+import { INSURANCE_KINDS, PAY_NOTES, parseNote, allRed, chipClass, itemLabel, itemSummary, parseWon, redFieldsOf, sumEntries, won } from "@/lib/ledgerRules";
+import { editableNote, previewNoteEdit } from "@/lib/ledgerEditRules";
+import type { CabinetItem, LedgerCode, LedgerEntryWithItems, RedField } from "@/lib/types";
 
 type Props = {
   entries: LedgerEntryWithItems[];
+  codes: LedgerCode[];
+  cabinetItems: CabinetItem[];
+  staff: string;
   closed: boolean;
   onDelete: (e: LedgerEntryWithItems) => void;
   onCorrect: (e: LedgerEntryWithItems) => void;
@@ -63,14 +67,20 @@ function Followed({ e }: { e: LedgerEntryWithItems }) {
   return <span className="flex flex-col gap-0.5 text-xs">{out}</span>;
 }
 
-/** 마감 전 줄 고치기: 성함·구분·금액·붉은 금액 표시·메모. 항목(기타)은 못 고친다 — 지우고 다시 넣는다. */
-function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () => void; onCancel: () => void }) {
+/** 기타와 메모를 분리하고 재고는 원자적으로 반영한다. */
+function EditRow({ e, codes, cabinetItems, staff, onDone, onCancel }: { e: LedgerEntryWithItems; codes: LedgerCode[]; cabinetItems: CabinetItem[]; staff: string; onDone: () => void; onCancel: () => void }) {
   const [name, setName] = useState(e.patient_name);
   const [kind, setKind] = useState(e.insurance_kind ?? "");
   const [cash, setCash] = useState(e.cash ? String(e.cash) : "");
   const [cashReceipt, setCashReceipt] = useState(e.cash_receipt ? String(e.cash_receipt) : "");
   const [card, setCard] = useState(e.card ? String(e.card) : "");
   const [memo, setMemo] = useState(e.memo ?? "");
+  const originalNote = editableNote(e);
+  const [note, setNote] = useState(originalNote);
+  const noteChanged = note !== originalNote;
+  const parsed = parseNote(note, codes, cabinetItems);
+  const preview = previewNoteEdit(parsed.items, e.items);
+  const missingDays = noteChanged && preview.some(({item,unchanged}) => !unchanged && item.group === "extract" && item.cabinet_item_id && !item.days);
   const [red, setRed] = useState<RedField[]>(() => redFieldsOf(e));
   const [payNote, setPayNote] = useState(e.pay_note ?? "계좌입금");
   const toggleRed = (f: RedField) => setRed((r) => (r.includes(f) ? r.filter((x) => x !== f) : [...r, f]));
@@ -82,7 +92,7 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
     setError(null);
     setBusy(true);
     try {
-      await updateEntryMoney(e.id, {
+      await updateEntryWithStock(e, {
         patient_name: name,
         insurance_kind: kind || null,
         cash: parseWon(cash),
@@ -91,7 +101,7 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
         memo,
         red_fields: red,
         pay_note: offTotal ? payNote : null,
-      });
+      }, noteChanged ? {note_raw: note, items: parsed.items, review: parsed.review} : null, staff);
       onDone();
     } catch (err) {
       setError((err as Error).message);
@@ -118,7 +128,7 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
         <div><MoneyInput compact value={cashReceipt} onChange={setCashReceipt} red={red.includes("cash_receipt")} onToggleRed={() => toggleRed("cash_receipt")} /></div>
         <div><MoneyInput compact value={card} onChange={setCard} red={red.includes("card")} onToggleRed={() => toggleRed("card")} /></div>
         <div className={`${NUM} font-bold`}>{won(parseWon(cash) + parseWon(cashReceipt) + parseWon(card))}</div>
-        <div className="pl-3"><input value={memo} onChange={(x) => setMemo(x.target.value)} placeholder="메모" className={IN} /></div>
+        <div className="pl-3"><input aria-label="기타 항목 수정" value={note} onChange={(x) => setNote(x.target.value)} placeholder="삼소음2일,소합원3T" className={IN} /></div>
         <div className="flex flex-wrap items-center gap-1 text-xs">
           {offTotal ? (
             <select value={payNote} onChange={(x) => setPayNote(x.target.value)} className="h-7 rounded border border-red-300 px-1 text-xs font-bold text-red-700">
@@ -131,17 +141,23 @@ function EditRow({ e, onDone, onCancel }: { e: LedgerEntryWithItems; onDone: () 
           )}
         </div>
         <div className="flex flex-col gap-1 text-xs">
-          <button type="button" onClick={save} disabled={busy} className="rounded bg-stone-900 px-2 py-1 text-white disabled:opacity-50">저장</button>
+          <button type="button" onClick={save} disabled={busy || !!missingDays} className="rounded bg-stone-900 px-2 py-1 text-white disabled:opacity-50">저장</button>
           <button type="button" onClick={onCancel} className="rounded border border-stone-300 px-2 py-1">취소</button>
         </div>
       </div>
-      <p className="mt-1 text-[11px] text-stone-500">항목(기타)은 여기서 못 고칩니다. 항목이 틀렸으면 줄을 지우고 다시 넣어 주세요.</p>
+      <label className="mt-2 block text-xs text-stone-600">메모 (재고 반영 없음)<input aria-label="메모 (재고 반영 없음)" value={memo} onChange={x=>setMemo(x.target.value)} className={IN} /></label>
+      <p className="mt-2 text-[11px] text-stone-600">기타에 품목을 추가하면 재고가 반영됩니다. 수량 변경·삭제는 이전 차감을 되돌린 뒤 반영하며, 같은 내용 재저장은 중복 차감하지 않습니다. 연결된 탕약 처방은 그대로 유지하세요.</p>
+      {noteChanged && <div aria-label="기타 수정 재고 미리보기" className="mt-2 flex flex-wrap gap-2 text-xs">{preview.map(({item,unchanged},index)=>{
+        const ci=cabinetItems.find(c=>c.id===item.cabinet_item_id);
+        return <span key={index} className={chipClass(item.group,item.unknown)}>{item.raw} · {unchanged ? "기존 연결 유지" : item.unknown ? "미등록: 재고 차감 없음" : item.cabinet_item_id && item.group==="extract" ? item.days ? "재고 −"+extractPacks(item.days,item.per_day)+"포" : "일수 필요" : item.cabinet_item_id && item.group==="cabinet" ? "재고 −"+item.qty+(ci?.unit??"개") : "재고 차감 없음"}</span>;
+      })}</div>}
+      {missingDays && <p role="alert" className="mt-1 text-xs text-red-700">보험약은 삼소음2일처럼 일수를 적어 주세요.</p>}
       {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
     </div>
   );
 }
 
-export default function LedgerTable({ entries, closed, onDelete, onCorrect, onRefund, onChanged }: Props) {
+export default function LedgerTable({ entries, codes, cabinetItems, staff, closed, onDelete, onCorrect, onRefund, onChanged }: Props) {
   const [editing, setEditing] = useState<number | null>(null);
   const total = sumEntries(entries);
   const normal = entries.filter((e) => e.kind === "normal");
@@ -170,6 +186,9 @@ export default function LedgerTable({ entries, closed, onDelete, onCorrect, onRe
               <EditRow
                 key={e.id}
                 e={e}
+                codes={codes}
+                cabinetItems={cabinetItems}
+                staff={staff}
                 onDone={() => {
                   setEditing(null);
                   onChanged();

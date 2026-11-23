@@ -1,0 +1,23 @@
+import { describe,it,expect,vi } from 'vitest';
+import { editableNote,previewNoteEdit } from './ledgerEditRules';
+import { parseNote } from './ledgerRules';
+import type { CabinetItem,LedgerEntryWithItems,LedgerItem } from './types';
+const {rpc}=vi.hoisted(()=>({rpc:vi.fn()}));
+vi.mock('./supabaseClient',()=>({getSupabase:()=>({rpc})}));
+import { updateEntryWithStock } from './ledger';
+const med={id:10,name:'소합원',kind:'medicine',clinic:null,unit:'개',active:true} as CabinetItem;
+const insured={id:11,name:'삼소음',kind:'insured',clinic:'S',unit:'포',active:true} as CabinetItem;
+const parsed=()=>parseNote('소합원3T,삼소음2일분',[],[med,insured]);
+const old=(raw:string,id:number)=>({id,raw,qty:3,days:null,amount:null,split:null} as LedgerItem);
+const entry={id:5,updated_at:'2026-11-23T01:00:00.000001Z',note_raw:'소합원3T',items:[old('소합원3T',1)]} as LedgerEntryWithItems;
+const money={patient_name:'synthetic',insurance_kind:null,cash:0,cash_receipt:0,card:0,memo:'memo only',red_fields:[],pay_note:null};
+describe('ledger note editing',()=>{
+ it('parses named medicine quantities and both 일/일분 without guessing stock ownership',()=>{const p=parsed();expect(p.items.map(i=>[i.cabinet_item_id,i.qty,i.days])).toEqual([[10,3,null],[11,1,2]]);expect(p.items.every(i=>!i.unknown)).toBe(true);});
+ it('preserves old raw note and reconstructs legacy item text only for display',()=>{expect(editableNote(entry)).toBe('소합원3T');expect(editableNote({...entry,note_raw:''})).toBe('소합원3T');});
+ it('matches unchanged tokens as a multiset, so a second equal token is new',()=>{const item=parsed().items[0];expect(previewNoteEdit([item,item],[old(item.raw,1)]).map(p=>p.unchanged)).toEqual([true,false]);});
+ it('unchanged raw tokens retain archived/unknown historical metadata',()=>{const unknown={...parsed().items[0],qty:1,unknown:true,cabinet_item_id:null};expect(previewNoteEdit([unknown],[old(unknown.raw,2)])[0].unchanged).toBe(true);});
+ it('changed quantity and missing days are not classified as unchanged',()=>{expect(previewNoteEdit(parsed().items,[old('소합원2T',1)]).map(p=>p.unchanged)).toEqual([false,false]);expect(parseNote('삼소음',[],[insured]).items[0].days).toBeNull();});
+ it('uses a single atomic RPC with optimistic revision and explicit new tokens',async()=>{rpc.mockResolvedValueOnce({error:null});await updateEntryWithStock(entry,money,{note_raw:'new',...parsed()},'fixture');expect(rpc).toHaveBeenLastCalledWith('edit_ledger_entry_v21',expect.objectContaining({p_id:5,p_expected_updated_at:entry.updated_at,p_note:'new',p_items:parsed().items,p_staff:'fixture'}));});
+ it('money/memo-only save does not reparse/re-deduct old items',async()=>{rpc.mockResolvedValueOnce({error:null});await updateEntryWithStock(entry,money,null,'fixture');expect(rpc).toHaveBeenLastCalledWith('edit_ledger_entry_v21',expect.objectContaining({p_note:entry.note_raw,p_items:null,p_patch:expect.objectContaining({memo:'memo only'})}));});
+ it('never hides a DB failure or falls back to a memo-only success',async()=>{rpc.mockResolvedValueOnce({error:{message:'rollback required'}});await expect(updateEntryWithStock(entry,money,{note_raw:'new',...parsed()},'fixture')).rejects.toThrow('rollback required');});
+});

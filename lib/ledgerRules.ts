@@ -135,7 +135,7 @@ export function parseNote(raw: string, codes: LedgerCode[], cabinetItems: Cabine
       }
     }
 
-    m = rest.match(/(\d+)일$/);
+    m = rest.match(/(\d+)일(?:분)?$/);
     if (m) {
       days = Number(m[1]);
       rest = rest.slice(0, -m[0].length);

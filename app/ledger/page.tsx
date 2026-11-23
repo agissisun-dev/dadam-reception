@@ -200,6 +200,9 @@ function Board() {
       ) : (
         <LedgerTable
           entries={entries}
+          codes={codes}
+          cabinetItems={cabinetItems}
+          staff={staff}
           closed={locked}
           onDelete={(e) => {
             if (window.confirm(`${e.seq}번 ${e.patient_name} 줄을 지울까요? 따라온 처방·해피콜은 같이 지워지고, 약장 나감은 되돌림 입고로 남습니다.`)) {

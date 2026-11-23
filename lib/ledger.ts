@@ -329,7 +329,20 @@ function itemTitle(i: ParsedItem): string {
   return brewTitle(i.decoction_kind);
 }
 
-/** 돈·이름·구분·메모만 고치기(마감 전). 항목은 지우고 다시 넣는다. */
+/** 기타와 재고를 단일 DB 트랜잭션으로 수정. 실패하면 모두 롤백한다. */
+export async function updateEntryWithStock(entry: LedgerEntryWithItems,patch: Parameters<typeof updateEntryMoney>[1],change: {note_raw:string;items:ParsedItem[];review:boolean}|null,staff: string): Promise<void> {
+ if(!patch.patient_name.trim()) throw new Error('성함을 적어 주세요.');
+ const {error}=await getSupabase().rpc('edit_ledger_entry_v21',{
+  p_id:entry.id,p_expected_updated_at:entry.updated_at,p_patch:{...patch,...redColumns(patch.red_fields,patch.pay_note)},
+  p_note:change?.note_raw??entry.note_raw,p_items:change?.items??null,p_review:change?.review??false,p_staff:staff,
+ });
+ if(error) {
+  if(error.code==='PGRST202') throw new Error('재고 연동 수정 기능 준비 중입니다. 새로고침 후 다시 시도해 주세요.');
+  throw new Error('장부 수정 실패: '+error.message);
+ }
+}
+
+/** 금액·이름·구분·메모만 수정하는 기존 호환 경로. */
 export async function updateEntryMoney(
   id: number,
   patch: {

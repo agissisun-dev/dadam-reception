@@ -56,7 +56,7 @@ export async function runLedgerEditRegressions({db,q,eq,reject,test,as,admin,roo
  await test('removing stock tokens returns stock but never deletes the ledger row or move history',async()=>{
   await edit(main,[],'');eq([await stock(med),await stock(insured)],baseline);
   eq((await q('select count(*)::int n from ledger_items where entry_id=$1',[main])).rows[0].n,0);
-  eq((await q('select count(*)::int n from ledger_entry_edits_v21 where original_entry_id=$1 and operation='entry_update'',[main])).rows[0].n,5);
+  eq((await q('select count(*)::int n from ledger_entry_edits_v21 where original_entry_id=$1 and operation=$2',[main,'entry_update'])).rows[0].n,5);
  });
  await test('foreign clinic item in a later token rolls back all earlier stock and entry changes',async()=>{
   const id=await create();const before=await snapshot();const audit=(await q('select * from ledger_entry_edits_v21 order by id')).rows;
@@ -93,7 +93,7 @@ export async function runLedgerEditRegressions({db,q,eq,reject,test,as,admin,roo
   await admin();await db.exec('set role anon');await reject(()=>edit(own,[],'',ownRev),'permission denied');await as('S');
  });
  await test('audit records preserve before/after and are append-only with clinic separation',async()=>{
-  eq((await q('select * from ledger_entry_edits_v21 where original_entry_id=$1 and operation='entry_update'',[main])).rows.length,5);
+  eq((await q('select * from ledger_entry_edits_v21 where original_entry_id=$1 and operation=$2',[main,'entry_update'])).rows.length,5);
   await reject(()=>q("insert into ledger_entry_edits_v21(original_entry_id,clinic,staff_name,before_entry,before_items,after_entry,after_items) values(999,'S','forged','{}','[]','{}','[]')"),'permission denied');
   await reject(()=>q('delete from ledger_entry_edits_v21'),'permission denied');await reject(()=>q("update ledger_entry_edits_v21 set staff_name='x'"),'permission denied');
   await as('N');eq((await q('select id from ledger_entry_edits_v21')).rows,[]);await as('S');
